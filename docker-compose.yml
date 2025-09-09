@@ -1,0 +1,16 @@
+services:
+  # Веб-приложение Flask
+  web:
+    build: .
+    env-file:
+      - .env
+    volumes:
+      # Монтируем директории для хранения данных
+      - ./:/app/instance
+      - ./uploads:/app/uploads
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
