@@ -1,4 +1,5 @@
 /instance/app.db
+*.db
 /app/uploads/discount_template.xlsx
 .env
 app/core/__pycache__/*
