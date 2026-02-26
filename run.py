@@ -1,7 +1,7 @@
 import os
 from app import create_app
 from app.core.config import DevelopmentConfig
-from app.services.initial_load_service import refresh_estate_data_from_mysql
+from app.services.initial_load_service import refresh_estate_data_from_mysql, incremental_update_from_mysql
 from app.core.extensions import db
 from app.models import auth_models
 from prefix_middleware import PrefixMiddleware
@@ -122,7 +122,7 @@ if os.environ.get('WERKZEUG_RUN_MAIN') is None:
             f.write('locked')
         print(f"[UPDATE FLAG] Файл блокировки создан: {LOCK_FILE_PATH}")
         with app.app_context():
-            refresh_estate_data_from_mysql()
+            incremental_update_from_mysql()
     finally:
         if os.path.exists(LOCK_FILE_PATH):
             os.remove(LOCK_FILE_PATH)
