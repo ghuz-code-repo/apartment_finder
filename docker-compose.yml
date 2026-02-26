@@ -9,8 +9,6 @@ services:
       # Монтируем директории для хранения данных
       - ./:/app/instance
       - ./uploads:/app/uploads
-    depends_on:
-      - db
     restart: unless-stopped
     networks:
       - default
