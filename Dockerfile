@@ -9,9 +9,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     default-libmysqlclient-dev \
     pkg-config \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
-
-RUN apk --no-cache add ca-certificates tzdata
 
 # Set timezone
 ENV TZ=Asia/Tashkent
