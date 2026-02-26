@@ -3,7 +3,7 @@ services:
   web:
     build: .
     container_name: apartment-finder-app
-    env-file:
+    env_file:
       - .env
     volumes:
       # Монтируем директории для хранения данных
