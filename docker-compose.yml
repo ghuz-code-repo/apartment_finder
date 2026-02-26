@@ -7,7 +7,7 @@ services:
       - .env
     volumes:
       # Монтируем директории для хранения данных
-      - ./:/app/instance
+      - ./instance:/app/instance
       - ./uploads:/app/uploads
     restart: unless-stopped
     networks:
