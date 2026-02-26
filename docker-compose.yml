@@ -2,6 +2,7 @@ services:
   # Веб-приложение Flask
   web:
     build: .
+    container_name: apartment-finder-app
     env-file:
       - .env
     volumes:
@@ -11,6 +12,13 @@ services:
     depends_on:
       - db
     restart: unless-stopped
+    networks:
+      - default
+      - service_network
 
 volumes:
   mysql_data:
+
+networks:
+  service_network:
+    external: true

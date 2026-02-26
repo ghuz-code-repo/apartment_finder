@@ -4,9 +4,13 @@ from app.core.config import DevelopmentConfig
 from app.services.initial_load_service import refresh_estate_data_from_mysql
 from app.core.extensions import db
 from app.models import auth_models
+from prefix_middleware import PrefixMiddleware
 
 # Создаем приложение Flask
 app = create_app(DevelopmentConfig)
+
+# Apply prefix middleware for running behind gateway at /finder
+app.wsgi_app = PrefixMiddleware(app.wsgi_app, app=app, prefix='/finder')
 
 # Путь к файлу-флагу
 LOCK_FILE_PATH = os.path.join(app.instance_path, 'update.lock')

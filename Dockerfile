@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+RUN apk --no-cache add ca-certificates tzdata
+
+# Set timezone
+ENV TZ=Asia/Tashkent
+
 # Копируем файл с зависимостями
 COPY requirements.txt .
 
