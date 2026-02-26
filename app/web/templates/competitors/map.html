@@ -1,0 +1,211 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+<style>
+    /* Интеграция с темой оформления */
+    .leaflet-container {
+        background: var(--bs-body-bg);
+    }
+    .filter-panel {
+        background-color: var(--gh-element-bg);
+        color: var(--bs-body-color);
+        border-right: 1px solid var(--bs-border-color);
+        z-index: 1001;
+    }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+        background-color: var(--gh-element-bg);
+        color: var(--bs-body-color);
+        box-shadow: 0 3px 14px var(--gh-card-shadow);
+    }
+    .action-buttons .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        text-align: left;
+        display: flex;
+        align-items: center;
+    }
+    .action-buttons .bi {
+        margin-right: 10px;
+    }
+    #competitorMap {
+        width: 100%;
+        height: 100%;
+        min-height: 500px; /* Гарантируем видимость */
+    }
+    .text-golden { color: #d4af37; }
+    .border-dashed { border: 1px dashed var(--bs-border-color); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-0" style="height: calc(100vh - 120px); margin-top: -3rem;">
+    <div class="col-md-3 filter-panel p-3 overflow-auto">
+        <div class="action-buttons mb-4">
+            <h6 class="text-muted text-uppercase small fw-bold mb-3">{{ _('Управление данными') }}</h6>
+            {% if current_user.can('upload_data') %}
+            <a href="{{ url_for('competitor.import_view') }}" class="btn btn-golden-outline btn-sm">
+                <i class="bi bi-upload"></i> {{ _('Импорт из Excel') }}
+            </a>
+            {% endif %}
+            {% if current_user.can('view_reports') %}
+            <a href="{{ url_for('competitor.export_our') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-download"></i> {{ _('Экспорт данных') }}
+            </a>
+            {% endif %}
+        </div>
+        <hr>
+
+        <h5 class="mb-3">{{ _('Фильтры') }}</h5>
+        <div class="mb-3">
+            <label class="form-label small">{{ _('Поиск по названию') }}</label>
+            <input type="text" id="searchName" class="form-control form-control-sm" placeholder="Введите название...">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small">{{ _('Класс') }}</label>
+            <select id="filterClass" class="form-select form-select-sm">
+                <option value="">{{ _('Все классы') }}</option>
+                {% for class in competitors|map(attribute='property_class')|unique|reject('none') %}
+                <option value="{{ class }}">{{ class }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <hr>
+        <h5>{{ _('Сравнение') }}</h5>
+        <label class="form-label small text-golden fw-bold">{{ _('Ваш проект (база)') }}</label>
+        <select id="ourProject" class="form-select form-select-sm mb-3">
+            {% for p in projects %}
+            <option value="{{ p }}">{{ p }}</option>
+            {% endfor %}
+        </select>
+
+        <div id="comparisonDetails" class="card p-2 border-dashed">
+            <p class="text-muted small mb-0">{{ _('Выберите маркер на карте для сравнения') }}</p>
+        </div>
+    </div>
+
+    <div class="col-md-9" style="position: relative;">
+        <div id="competitorMap"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script>
+    // 1. Безопасная инициализация данных (используем |tojson)
+    const competitors = [
+        {% for c in competitors %}
+        {
+            id: {{ c.id }},
+            name: {{ c.name|tojson }},
+            lat: {{ c.lat or 0 }},
+            lng: {{ c.lng or 0 }},
+            class: {{ (c.property_class or '')|tojson }},
+            type: {{ (c.property_type or '')|tojson }},
+            isInternal: {{ 'true' if c.is_internal else 'false' }},
+            directComp: {{ (c.direct_competitor_name or '')|tojson }}
+        },
+        {% endfor %}
+    ];
+
+    // 2. Иконки разных цветов
+    const goldIcon = new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    const blueIcon = new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    const redIcon = new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [30, 48], iconAnchor: [15, 48], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    // 3. Инициализация карты
+    const map = L.map('competitorMap').setView([41.31, 69.24], 12);
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
+        tiles.setUrl('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+    }
+
+    let markers = [];
+
+    // 4. Основная логика отрисовки меток
+    function updateMarkers() {
+        const searchTerm = document.getElementById('searchName').value.trim().toLowerCase();
+        const classFilter = document.getElementById('filterClass').value;
+        const selectedOurProject = document.getElementById('ourProject').value;
+        const selectedNorm = selectedOurProject.trim().toLowerCase();
+
+        // Очистка старых маркеров
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        competitors.forEach(c => {
+            if (c.lat === 0 || c.lng === 0) return;
+
+            const nameNorm = c.name.trim().toLowerCase();
+            const dCompNorm = c.directComp.trim().toLowerCase();
+
+            const matchesSearch = nameNorm.includes(searchTerm);
+            const matchesClass = !classFilter || c.class === classFilter;
+
+            if (matchesSearch && matchesClass) {
+                // Выбор иконки
+                let icon = c.isInternal ? goldIcon : blueIcon;
+
+                // Красная подсветка для выбранного проекта и его прямых конкурентов
+                if (nameNorm === selectedNorm || dCompNorm === selectedNorm) {
+                    icon = redIcon;
+                }
+
+                const marker = L.marker([c.lat, c.lng], { icon: icon })
+                    .bindPopup(`
+                        <div class="p-1">
+                            <h6 class="mb-1 fw-bold">${c.name}</h6>
+                            <div class="small mb-2 text-muted">${c.class}</div>
+                            <div class="d-grid">
+                                <a href="/competitors/${c.id}" class="btn btn-xs btn-golden">
+                                    <i class="bi bi-info-circle"></i> Подробнее
+                                </a>
+                            </div>
+                        </div>
+                    `)
+                    .on('click', () => loadComparison(c.id, selectedOurProject))
+                    .addTo(map);
+
+                markers.push(marker);
+            }
+        });
+    }
+
+    function loadComparison(compId, projectName) {
+        const detailsBox = document.getElementById('comparisonDetails');
+        detailsBox.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-golden"></div></div>';
+
+        fetch(`/competitors/compare/${compId}?our_project=` + encodeURIComponent(projectName))
+            .then(r => r.text())
+            .then(html => {
+                detailsBox.innerHTML = html;
+            });
+    }
+
+    // Слушатели событий
+    document.getElementById('searchName').addEventListener('input', updateMarkers);
+    document.getElementById('filterClass').addEventListener('change', updateMarkers);
+    document.getElementById('ourProject').addEventListener('change', updateMarkers);
+
+    // Первый запуск
+    updateMarkers();
+</script>
+{% endblock %}

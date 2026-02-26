@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_user, logout_user, login_required, current_user
 
 from ..core.decorators import permission_required
-from ..core.extensions import db
+from ..core.db_utils import get_default_session
 from .forms import CreateUserForm, ChangePasswordForm, RoleForm
 
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
@@ -23,7 +23,8 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         # Обращаемся к модели User через auth_models
-        user = auth_models.User.query.filter_by(username=username).first()
+        default_session = get_default_session()  # <--- ДОБАВЛЕНО
+        user = default_session.query(auth_models.User).filter_by(username=username).first()  # <--- ИЗМЕНЕНО
         if user and user.check_password(password):
             login_user(user)
             next_page = request.args.get('next')
@@ -48,10 +49,12 @@ def logout():
 def user_management():
     form = CreateUserForm()
     # Загружаем роли из auth_models
-    form.role.choices = [(r.id, r.name) for r in auth_models.Role.query.order_by('name').all()]
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    form.role.choices = [(r.id, r.name) for r in
+                         default_session.query(auth_models.Role).order_by('name').all()]  # <--- ИЗМЕНЕНО
 
     if form.validate_on_submit():
-        role_obj = auth_models.Role.query.get(form.role.data)
+        role_obj = default_session.query(auth_models.Role).get(form.role.data)
         user = auth_models.User(
             username=form.username.data,
             role=role_obj,
@@ -60,12 +63,12 @@ def user_management():
             phone_number=form.phone_number.data
         )
         user.set_password(form.password.data)
-        db.session.add(user)
-        db.session.commit()
+        default_session.add(user)  # <--- ИЗМЕНЕНО
+        default_session.commit()
         flash(f'Пользователь {user.username} успешно создан.', 'success')
         return redirect(url_for('auth.user_management'))
 
-    users = auth_models.User.query.order_by(auth_models.User.id).all()
+    users = default_session.query(auth_models.User).order_by(auth_models.User.id).all()
     return render_template('auth/user_management.html', title="Управление пользователями", users=users, form=form)
 
 
@@ -77,9 +80,10 @@ def delete_user(user_id):
         flash('Вы не можете удалить свою учетную запись.', 'danger')
         return redirect(url_for('auth.user_management'))
 
-    user_to_delete = auth_models.User.query.get_or_404(user_id)
-    db.session.delete(user_to_delete)
-    db.session.commit()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    user_to_delete = default_session.query(auth_models.User).get_or_404(user_id)  # <--- ИЗМЕНЕНО
+    default_session.delete(user_to_delete)  # <--- ИЗМЕНЕНО
+    default_session.commit()
     flash(f'Пользователь {user_to_delete.username} удален.', 'success')
     return redirect(url_for('auth.user_management'))
 
@@ -92,8 +96,9 @@ def change_password():
         if not current_user.check_password(form.current_password.data):
             flash('Введен неверный текущий пароль.', 'danger')
         else:
+            default_session = get_default_session()  # <--- ДОБАВЛЕНО
             current_user.set_password(form.new_password.data)
-            db.session.commit()
+            default_session.commit()
             flash('Ваш пароль успешно изменен.', 'success')
             return redirect(url_for('main.selection'))
 
@@ -104,7 +109,8 @@ def change_password():
 @login_required
 @permission_required('manage_users')
 def manage_roles():
-    roles = auth_models.Role.query.order_by(auth_models.Role.name).all()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    roles = default_session.query(auth_models.Role).order_by(auth_models.Role.name).all()  # <--- ИЗМЕНЕНО
     return render_template('auth/manage_roles.html', title="Управление ролями", roles=roles)
 
 
@@ -113,8 +119,9 @@ def manage_roles():
 @login_required
 @permission_required('manage_users')
 def role_form(role_id):
+    default_session = get_default_session()
     if role_id:
-        role = auth_models.Role.query.get_or_404(role_id)
+        role = default_session.query(auth_models.Role).get_or_404(role_id)
         form = RoleForm(obj=role)
         title = f"Редактирование роли: {role.name}"
     else:
@@ -122,21 +129,21 @@ def role_form(role_id):
         form = RoleForm()
         title = "Создание новой роли"
 
-    form.permissions.choices = [(p.id, p.description) for p in auth_models.Permission.query.order_by('description').all()]
+    form.permissions.choices = [(p.id, p.description) for p in default_session.query(auth_models.Permission).order_by('description').all()]
 
     if form.validate_on_submit():
         role.name = form.name.data
-        selected_permissions = auth_models.Permission.query.filter(auth_models.Permission.id.in_(form.permissions.data)).all()
+        selected_permissions = default_session.query(auth_models.Permission).filter(auth_models.Permission.id.in_(form.permissions.data)).all()
         role.permissions = selected_permissions
 
         if not role_id:
-            db.session.add(role)
+            default_session.add(role)
 
-        db.session.commit()
+        default_session.commit()
         flash(f"Роль '{role.name}' успешно сохранена.", "success")
         return redirect(url_for('auth.manage_roles'))
 
-    all_permissions = auth_models.Permission.query.order_by('description').all()
+    all_permissions = default_session.query(auth_models.Permission).order_by('description').all()
     selected_permission_ids = {p.id for p in role.permissions}
 
     return render_template(
@@ -152,12 +159,13 @@ def role_form(role_id):
 @login_required
 @permission_required('manage_users')
 def delete_role(role_id):
-    role = auth_models.Role.query.get_or_404(role_id)
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    role = default_session.query(auth_models.Role).get_or_404(role_id)
     if role.users.count() > 0:
         flash(f"Нельзя удалить роль '{role.name}', так как она присвоена пользователям.", 'danger')
         return redirect(url_for('auth.manage_roles'))
 
-    db.session.delete(role)
-    db.session.commit()
+    default_session.delete(role)  # <--- ИЗМЕНЕНО
+    default_session.commit()
     flash(f"Роль '{role.name}' успешно удалена.", 'success')
     return redirect(url_for('auth.manage_roles'))

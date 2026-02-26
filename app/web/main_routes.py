@@ -9,16 +9,17 @@ from flask_login import login_required, current_user
 from flask_babel import gettext as _
 from app.services import special_offer_service
 from ..core.decorators import permission_required
-from ..core.extensions import db
+from ..core.db_utils import get_default_session, get_mysql_session
 from ..models import auth_models
 from ..models.estate_models import EstateHouse
 from ..models.exclusion_models import ExcludedSell
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+from ..services import currency_service
 # Импортируем PropertyType и PaymentMethod из их нового местоположения
 from ..models.planning_models import PropertyType, PaymentMethod
 from ..services import settings_service
 from ..services.data_service import get_sells_with_house_info, get_filter_options
-from ..services.discount_service import get_current_usd_rate
+
 from ..services.selection_service import find_apartments_by_budget, get_apartment_card_data
 
 main_bp = Blueprint('main', __name__, template_folder='templates')
@@ -202,7 +203,7 @@ def generate_commercial_offer(sell_id):
     card_data['pricing'] = final_pricing_options
 
     current_date = datetime.now().strftime("%d.%m.%Y %H:%M")
-    usd_rate_from_cbu = get_current_usd_rate()
+    usd_rate_from_cbu = currency_service.get_current_effective_rate()
     fallback_usd_rate = current_app.config.get('USD_TO_UZS_RATE', 12650.0)
     actual_usd_rate = usd_rate_from_cbu if usd_rate_from_cbu is not None else fallback_usd_rate
 
@@ -219,6 +220,8 @@ def generate_commercial_offer(sell_id):
 @login_required
 @permission_required('manage_settings')
 def manage_exclusions():
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    mysql_session = get_mysql_session()
     if request.method == 'POST':
         if 'sell_id_to_manage' in request.form:
             action = request.form.get('action')
@@ -231,17 +234,17 @@ def manage_exclusions():
                 try:
                     sell_id = int(sell_id_str)
                     if action == 'add':
-                        if ExcludedSell.query.filter_by(sell_id=sell_id).first():
+                        if default_session.query(ExcludedSell).filter_by(sell_id=sell_id).first():
                             flash(f"Квартира с ID {sell_id} уже в исключениях.", "warning")
                         else:
-                            db.session.add(ExcludedSell(sell_id=sell_id, comment=comment or None))
-                            db.session.commit()
+                            default_session.add(ExcludedSell(sell_id=sell_id, comment=comment or None))  # <--- ИЗМЕНЕНО
+                            default_session.commit()
                             flash(f"Квартира ID {sell_id} добавлена в исключения.", "success")
                     elif action == 'delete':
-                        exclusion = ExcludedSell.query.filter_by(sell_id=sell_id).first()
+                        exclusion = default_session.query(ExcludedSell).filter_by(sell_id=sell_id).first()
                         if exclusion:
-                            db.session.delete(exclusion)
-                            db.session.commit()
+                            default_session.delete(exclusion)  # <--- ИЗМЕНЕНО
+                            default_session.commit()
                             flash(f"Квартира ID {sell_id} удалена из исключений.", "success")
                 except ValueError:
                     flash("ID квартиры должен быть числом.", "danger")
@@ -254,8 +257,9 @@ def manage_exclusions():
 
         return redirect(url_for('main.manage_exclusions'))
 
-    excluded_sells = ExcludedSell.query.order_by(ExcludedSell.created_at.desc()).all()
-    all_complexes = db.session.query(EstateHouse.complex_name).distinct().order_by(EstateHouse.complex_name).all()
+    excluded_sells = default_session.query(ExcludedSell).order_by(ExcludedSell.created_at.desc()).all()  # <--- ИЗМЕНЕНО
+    all_complexes = mysql_session.query(EstateHouse.complex_name).distinct().order_by(
+        EstateHouse.complex_name).all()  # <--- ИЗМЕНЕНО
     excluded_complexes_names = {c.complex_name for c in settings_service.get_all_excluded_complexes()}
 
     return render_template(
@@ -302,24 +306,27 @@ def fix_permissions():
         return "Доступ только для администраторов!", 403
 
     # 1. Находим роль ADMIN
-    admin_role = auth_models.Role.query.filter_by(name='ADMIN').first()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+
+    # 1. Находим роль ADMIN
+    admin_role = default_session.query(auth_models.Role).filter_by(name='ADMIN').first()
     if not admin_role:
         return "Ошибка: роль 'ADMIN' не найдена."
 
     # 2. Находим (или создаем) право 'manage_specials'
-    permission_to_add = auth_models.Permission.query.filter_by(name='manage_specials').first()
+    permission_to_add = default_session.query(auth_models.Permission).filter_by(name='manage_specials').first()
     if not permission_to_add:
         permission_to_add = auth_models.Permission(name='manage_specials', description='Управление квартирами месяца')
-        db.session.add(permission_to_add)
+        default_session.add(permission_to_add)  # <--- ИЗМЕНЕНО
         # Сразу коммитим, чтобы право появилось в БД
-        db.session.commit()
+        default_session.commit()
 
     # 3. Проверяем, есть ли уже это право у роли
     has_permission = any(p.id == permission_to_add.id for p in admin_role.permissions)
 
     if not has_permission:
         admin_role.permissions.append(permission_to_add)
-        db.session.commit()
+        default_session.commit()  # <--- ИЗМЕНЕНО
         return "Успех! Право 'manage_specials' было добавлено к роли ADMIN. Теперь страница должна открыться."
     else:
         return "Право 'manage_specials' уже было у роли ADMIN. Проблема может быть в другом."

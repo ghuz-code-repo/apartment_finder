@@ -1,0 +1,166 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<h1 class="mb-4">{{ title }}</h1>
+
+{# --- Форма добавления/обновления обязательства --- #}
+<div class="card card-glass mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-journal-plus me-2"></i>Добавить или обновить обязательство</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('obligations.obligation_control') }}">
+            <input type="hidden" name="action" value="add_obligation">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="project_name_add" class="form-label">Проект</label>
+                    <select class="form-select" id="project_name_add" name="project_name_add" required>
+                        <option value="" disabled selected>-- Выберите проект --</option>
+                        {% for name in project_names %}
+                            <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {# --- НОВОЕ ПОЛЕ: Тип недвижимости (добавление) --- #}
+                <div class="col-md-3">
+                    <label for="property_type_add" class="form-label">Тип недвижимости</label>
+                    <select class="form-select" id="property_type_add" name="property_type_add" required>
+                        <option value="" disabled selected>-- Выберите тип --</option>
+                        {% for pt in property_types %}
+                            <option value="{{ pt }}">{{ _(pt) }}</option> {# Используем _() для перевода #}
+                        {% endfor %}
+                    </select>
+                </div>
+                {# --------------------------------------------- #}
+                <div class="col-md-2">
+                    <label for="amount_usd" class="form-label">Сумма, USD</label>
+                    <input type="number" class="form-control" id="amount_usd" name="amount_usd" step="0.01" required placeholder="Например: 1500000.50">
+                </div>
+                 <div class="col-md-2">
+                    <label for="comment_add" class="form-label">Комментарий</label>
+                    <input type="text" class="form-control" id="comment_add" name="comment_add">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check-circle me-1"></i> Сохранить
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# --- Форма для расчета требуемой цены --- #}
+<div class="card card-glass mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-calculator me-2"></i>Рассчитать требуемую цену для выполнения</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('obligations.obligation_control') }}">
+             <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="project_name_check" class="form-label">Проект</label>
+                    <select class="form-select" id="project_name_check" name="project_name_check" required>
+                        <option value="" disabled {% if not selected_project_check %}selected{% endif %}>-- Выберите проект --</option>
+                        {% for name in project_names %}
+                            <option value="{{ name }}" {% if name == selected_project_check %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {# --- НОВОЕ ПОЛЕ: Тип недвижимости (проверка) --- #}
+                <div class="col-md-3">
+                    <label for="property_type_check" class="form-label">Тип недвижимости</label>
+                    <select class="form-select" id="property_type_check" name="property_type_check" required>
+                        <option value="" disabled {% if not selected_property_type_check %}selected{% endif %}>-- Выберите тип --</option>
+                        {% for pt in property_types %}
+                             <option value="{{ pt }}" {% if pt == selected_property_type_check %}selected{% endif %}>{{ _(pt) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {# ---------------------------------------------- #}
+                 <div class="col-md-3">
+                    <label for="start_date_check" class="form-label">Сделки начиная с</label>
+                    <input type="date" class="form-control" id="start_date_check" name="start_date_check" value="{{ start_date_check }}" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                         <i class="bi bi-arrow-clockwise me-1"></i> Рассчитать
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        {# --- Отображение результата расчета --- #}
+        {% if calculation_result and 'error' not in calculation_result %}
+            <hr>
+            {# --- ИЗМЕНЕНИЕ: Добавляем тип недвижимости в заголовок --- #}
+            <h5 class="mt-3">Результат расчета для "{{ calculation_result.project_name }}" ({{ _(calculation_result.property_type) }}) (сделки с {{ calculation_result.start_date }})</h5>
+             <div class="alert alert-info d-flex align-items-center" role="alert">
+                 <i class="bi bi-info-circle-fill me-3 fs-4"></i>
+                <div>
+                     {% if calculation_result.message %}
+                        <p class="mb-0">{{ calculation_result.message }}</p>
+                     {% elif calculation_result.required_avg_price_usd is not none %}
+                        Чтобы покрыть остаток обязательства в <strong>${{ "{:,.0f}".format(calculation_result.remaining_obligation_usd) }}</strong>,
+                        необходимо продать оставшиеся <strong>{{ "{:,.2f}".format(calculation_result.total_remaining_area) }} м²</strong>
+                        по средней цене не ниже <strong class="fs-4 text-success">${{ "{:,.0f}".format(calculation_result.required_avg_price_usd) }} / м²</strong>.
+                     {% endif %}
+                </div>
+            </div>
+             <small class="text-muted">
+                 Цель: ${{ "{:,.0f}".format(calculation_result.target_amount_usd) }} |
+                 Выполнено: ${{ "{:,.0f}".format(calculation_result.total_volume_usd) }}
+             </small>
+        {% endif %}
+    </div>
+</div>
+
+{# --- Отображение текущего списка обязательств --- #}
+<div class="card card-glass">
+    <div class="card-header">
+        <h5><i class="bi bi-list-check me-2"></i>Текущие обязательства по проектам (USD)</h5>
+    </div>
+    <div class="card-body p-0">
+        {% if current_obligations %}
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Проект</th>
+                        <th>Тип недвижимости</th> {# <-- Новая колонка #}
+                        <th class="text-end">Сумма, USD</th>
+                        <th class="text-end">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obl in current_obligations %}
+                    <tr>
+                        <td>{{ obl.project_name }}</td>
+                        <td>{{ _(obl.property_type) }}</td> {# <-- Выводим тип #}
+                        <td class="text-end fw-bold">${{ "{:,.0f}".format(obl.amount_usd) }}</td>
+                        <td class="text-end">
+                            <form method="POST" action="{{ url_for('obligations.obligation_control') }}" onsubmit="return confirm('Вы уверены, что хотите удалить обязательство для {{ obl.project_name }} ({{ _(obl.property_type) }})?');" class="d-inline">
+                                <input type="hidden" name="action" value="delete_obligation">
+                                <input type="hidden" name="obligation_id" value="{{ obl.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="text-center text-muted p-4">Список обязательств пока пуст.</div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{# Скрипт для ручного ввода проекта больше не нужен, т.к. мы его убрали #}
+{% endblock %}

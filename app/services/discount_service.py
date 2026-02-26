@@ -8,19 +8,20 @@ from flask import render_template_string
 import requests
 import pandas as pd
 import io
-
-from ..core.extensions import db
+from . import currency_service
+from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модуль planning_models
 from ..models import planning_models
 from ..models.estate_models import EstateSell
 from .email_service import send_email
-
+from ..models.planning_models import map_russian_to_mysql_key
 
 def delete_draft_version(version_id: int):
     """Удаляет версию, если она никогда не была активна."""
     # Обращаемся к модели через planning_models
-    version_to_delete = planning_models.DiscountVersion.query.get(version_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    version_to_delete = planning_session.query(planning_models.DiscountVersion).get(version_id)  # <--- ИЗМЕНЕНО
     if not version_to_delete:
         raise ValueError("Версия для удаления не найдена.")
 
@@ -28,30 +29,11 @@ def delete_draft_version(version_id: int):
         raise PermissionError("Нельзя удалить версию, которая уже была активирована.")
 
     print(f"[DISCOUNT SERVICE] 🗑️ Удаление черновика версии №{version_to_delete.version_number} (ID: {version_id})")
-    db.session.delete(version_to_delete)
-    db.session.commit()
+    planning_session.delete(version_to_delete)  # <--- ИЗМЕНО
+    planning_session.commit()
     print(f"[DISCOUNT SERVICE] ✔️ Черновик успешно удален.")
 
-def get_current_usd_rate():
-    """
-    Получает актуальный курс USD к UZS с API Центрального банка Республики Узбекистан.
-    """
-    api_url = "https://cbu.uz/oz/arkhiv-kursov-valyut/json/"
-    print(f"\n[DISCOUNT SERVICE] Попытка получить курс USD с API ЦБ: {api_url}")
-    try:
-        response = requests.get(api_url, timeout=5, verify=False)
-        response.raise_for_status()
-        data = response.json()
-        for currency_data in data:
-            if currency_data.get("Ccy") == "USD":
-                rate = float(currency_data.get("Rate").replace(',', '.'))
-                print(f"[DISCOUNT SERVICE] ✔️ Получен актуальный курс USD с ЦБ: {rate}")
-                return rate
-        print("[DISCOUNT SERVICE] ❕ Курс USD не найден в ответе API ЦБ.")
-        return None
-    except Exception as e:
-        print(f"[DISCOUNT SERVICE] ❌ Ошибка при запросе/обработке API ЦБ: {e}")
-        return None
+
 
 def _normalize_percentage(value):
     try:
@@ -72,9 +54,11 @@ def process_discounts_from_excel(file_path: str, version_id: int):
         return "Ошибка: Файл Excel пуст или не содержит данных."
 
     created_count, updated_count = 0, 0
+    planning_session = get_planning_session()
     existing_discounts = {
         (d.complex_name, d.property_type, d.payment_method): d
-        for d in planning_models.Discount.query.filter_by(version_id=version_id).all()
+        for d in planning_session.query(planning_models.Discount).filter_by(version_id=version_id).all()
+        # <--- ИЗМЕНЕНО
     }
 
     for index, row in df.iterrows():
@@ -97,7 +81,7 @@ def process_discounts_from_excel(file_path: str, version_id: int):
                     property_type=property_type_enum,
                     payment_method=payment_method_enum
                 )
-                db.session.add(discount)
+                planning_session.add(discount)
                 created_count += 1
             else:
                 updated_count += 1
@@ -125,94 +109,263 @@ def process_discounts_from_excel(file_path: str, version_id: int):
 
 def generate_discount_template_excel():
     from .data_service import get_all_complex_names
-    print("[DISCOUNT SERVICE] Генерация шаблона скидок...")
+    print("[DISCOUNT SERVICE] Генерация заполненного шаблона скидок...")
+
+    planning_session = get_planning_session()
     complex_names = get_all_complex_names()
-    headers = ['ЖК', 'Тип недвижимости', 'Тип оплаты', 'Дата кадастра', 'МПП', 'РОП', 'КД', 'ОПТ', 'ГД', 'Холдинг', 'Акционер', 'Акция']
+
+    # 1. Получаем активную версию и её скидки для предзаполнения
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    existing_discounts = {}
+
+    if active_version:
+        # Создаем карту: (ЖК, Тип недвижимости, Тип оплаты) -> объект скидки
+        existing_discounts = {
+            (d.complex_name, d.property_type, d.payment_method): d
+            for d in active_version.discounts
+        }
+        print(f"[DISCOUNT SERVICE] Найдена активная версия №{active_version.version_number}, подгружаем данные.")
+
+    headers = ['ЖК', 'Тип недвижимости', 'Тип оплаты', 'Дата кадастра', 'МПП', 'РОП', 'КД', 'ОПТ', 'ГД', 'Холдинг',
+               'Акционер', 'Акция']
     data = []
+
+    percentage_fields = ['mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action']
+
     for name in complex_names:
         for prop_type in planning_models.PropertyType:
             for payment_method in planning_models.PaymentMethod:
-                row = {'ЖК': name, 'Тип недвижимости': prop_type.value, 'Тип оплаты': payment_method.value, 'Дата кадастра': '', 'МПП': 0, 'РОП': 0, 'КД': 0, 'ОПТ': 0, 'ГД': 0, 'Холдинг': 0, 'Акционер': 0, 'Акция': 0}
+                # Ищем существующую скидку в базе
+                discount_obj = existing_discounts.get((name, prop_type, payment_method))
+
+                # Базовая структура строки
+                row = {
+                    'ЖК': name,
+                    'Тип недвижимости': prop_type.value,
+                    'Тип оплаты': payment_method.value,
+                    'Дата кадастра': ''
+                }
+
+                # Если скидка есть, заполняем данными (переводим из долей в целые проценты для удобства редактирования)
+                if discount_obj:
+                    row['Дата кадастра'] = discount_obj.cadastre_date if discount_obj.cadastre_date else ''
+                    for field in percentage_fields:
+                        val = getattr(discount_obj, field) or 0.0
+                        # Записываем как целое число (0.05 -> 5.0),
+                        # так как _normalize_percentage при загрузке корректно обработает значения > 1
+                        header_name = field.upper() if field != 'action' else 'Акция'
+                        if field == 'shareholder': header_name = 'Акционер'  # Соответствие заголовкам
+
+                        # Сопоставляем технические имена полей с заголовками Excel
+                        header_map = {
+                            'mpp': 'МПП', 'rop': 'РОП', 'kd': 'КД', 'opt': 'ОПТ',
+                            'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер', 'action': 'Акция'
+                        }
+                        row[header_map[field]] = val * 100.0
+                else:
+                    # Если данных нет, заполняем нулями
+                    for field in percentage_fields:
+                        header_map = {
+                            'mpp': 'МПП', 'rop': 'РОП', 'kd': 'КД', 'opt': 'ОПТ',
+                            'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер', 'action': 'Акция'
+                        }
+                        row[header_map[field]] = 0
+
                 data.append(row)
+
+    # 2. Формируем Excel
     df = pd.DataFrame(data, columns=headers)
     output = io.BytesIO()
-    df.to_excel(output, index=False, sheet_name='Шаблон скидок')
+
+    # Используем xlsxwriter для настройки форматирования (опционально)
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Текущие скидки')
+
     output.seek(0)
+    print(f"[DISCOUNT SERVICE] Шаблон успешно сформирован. Строк: {len(data)}")
     return output
 
+
+# app/services/discount_service.py
+
+# app/services/discount_service.py
+
+# app/services/discount_service.py
 
 def get_discounts_with_summary():
     """
     Получает данные для страницы "Система скидок", включая комментарии к ЖК.
     """
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
-    if not active_version: return {}
+    planning_session = get_planning_session()
+    mysql_session = get_mysql_session()
 
-    all_discounts = active_version.discounts
-    comments = planning_models.ComplexComment.query.filter_by(version_id=active_version.id).all()
-    comments_map = {c.complex_name: c.comment for c in comments}
+    print("\n" + "=" * 80)
+    print("[DISCOUNT SERVICE DEBUG] 🔍 НАЧАЛО get_discounts_with_summary()")
+    print("=" * 80)
+    mysql_flat_key = map_russian_to_mysql_key(planning_models.PropertyType.FLAT.value)  # <-- ИСПОЛЬЗУЕМ МАППЕР
+    print(f"[5.5] MySQL ключ для 'Квартира': {mysql_flat_key}")
+    try:
+        # 1. Проверяем активную версию скидок
+        active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+        print(f"[1] Активная версия скидок: {active_version.version_number if active_version else 'НЕ НАЙДЕНА'}")
 
-    if not all_discounts: return {}
+        if not active_version:
+            print("[DISCOUNT SERVICE DEBUG] ❌ Нет активной версии скидок!")
+            return {}
 
-    discounts_map = {}
-    for d in all_discounts:
-        discounts_map.setdefault(d.complex_name, []).append(d)
-    all_sells = EstateSell.query.options(joinedload(EstateSell.house)).all()
-    sells_by_complex = {}
-    for s in all_sells:
-        if s.house: sells_by_complex.setdefault(s.house.complex_name, []).append(s)
+        usd_rate = currency_service.get_current_effective_rate()
+        if not usd_rate or usd_rate <= 0:
+            print("[DISCOUNT SERVICE] ❕ Не удалось получить 'effective_rate', использую fallback: 13000.0")
+            usd_rate = 13000.0
+        print(f"[2] Курс USD: {usd_rate}")
 
-    final_data = {}
-    valid_statuses = ["Маркетинговый резерв", "Подбор"]
-    tag_fields = {'kd': 'КД', 'opt': 'ОПТ', 'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер'}
-    all_complex_names = sorted(list(discounts_map.keys()))
+        all_discounts = active_version.discounts
+        print(f"[3] Всего скидок в версии: {len(all_discounts)}")
 
-    for complex_name in all_complex_names:
-        summary = {"sum_100_payment": 0, "sum_mortgage": 0, "months_to_cadastre": None, "avg_remainder_price_sqm": 0, "available_tags": set(), "max_action_discount": 0.0}
-        summary["complex_comment"] = comments_map.get(complex_name)
-        discounts_in_complex = discounts_map.get(complex_name, [])
-        details_by_prop_type = {pt.value: [] for pt in planning_models.PropertyType}
-        for d in discounts_in_complex:
-            details_by_prop_type[d.property_type.value].append(d)
+        comments = planning_session.query(planning_models.ComplexComment).filter_by(version_id=active_version.id).all()
+        comments_map = {c.complex_name: c.comment for c in comments}
+        print(f"[4] Комментариев к ЖК: {len(comments_map)}")
 
-        base_discount_100 = next((d for d in discounts_in_complex if d.property_type == planning_models.PropertyType.FLAT and d.payment_method == planning_models.PaymentMethod.FULL_PAYMENT), None)
-        if base_discount_100:
-            summary["sum_100_payment"] = (base_discount_100.mpp or 0) + (base_discount_100.rop or 0)
-            if base_discount_100.cadastre_date and base_discount_100.cadastre_date > date.today():
-                delta = base_discount_100.cadastre_date - date.today()
-                summary["months_to_cadastre"] = int(delta.days / 30.44)
+        if not all_discounts:
+            print("[DISCOUNT SERVICE DEBUG] ❌ В активной версии нет скидок!")
+            return {}
 
-        base_discount_mortgage = next((d for d in discounts_in_complex if d.property_type == planning_models.PropertyType.FLAT and d.payment_method == planning_models.PaymentMethod.MORTGAGE), None)
-        if base_discount_mortgage:
-            summary["sum_mortgage"] = (base_discount_mortgage.mpp or 0) + (base_discount_mortgage.rop or 0)
+        discounts_map = {}
+        for d in all_discounts:
+            discounts_map.setdefault(d.complex_name, []).append(d)
 
-        total_discount_rate = sum(getattr(base_discount_100, f, 0) or 0 for f in ['mpp', 'rop', 'kd', 'action']) if base_discount_100 else 0
-        remainder_prices_per_sqm = []
-        for sell in sells_by_complex.get(complex_name, []):
-            if sell.estate_sell_status_name in valid_statuses and sell.estate_sell_category == planning_models.PropertyType.FLAT.value and sell.estate_price and sell.estate_area:
-                price_after_deduction = sell.estate_price - 3_000_000
-                if price_after_deduction > 0:
-                    final_price = price_after_deduction * (1 - total_discount_rate)
-                    remainder_prices_per_sqm.append(final_price / sell.estate_area)
+        print(f"[5] Уникальных ЖК в скидках: {len(discounts_map)}")
+        print(f"    Список ЖК: {list(discounts_map.keys())[:5]}...")  # Первые 5
 
-        if remainder_prices_per_sqm:
-            avg_price_per_sqm_usd = (sum(remainder_prices_per_sqm) / len(remainder_prices_per_sqm)) / 12500.0
-            summary["avg_remainder_price_sqm"] = avg_price_per_sqm_usd
+        # --- КРИТИЧЕСКИЙ ЗАПРОС: Получаем квартиры из MySQL ---
+        print("\n[6] 🔍 ЗАПРОС К MYSQL: Получаем все квартиры...")
+        all_sells = mysql_session.query(EstateSell).options(joinedload(EstateSell.house)).all()
+        print(f"[6] ✅ Получено квартир из MySQL: {len(all_sells)}")
 
-        for discount in discounts_in_complex:
-            # Проверяем, что action не None перед сравнением
-            if discount.action is not None and discount.action > summary["max_action_discount"]:
-                summary["max_action_discount"] = discount.action
+        # Проверяем первые несколько квартир
+        if all_sells:
+            print("\n[7] 🔍 ПРИМЕР ДАННЫХ (первые 3 квартиры):")
+            for i, sell in enumerate(all_sells[:3]):
+                print(f"    [{i + 1}] ID: {sell.id}")
+                print(f"        - ЖК: {sell.house.complex_name if sell.house else 'НЕТ ДОМА'}")
+                print(f"        - Статус: '{sell.estate_sell_status_name}'")
+                print(f"        - Категория: '{sell.estate_sell_category}'")
+                print(f"        - Цена: {sell.estate_price}")
+                print(f"        - Площадь: {sell.estate_area}")
+        else:
+            print("[7] ❌ НЕТ КВАРТИР В БАЗЕ ДАННЫХ!")
 
-            for field, tag_name in tag_fields.items():
-                # Сначала получаем значение
-                value = getattr(discount, field)
-                # И только если оно не None, сравниваем с нулем
-                if value is not None and value > 0:
-                    summary["available_tags"].add(tag_name)
+        # Группируем по ЖК
+        sells_by_complex = {}
+        for s in all_sells:
+            if s.house:
+                sells_by_complex.setdefault(s.house.complex_name, []).append(s)
 
-        final_data[complex_name] = {"summary": summary, "details": details_by_prop_type}
-    return final_data
+        print(f"\n[8] Квартир сгруппировано по ЖК: {len(sells_by_complex)}")
+        print(f"    Список ЖК с квартирами: {list(sells_by_complex.keys())[:5]}...")
+
+        final_data = {}
+        valid_statuses = ["Маркетинговый резерв", "Подбор"]
+        print(f"\n[9] Валидные статусы для подсчета: {valid_statuses}")
+
+        tag_fields = {'kd': 'КД', 'opt': 'ОПТ', 'gd': 'ГД', 'holding': 'Холдинг', 'shareholder': 'Акционер'}
+        all_complex_names = sorted(list(discounts_map.keys()))
+
+        print(f"\n[10] 🔄 НАЧИНАЕМ ОБРАБОТКУ {len(all_complex_names)} ЖК...")
+
+        for idx, complex_name in enumerate(all_complex_names):
+            print(f"\n    --- ЖК #{idx + 1}: '{complex_name}' ---")
+
+            summary = {
+                "sum_100_payment": 0, "sum_mortgage": 0, "months_to_cadastre": None,
+                "avg_remainder_price_sqm": 0, "available_tags": set(), "max_action_discount": 0.0
+            }
+            summary["complex_comment"] = comments_map.get(complex_name)
+            discounts_in_complex = discounts_map.get(complex_name, [])
+            details_by_prop_type = {pt.value: [] for pt in planning_models.PropertyType}
+
+            for d in discounts_in_complex:
+                details_by_prop_type[d.property_type.value].append(d)
+
+            base_discount_100 = next((d for d in discounts_in_complex
+                                      if d.property_type == planning_models.PropertyType.FLAT
+                                      and d.payment_method == planning_models.PaymentMethod.FULL_PAYMENT), None)
+            if base_discount_100:
+                summary["sum_100_payment"] = (base_discount_100.mpp or 0) + (base_discount_100.rop or 0)
+                if base_discount_100.cadastre_date and base_discount_100.cadastre_date > date.today():
+                    delta = base_discount_100.cadastre_date - date.today()
+                    summary["months_to_cadastre"] = int(delta.days / 30.44)
+
+            base_discount_mortgage = next((d for d in discounts_in_complex
+                                           if d.property_type == planning_models.PropertyType.FLAT
+                                           and d.payment_method == planning_models.PaymentMethod.MORTGAGE), None)
+            if base_discount_mortgage:
+                summary["sum_mortgage"] = (base_discount_mortgage.mpp or 0) + (base_discount_mortgage.rop or 0)
+
+            total_discount_rate = sum(getattr(base_discount_100, f, 0) or 0
+                                      for f in ['mpp', 'rop', 'kd', 'action']) if base_discount_100 else 0
+
+            # --- КРИТИЧЕСКАЯ ПРОВЕРКА: Подсчет остатков ---
+            sells_in_this_complex = sells_by_complex.get(complex_name, [])
+            print(f"        Всего квартир в ЖК: {len(sells_in_this_complex)}")
+
+            # Фильтруем по статусам
+            valid_status_count = 0
+            flat_category_count = 0
+            price_and_area_ok_count = 0
+
+            remainder_prices_per_sqm = []
+
+            for sell in sells_in_this_complex:
+                # Проверка 1: Статус
+                if sell.estate_sell_status_name in valid_statuses:
+                    valid_status_count += 1
+
+                    # Проверка 2: Категория (Квартира)
+                    if sell.estate_sell_category == mysql_flat_key:
+                        flat_category_count += 1
+
+                        # Проверка 3: Цена и площадь
+                        if sell.estate_price and sell.estate_area:
+                            price_and_area_ok_count += 1
+
+                            price_after_deduction = sell.estate_price - 3_000_000
+                            if price_after_deduction > 0:
+                                final_price = price_after_deduction * (1 - total_discount_rate)
+                                remainder_prices_per_sqm.append(final_price / sell.estate_area)
+
+            print(f"        ├─ С валидным статусом: {valid_status_count}")
+            print(f"        ├─ Из них категория 'Квартира': {flat_category_count}")
+            print(f"        ├─ С ценой и площадью: {price_and_area_ok_count}")
+            print(f"        └─ Прошли все проверки: {len(remainder_prices_per_sqm)}")
+
+            if remainder_prices_per_sqm:
+                avg_price_per_sqm_usd = (sum(remainder_prices_per_sqm) / len(remainder_prices_per_sqm)) / usd_rate
+                summary["avg_remainder_price_sqm"] = avg_price_per_sqm_usd
+                print(f"        ✅ Средняя цена остатков: ${avg_price_per_sqm_usd:.2f}/м²")
+            else:
+                print(f"        ❌ НЕТ ОСТАТКОВ для расчета!")
+
+            for discount in discounts_in_complex:
+                if discount.action is not None and discount.action > summary["max_action_discount"]:
+                    summary["max_action_discount"] = discount.action
+
+                for field, tag_name in tag_fields.items():
+                    value = getattr(discount, field)
+                    if value is not None and value > 0:
+                        summary["available_tags"].add(tag_name)
+
+            final_data[complex_name] = {"summary": summary, "details": details_by_prop_type}
+
+        print("\n" + "=" * 80)
+        print(f"[ИТОГ] Обработано ЖК: {len(final_data)}")
+        print("=" * 80 + "\n")
+
+        return final_data
+
+    finally:
+        planning_session.close()
+        mysql_session.close()
 
 
 def _generate_version_comparison_summary(old_version, new_version, comments_data=None):
@@ -243,11 +396,13 @@ def _generate_version_comparison_summary(old_version, new_version, comments_data
 
 def create_blank_version(comment: str):
     """Создает новую, ПУСТУЮ запись о версии скидок БЕЗ КОММИТА."""
-    latest_version = planning_models.DiscountVersion.query.order_by(planning_models.DiscountVersion.version_number.desc()).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    latest_version = planning_session.query(planning_models.DiscountVersion).order_by(
+        planning_models.DiscountVersion.version_number.desc()).first()
     new_version_number = (latest_version.version_number + 1) if latest_version else 1
     new_version = planning_models.DiscountVersion(version_number=new_version_number, comment=comment)
-    db.session.add(new_version)
-    db.session.flush()
+    planning_session.add(new_version)  # <--- ИЗМЕНЕНО
+    planning_session.flush()
     print(f"[DISCOUNT SERVICE] ✔️ Подготовлена пустая версия №{new_version_number}")
     return new_version
 
@@ -257,20 +412,22 @@ def clone_version_for_editing(active_version):
     Создает полную копию активной версии в виде нового неактивного черновика.
     """
     if not active_version: raise ValueError("Нет активной версии для клонирования.")
-    latest_version = planning_models.DiscountVersion.query.order_by(planning_models.DiscountVersion.version_number.desc()).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    latest_version = planning_session.query(planning_models.DiscountVersion).order_by(
+        planning_models.DiscountVersion.version_number.desc()).first()  # <--- ИЗМЕНЕНО
     new_version_number = latest_version.version_number + 1
     draft_version = planning_models.DiscountVersion(version_number=new_version_number, comment=f"Черновик на основе v.{active_version.version_number}", is_active=False)
-    db.session.add(draft_version)
-    db.session.flush()
+    planning_session.add(draft_version)  # <--- ИЗМЕНЕНО
+    planning_session.flush()
 
     for old_discount in active_version.discounts:
         new_discount = planning_models.Discount(version_id=draft_version.id, **{k: getattr(old_discount, k) for k in ['complex_name', 'property_type', 'payment_method', 'mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action', 'cadastre_date']})
-        db.session.add(new_discount)
+        planning_session.add(new_discount)
     for old_comment in active_version.complex_comments:
         new_comment = planning_models.ComplexComment(version_id=draft_version.id, complex_name=old_comment.complex_name, comment=old_comment.comment)
-        db.session.add(new_comment)
+        planning_session.add(new_comment)
 
-    db.session.commit()
+    planning_session.commit()
     print(f"[DISCOUNT SERVICE] ✔️ Создан черновик версии №{draft_version.version_number}")
     return draft_version
 
@@ -279,7 +436,8 @@ def update_discounts_for_version(version_id: int, form_data: dict, changes_json:
     """
     Обновляет скидки для УКАЗАННОЙ ВЕРСИИ (черновика) и ПЕРЕЗАПИСЫВАЕТ JSON-саммари.
     """
-    target_version = planning_models.DiscountVersion.query.get(version_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    target_version = planning_session.query(planning_models.DiscountVersion).get(version_id)
     if not target_version or target_version.is_active: return "Ошибка: Версия не найдена или активна."
 
     discounts_map = {(d.complex_name, d.property_type.value, d.payment_method.value): d for d in target_version.discounts}
@@ -300,9 +458,9 @@ def update_discounts_for_version(version_id: int, form_data: dict, changes_json:
 
     target_version.changes_summary_json = changes_json
     if updated_fields_count > 0:
-        db.session.commit()
+        planning_session.commit()
         return "Изменения успешно сохранены."
-    db.session.rollback() # No need to commit if only JSON changed
+    planning_session.rollback() # No need to commit if only JSON changed
     return "Изменений для сохранения не найдено."
 
 
@@ -310,16 +468,17 @@ def activate_version(version_id: int, activation_comment: str = None):
     """
     Активирует версию, обновляет ее комментарий и готовит данные для email.
     """
-    target_version = planning_models.DiscountVersion.query.get(version_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    target_version = planning_session.query(planning_models.DiscountVersion).get(version_id)
     if not target_version: raise ValueError(f"Не найдена версия с ID: {version_id}")
 
     if activation_comment: target_version.comment = activation_comment
-    old_active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    old_active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if old_active_version: old_active_version.is_active = False
 
     target_version.is_active = True
     target_version.was_ever_activated = True
-    db.session.commit()
+    planning_session.commit()
 
     if old_active_version:
         comments_data = json.loads(target_version.changes_summary_json) if target_version.changes_summary_json else None

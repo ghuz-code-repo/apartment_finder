@@ -4,7 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, send_file, jsonify
 from flask_login import login_required
-from ..core.extensions import db
+from ..core.db_utils import get_planning_session
 from ..core.decorators import permission_required
 
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
@@ -73,7 +73,7 @@ def upload_discounts():
             flash(f"Файл успешно загружен. Создана и активирована новая версия №{new_version.version_number}. {result_message}", "success")
             return redirect(url_for('discount.versions_index'))
         except Exception as e:
-            db.session.rollback()
+            get_planning_session().rollback()
             flash(f"Произошла ошибка при обработке файла: {e}", "danger")
             return redirect(url_for('discount.upload_discounts'))
 
@@ -85,7 +85,9 @@ def upload_discounts():
 @permission_required('view_version_history')
 def versions_index():
     # Обращаемся к моделям через planning_models
-    versions = planning_models.DiscountVersion.query.order_by(planning_models.DiscountVersion.version_number.desc()).all()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    versions = planning_session.query(planning_models.DiscountVersion).order_by(
+        planning_models.DiscountVersion.version_number.desc()).all()  # <--- ИЗМЕНЕНО
     active_version_obj = next((v for v in versions if v.is_active), None)
     return render_template(
         'discounts/versions.html',
@@ -100,8 +102,9 @@ def versions_index():
 @login_required
 @permission_required('view_version_history')
 def view_version(version_id):
-    version = planning_models.DiscountVersion.query.get_or_404(version_id)
-    discounts = planning_models.Discount.query.filter_by(version_id=version_id).order_by(
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    version = planning_session.query(planning_models.DiscountVersion).get_or_404(version_id)  # <--- ИЗМЕНЕНО
+    discounts = planning_session.query(planning_models.Discount).filter_by(version_id=version_id).order_by(
         planning_models.Discount.complex_name,
         planning_models.Discount.property_type,
         planning_models.Discount.payment_method
@@ -118,7 +121,8 @@ def view_version(version_id):
 @login_required
 @permission_required('manage_discounts')
 def edit_version(version_id):
-    version = planning_models.DiscountVersion.query.get_or_404(version_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    version = planning_session.query(planning_models.DiscountVersion).get_or_404(version_id)  # <--- ИЗМЕНЕНО
     if version.is_active:
         flash('Активные версии нельзя редактировать. Создайте новый черновик.', 'warning')
         return redirect(url_for('discount.versions_index'))
@@ -132,16 +136,16 @@ def edit_version(version_id):
             update_discounts_for_version(version_id, request.form, changes_json)
             flash(f"Изменения в черновике версии №{version.version_number} успешно сохранены.", "success")
         except Exception as e:
-            db.session.rollback()
+            planning_session.rollback()
             flash(f"Произошла критическая ошибка при сохранении: {e}", "danger")
         return redirect(url_for('discount.versions_index'))
 
-    discounts = planning_models.Discount.query.filter_by(version_id=version_id).order_by(
+    discounts = planning_session.query(planning_models.Discount).filter_by(version_id=version_id).order_by(
         planning_models.Discount.complex_name,
         planning_models.Discount.property_type,
         planning_models.Discount.payment_method
     ).all()
-    comments_for_version = planning_models.ComplexComment.query.filter_by(version_id=version_id).all()
+    comments_for_version = planning_session.query(planning_models.ComplexComment).filter_by(version_id=version_id).all()
     complex_comments = {c.complex_name: c.comment for c in comments_for_version}
 
     return render_template(
@@ -157,7 +161,9 @@ def edit_version(version_id):
 @login_required
 @permission_required('manage_discounts')
 def create_draft_version():
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(
+        is_active=True).first()  # <--- ИЗМЕНЕНО
     if not active_version:
         flash('Не найдена активная версия для создания черновика.', 'danger')
         return redirect(url_for('discount.versions_index'))
@@ -182,7 +188,8 @@ def activate_discount_version(version_id):
         email_data = activate_version(version_id, activation_comment=activation_comment)
         if email_data:
             send_email(email_data['subject'], email_data['html_body'])
-        version = planning_models.DiscountVersion.query.get(version_id)
+        planning_session = get_planning_session()
+        version = planning_session.query(planning_models.DiscountVersion).get(version_id)  # <--- ИЗМЕНЕНО
         flash(f"Версия №{version.version_number} успешно активирована.", "success")
     except Exception as e:
         flash(f"Ошибка при активации: {e}", "danger")
@@ -215,11 +222,14 @@ def save_complex_comment():
     if not all([version_id, complex_name]):
         return jsonify({'success': False, 'error': 'Missing data'}), 400
 
-    comment = planning_models.ComplexComment.query.filter_by(version_id=version_id, complex_name=complex_name).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+
+    comment = planning_session.query(planning_models.ComplexComment).filter_by(version_id=version_id,
+                                                                               complex_name=complex_name).first()  # <--- ИЗМЕНЕНО
     if not comment:
         comment = planning_models.ComplexComment(version_id=version_id, complex_name=complex_name)
-        db.session.add(comment)
+        planning_session.add(comment)  # <--- ИЗМЕНЕНО
 
     comment.comment = comment_text
-    db.session.commit()
+    planning_session.commit()  # <--- ИЗМЕНЕНО
     return jsonify({'success': True})

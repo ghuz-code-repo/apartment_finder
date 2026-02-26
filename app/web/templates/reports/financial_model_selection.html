@@ -1,0 +1,31 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Выбор проекта: Финансовая модель{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Выберите проект для анализа</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for complex in complexes %}
+                            <a href="{{ url_for('report.financial_model', complex_name=complex) }}"
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-building me-2 text-secondary"></i>
+                                    <strong>{{ complex }}</strong>
+                                </div>
+                                <i class="bi bi-chevron-right text-muted"></i>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

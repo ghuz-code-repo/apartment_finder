@@ -1,0 +1,66 @@
+{% extends "tma/base_tma.html" %}
+
+{% block content %}
+<div class="mobile-passport">
+    <h3>{{ complex_name }}</h3>
+
+    <div class="card">
+        <div class="metric-row">
+            <span>Продано м²:</span>
+            <strong>{{ data.summary.total_sold_area | round(1) }}</strong>
+        </div>
+        <div class="metric-row">
+            <span>Остаток:</span>
+            <strong>{{ data.summary.remaining_area | round(1) }}</strong>
+        </div>
+    </div>
+
+    <div class="card chart-container">
+        <div id="salesDynamicsChart" style="height: 300px; width: 100%;"></div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+<script>
+    const chartData = {{ charts_json | safe }};
+
+    function renderMobileChart() {
+        const layout = {
+            autosize: true,
+            margin: { l: 40, r: 10, t: 20, b: 40 },
+            showlegend: true,
+            legend: { orientation: 'h', y: -0.2 }, // Легенда под графиком
+            font: { size: 10 },
+            xaxis: { automargin: true },
+            yaxis: { automargin: true },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: window.Telegram.WebApp.themeParams.text_color || '#000' }
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: false, // Убираем панель инструментов для мобильных
+            staticPlot: false
+        };
+
+        // Пример отрисовки (адаптируйте под структуру ваших данных из project_dashboard_service)
+        if (chartData.sales_stats) {
+            const trace = {
+                x: chartData.sales_stats.dates,
+                y: chartData.sales_stats.values,
+                type: 'bar',
+                marker: { color: window.Telegram.WebApp.themeParams.button_color || '#2481cc' }
+            };
+            Plotly.newPlot('salesDynamicsChart', [trace], layout, config);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', renderMobileChart);
+</script>
+
+<style>
+    .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .chart-container { overflow: hidden; }
+</style>
+{% endblock %}

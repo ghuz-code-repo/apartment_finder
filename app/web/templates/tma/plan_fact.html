@@ -1,0 +1,86 @@
+{% extends "tma/base_tma.html" %}
+
+{% block content %}
+<div class="tma-container">
+    <h3 style="margin-top:0;">{{ complex_name }}</h3>
+    <p style="color: var(--tg-theme-hint-color); font-size: 14px; margin-bottom: 20px;">План-фактный анализ</p>
+
+    <div class="card">
+        <div style="font-weight: bold; margin-bottom: 12px;">Выполнение плана (Units)</div>
+        {% set total = dynamic.total_deviation_data %}
+        {% set perc = (total.fact_units / total.plan_units * 100) if total.plan_units > 0 else 0 %}
+
+        <div class="metric-row">
+            <span>План: <strong>{{ total.plan_units }}</strong></span>
+            <span>Факт: <strong>{{ total.fact_units }}</strong></span>
+        </div>
+        <div class="progress-bg">
+            <div class="progress-fill" style="width: {{ [perc, 100]|min }}%;"></div>
+        </div>
+        <div style="text-align: right; font-size: 12px; margin-top: 4px;">{{ perc|round(1) }}%</div>
+    </div>
+
+    <div class="card">
+        <div style="font-weight: bold; margin-bottom: 12px;">Месяц: {{ dynamic.latest_plan_fact_data.period }}</div>
+        {% set latest = dynamic.latest_plan_fact_data %}
+
+        <div class="metric-row">
+            <span>Объем (факт):</span>
+            <strong>{{ (latest.fact_volume / 1_000_000)|round(2) }} млн</strong>
+        </div>
+        <div class="metric-row" style="color: var(--tg-theme-hint-color); font-size: 12px;">
+            <span>План: {{ (latest.plan_volume / 1_000_000)|round(2) }} млн</span>
+        </div>
+
+        <div style="margin: 12px 0; border-top: 1px solid rgba(0,0,0,0.05);"></div>
+
+        <div class="metric-row">
+            <span>Поступления (факт):</span>
+            <strong>{{ (latest.fact_income / 1_000_000)|round(2) }} млн</strong>
+        </div>
+        <div class="metric-row" style="color: var(--tg-theme-hint-color); font-size: 12px;">
+            <span>План: {{ (latest.plan_income / 1_000_000)|round(2) }} млн</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="font-weight: bold; margin-bottom: 10px;">Динамика объема</div>
+        <div id="volumeDynamics" style="height: 250px;"></div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+<script>
+    const chartData = {{ charts_json | safe }};
+
+    function initChart() {
+        const dyn = chartData.dynamics;
+        const tracePlan = {
+            x: dyn.labels, y: dyn.plan_volume,
+            name: 'План', type: 'scatter', line: { color: '#ccc', dash: 'dot' }
+        };
+        const traceFact = {
+            x: dyn.labels, y: dyn.fact_volume,
+            name: 'Факт', type: 'bar', marker: { color: window.Telegram.WebApp.themeParams.button_color || '#2481cc' }
+        };
+
+        const layout = {
+            margin: { l: 40, r: 10, t: 10, b: 30 },
+            showlegend: false,
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: { color: window.Telegram.WebApp.themeParams.text_color || '#000', size: 10 }
+        };
+
+        Plotly.newPlot('volumeDynamics', [tracePlan, traceFact], layout, {responsive: true, displayModeBar: false});
+    }
+
+    document.addEventListener('DOMContentLoaded', initChart);
+</script>
+
+<style>
+    .metric-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .progress-bg { background: rgba(0,0,0,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .progress-fill { height: 100%; background: var(--tg-theme-button-color); border-radius: 4px; }
+</style>
+{% endblock %}

@@ -1,0 +1,66 @@
+<div class="comparison-card p-1">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="text-start" style="width: 45%;">
+            <small class="text-muted d-block">Наш проект</small>
+            <h6 class="fw-bold text-golden mb-0">{{ data.our_project.name }}</h6>
+        </div>
+        <div class="text-center">
+            <span class="badge rounded-pill bg-light text-dark border">VS</span>
+        </div>
+        <div class="text-end" style="width: 45%;">
+            <small class="text-muted d-block">Конкурент</small>
+            <h6 class="fw-bold text-info mb-0">{{ data.competitor.name }}</h6>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-borderless align-middle mb-0" style="font-size: 0.8rem;">
+            <thead>
+                <tr class="text-muted border-bottom">
+                    <th style="width: 40%;">Параметр</th>
+                    <th class="text-center">Наш</th>
+                    <th class="text-center">Конкурент</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="bg-light shadow-sm">
+                    <td class="fw-bold text-danger">Цена ДНА ($/м²)</td>
+                    <td class="text-center fw-bold text-danger">{{ "{:,.0f}".format(data.our_project.avg_bottom_price) }}</td>
+                    <td class="text-center fw-bold">{{ "{:,.0f}".format(data.competitor.avg_bottom_price or 0) }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Продано, шт</td>
+                    <td class="text-center fw-bold">{{ data.our_project.sold or 0 }}</td>
+                    <td class="text-center">{{ data.competitor.sold_count or 0 }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Всего объектов</td>
+                    <td class="text-center">{{ data.our_project.units or 0 }}</td>
+                    <td class="text-center">{{ data.competitor.units_count or 0 }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Средняя площадь</td>
+                    <td class="text-center">{{ data.our_project.avg_area|round(1) }}</td>
+                    <td class="text-center">{{ data.competitor.avg_area|round(1) }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Класс</td>
+                    <td class="text-center small">{{ data.our_project.property_class or '-' }}</td>
+                    <td class="text-center small">{{ data.competitor.property_class or '-' }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Стадия</td>
+                    <td class="text-center small">{{ data.our_project.construction_stage or '-' }}</td>
+                    <td class="text-center small">{{ data.competitor.construction_stage or '-' }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% if data.competitor.amenities %}
+    <div class="mt-3 bg-light p-2 rounded border-start border-golden border-3">
+        <label class="text-muted small fw-bold d-block mb-1">Благоустройство конкурента:</label>
+        <p class="small mb-0" style="font-size: 0.75rem;">{{ data.competitor.amenities }}</p>
+    </div>
+    {% endif %}
+</div>

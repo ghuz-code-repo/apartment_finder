@@ -15,6 +15,10 @@
             {# --- ИЗМЕНЕНИЕ 2 --- #}
             <i class="bi bi-file-earmark-excel me-2"></i>{{ _('Экспорт') }}
         </a>
+        {# --- НОВАЯ КНОПКА ГОДОВОГО ОТЧЕТА --- #}
+        <a href="{{ url_for('report.export_annual_plan_fact', year=selected_year, currency=request.args.get('currency', 'UZS')) }}" class="btn btn-outline-success">
+            Скачать годовой отчет
+        </a>
     </div>
 </div>
 

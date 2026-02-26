@@ -1,0 +1,66 @@
+{% extends "tma/base_tma.html" %}
+
+{% block content %}
+<div class="tma-dashboard">
+    <header class="dashboard-header">
+        <h3 style="margin: 0;">Проекты компании</h3>
+        <span class="currency-badge">Default: USD ($)</span>
+    </header>
+
+    {% if complexes %}
+        <div class="project-grid">
+            {% for complex in complexes %}
+                <div class="project-tile card">
+                    <div class="tile-header">
+                        <span class="project-name">{{ complex.name }}</span>
+                        <span class="remainder-label">{{ complex.remainders }} ед.</span>
+                    </div>
+
+                    <div class="tile-metrics">
+                        <div class="metric">
+                            <span class="label">Объем сделок</span>
+                            <span class="value">${{ "{:,.0f}".format(complex.volume_usd) }}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Поступления</span>
+                            <span class="value">${{ "{:,.0f}".format(complex.income_usd) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="tile-actions">
+                        <a href="{{ url_for('tma.tma_project_detail', complex_name=complex.name) }}" class="btn-tma secondary">Паспорт</a>
+                        <a href="{{ url_for('tma.tma_plan_fact', complex_name=complex.name) }}" class="btn-tma primary">План-факт</a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">Список проектов пуст</div>
+    {% endif %}
+</div>
+
+<style>
+    .tma-dashboard { padding: 10px; }
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .currency-badge { font-size: 10px; padding: 4px 8px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px; color: var(--tg-theme-hint-color); }
+
+    .project-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+    .project-tile { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .tile-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .project-name { font-weight: 700; font-size: 16px; color: var(--tg-theme-text-color); }
+    .remainder-label { font-size: 11px; color: var(--tg-theme-hint-color); }
+
+    .tile-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 0; border-top: 1px solid var(--tg-theme-secondary-bg-color); }
+    .metric { display: flex; flex-direction: column; }
+    .metric .label { font-size: 10px; color: var(--tg-theme-hint-color); text-transform: uppercase; }
+    .metric .value { font-size: 14px; font-weight: 600; color: var(--tg-theme-text-color); }
+
+    .tile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-tma { padding: 10px; border-radius: 8px; text-decoration: none; text-align: center; font-size: 13px; font-weight: 500; }
+    .btn-tma.primary { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
+    .btn-tma.secondary { background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-button-color); }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--tg-theme-hint-color); }
+</style>
+{% endblock %}

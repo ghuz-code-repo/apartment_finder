@@ -4,7 +4,7 @@ from collections import Counter
 from collections import defaultdict
 from datetime import date
 from sqlalchemy import func
-from ..core.extensions import db
+from ..core.db_utils import get_mysql_session
 from ..models.funnel_models import EstateBuy, EstateBuysStatusLog
 
 
@@ -17,12 +17,13 @@ def _format_status(status, custom_status):
 
 
 def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
+    mysql_session = get_mysql_session()
     """
     Рассчитывает разделение на целевые/нецелевые и ключевые показатели конверсии.
     (С УТОЧНЕНИЕМ: Сделка = 'Сделка в работе' + 'Сделка проведена')
     """
     # === Шаги 1-2: Сбор когорты и логов (без изменений) ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = mysql_session.query(EstateBuy.id)
     try:
         start_date = date.fromisoformat(start_date_str)
         cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
@@ -40,7 +41,7 @@ def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
     if not total_leads_count:
         return {'total_leads': 0}
 
-    logs = db.session.query(
+    logs = mysql_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -178,11 +179,12 @@ def finalize_tree_with_ids(node, threshold_percent=1.0):
 
 
 def get_funnel_data(start_date_str: str, end_date_str: str):
+    mysql_session = get_mysql_session()
     """
     Строит полное дерево путей заявок, ВКЛЮЧАЯ ID ЗАЯВОК в каждом узле.
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = mysql_session.query(EstateBuy.id)
     if start_date_str:
         try:
             start_date = date.fromisoformat(start_date_str)
@@ -202,7 +204,7 @@ def get_funnel_data(start_date_str: str, end_date_str: str):
         return {'name': 'Заявки, созданные за период', 'count': 0, 'ids': [], 'children': []}, {}
 
     # === Шаг 2: Получаем все логи для когорты, используя подзапрос ===
-    logs = db.session.query(
+    logs = mysql_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -237,12 +239,13 @@ def get_funnel_data(start_date_str: str, end_date_str: str):
 
 
 def get_dead_end_summary(start_date_str: str, end_date_str: str):
+    mysql_session = get_mysql_session()
     """
     Анализирует когорту созданных заявок и находит их конечные статусы.
     (Эта функция остается без изменений)
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = db.session.query(EstateBuy.id)
+    cohort_query = mysql_session.query(EstateBuy.id)
     try:
         start_date = date.fromisoformat(start_date_str)
         cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
@@ -253,12 +256,12 @@ def get_dead_end_summary(start_date_str: str, end_date_str: str):
     except (ValueError, TypeError): pass
 
     cohort_subquery = cohort_query.subquery()
-    trunk_count = db.session.query(func.count(cohort_subquery.c.id)).scalar() or 0
+    trunk_count = mysql_session.query(func.count(cohort_subquery.c.id)).scalar() or 0
     if not trunk_count:
         return {'total_leads': 0, 'summary': [], 'chart_data': {}}
 
     # === Шаг 2: Получаем все логи для когорты, упорядоченные по времени ===
-    logs = db.session.query(
+    logs = mysql_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name,
         EstateBuysStatusLog.status_custom_to_name
@@ -300,7 +303,10 @@ def get_leads_details_by_ids(lead_ids_str: str):
         return []
     if not lead_ids:
         return []
-    leads = db.session.query(
+
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+
+    leads = mysql_session.query(  # <--- ИЗМЕНЕНО
         EstateBuy.id,
         EstateBuy.date_added
     ).filter(

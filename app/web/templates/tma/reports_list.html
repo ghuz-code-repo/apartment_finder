@@ -1,0 +1,17 @@
+{% extends "tma/base_tma.html" %}
+
+{% block content %}
+    <h3>Аналитические отчеты</h3>
+
+    <div class="card">
+        <div style="font-weight: bold;">План-фактный отчет</div>
+        <p style="font-size: 0.9em; opacity: 0.8;">Общие показатели выполнения плана по месяцам.</p>
+        <a href="{{ url_for('report.plan_fact_report') }}" class="btn-tma">Смотреть</a>
+    </div>
+
+    <div class="card">
+        <div style="font-weight: bold;">Воронка продаж</div>
+        <p style="font-size: 0.9em; opacity: 0.8;">Конверсия лидов и статус сделок.</p>
+        <a href="{{ url_for('report.sales_funnel') }}" class="btn-tma">Смотреть</a>
+    </div>
+{% endblock %}

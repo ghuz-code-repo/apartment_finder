@@ -1,0 +1,206 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Реестр расторжений</h1>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-body">
+        <form action="{{ url_for('cancellations.add') }}" method="POST" class="row g-3 align-items-end">
+            <div class="col-auto">
+                <label class="form-label fw-bold">Добавить ID Объекта</label>
+                <input type="number" name="sell_id" class="form-control" placeholder="Например: 12345" required>
+            </div>
+
+            <div class="col-auto">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_free" id="add_free">
+                    <label class="form-check-label" for="add_free">Свободно</label>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_no_money" id="add_no_money">
+                    <label class="form-check-label" for="add_no_money">Без денег</label>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_change_object" id="add_change">
+                    <label class="form-check-label" for="add_change">Смена объекта</label>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-plus-circle"></i> Внести в реестр
+                </button>
+            </div>
+
+            <div class="col-auto">
+                <a href="{{ url_for('cancellations.export_excel') }}" class="btn btn-outline-success">
+                    <i class="bi bi-file-earmark-excel"></i> Выгрузить в Excel
+                </a>
+            </div>
+
+            <div class="col-auto text-muted small pb-2">
+                Дата расторжения установится автоматически.
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-bordered table-hover table-sm align-middle" style="font-size: 0.85rem;">
+        <thead class="table-light text-center align-middle">
+            <tr>
+                <th rowspan="2">ID</th>
+                <th colspan="3">Локация</th>
+                <th colspan="4">Характеристики</th>
+                <th colspan="3">Параметры</th>
+                <th colspan="3">Договор</th>
+                <th rowspan="2">Дата<br>расторжения</th>
+                <th rowspan="2">Действия</th>
+            </tr>
+            <tr>
+                <th>ЖК</th>
+                <th>Дом</th>
+                <th>Подъезд</th>
+
+                <th>№ Пом.</th>
+                <th>Тип</th>
+                <th>Комн.</th>
+                <th>Этаж / Площадь</th>
+
+                <th>Свободно</th>
+                <th>Без денег</th>
+                <th>Смена</th>
+
+                <th>Номер</th>
+                <th>Дата</th>
+                <th>Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if data %}
+                {% for item in data %}
+                <tr>
+                    <td class="text-center fw-bold">
+                        <a href="{{ url_for('main.apartment_details', sell_id=item.sell_id) }}" target="_blank" class="text-decoration-none">
+                            {{ item.sell_id }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.7rem;"></i>
+                        </a>
+                    </td>
+
+                    <td>{{ item.complex }}</td>
+                    <td>{{ item.house }}</td>
+                    <td class="text-center">{{ item.entrance }}</td>
+
+                    <td class="text-center fw-bold">{{ item.number }}</td>
+                    <td>{{ item.type }}</td>
+                    <td class="text-center">{{ item.rooms }}</td>
+                    <td class="text-center text-nowrap">{{ item.floor }} эт. / {{ item.area }} м²</td>
+
+                    <td class="text-center">{{ 'Да' if item.is_free else '-' }}</td>
+                    <td class="text-center">{{ 'Да' if item.is_no_money else '-' }}</td>
+                    <td class="text-center">{{ 'Да' if item.is_change_object else '-' }}</td>
+
+                    <td class="text-center">{{ item.contract_number }}</td>
+                    <td class="text-center">{{ item.contract_date }}</td>
+                    <td class="text-end text-nowrap">
+                        {% if item.contract_sum %}
+                            {{ "{:,.0f}".format(item.contract_sum).replace(',', ' ') }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </td>
+
+                    <td class="text-center text-danger fw-bold">{{ item.cancellation_date }}</td>
+
+                    <td class="text-center text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-primary border-0 me-1"
+                                data-bs-toggle="modal"
+                                data-bs-target="#editModal{{ item.registry_id }}"
+                                title="Редактировать данные">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+
+                        <form action="{{ url_for('cancellations.delete', id=item.registry_id) }}" method="POST" class="d-inline" onsubmit="return confirm('Вы действительно хотите удалить эту запись?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger border-0" title="Удалить запись">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+
+                        <div class="modal fade text-start" id="editModal{{ item.registry_id }}" tabindex="-1" aria-hidden="true">
+                          <div class="modal-dialog">
+                            <div class="modal-content">
+                              <form action="{{ url_for('cancellations.update_manual') }}" method="POST">
+                                  <div class="modal-header">
+                                    <h5 class="modal-title">Ручной ввод данных (ID {{ item.sell_id }})</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                  </div>
+                                  <div class="modal-body">
+                                    <input type="hidden" name="registry_id" value="{{ item.registry_id }}">
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Номер договора</label>
+                                        <input type="text" class="form-control" name="manual_number"
+                                               value="{{ item.manual_number_raw }}">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Дата договора</label>
+                                        <input type="date" class="form-control" name="manual_date"
+                                               value="{{ item.manual_date_raw }}">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Сумма сделки</label>
+                                        <input type="number" step="0.01" class="form-control" name="manual_sum"
+                                               value="{{ item.manual_sum_raw }}">
+                                    </div>
+
+                                    <div class="mb-3 border-top pt-3">
+                                        <label class="form-label fw-bold d-block mb-2">Дополнительные параметры</label>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox" name="is_free" id="edit_free{{ item.registry_id }}" {{ 'checked' if item.is_free }}>
+                                            <label class="form-check-label" for="edit_free{{ item.registry_id }}">Свободно</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox" name="is_no_money" id="edit_no_money{{ item.registry_id }}" {{ 'checked' if item.is_no_money }}>
+                                            <label class="form-check-label" for="edit_no_money{{ item.registry_id }}">Без денег</label>
+                                        </div>
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="checkbox" name="is_change_object" id="edit_change{{ item.registry_id }}" {{ 'checked' if item.is_change_object }}>
+                                            <label class="form-check-label" for="edit_change{{ item.registry_id }}">Смена</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-info small py-2 mb-0">
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        Заполняйте данные договора, только если они не подтянулись автоматически.
+                                    </div>
+                                  </div>
+                                  <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                                  </div>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
+                        </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="16" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                        Нет записей о расторжениях
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

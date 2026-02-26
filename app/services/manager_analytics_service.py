@@ -2,18 +2,19 @@
 
 from sqlalchemy import func, extract
 from collections import defaultdict
-from ..core.extensions import db
+from ..core.db_utils import get_mysql_session
 from ..models.auth_models import SalesManager
 from ..models.funnel_models import EstateBuysStatusLog
 from ..models.estate_models import EstateDeal
 
 
 def get_manager_analytics_report(year: int, month: int, post_title: str = None):
+    mysql_session = get_mysql_session()
     """
     Собирает аналитические данные по менеджерам за указанный период.
     """
     # ... (Блоки 1, 2 и 3 без изменений) ...
-    manager_query = SalesManager.query
+    manager_query = mysql_session.query(SalesManager)
     if post_title and post_title != 'all':
         manager_query = manager_query.filter(SalesManager.post_title == post_title)
 
@@ -38,7 +39,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
     manager_ids = list(report_data.keys())
 
     # 2. Подсчет "Броней" и сбор их ID
-    bookings_query = db.session.query(
+    bookings_query = mysql_session.query(
         EstateBuysStatusLog.manager_id,
         EstateBuysStatusLog.estate_buy_id
     ).filter(
@@ -60,7 +61,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
         "Сделка расторгнута": "deals_failed"  # <-- ИЗМЕНЕНИЕ
     }
 
-    deal_events = db.session.query(
+    deal_events = mysql_session.query(
         EstateBuysStatusLog.estate_buy_id,
         EstateBuysStatusLog.status_to_name
     ).filter(
@@ -71,7 +72,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
 
     if deal_events:
         deal_buy_ids = list(set([event.estate_buy_id for event in deal_events]))
-        full_history_logs = db.session.query(
+        full_history_logs = mysql_session.query(
             EstateBuysStatusLog.estate_buy_id,
             EstateBuysStatusLog.manager_id,
             EstateBuysStatusLog.status_to_name
@@ -102,7 +103,7 @@ def get_manager_analytics_report(year: int, month: int, post_title: str = None):
                     report_data[manager_id][key]['buy_ids'].append(buy_id)
 
     # 4. Подсчет "Сделок отменена"
-    canceled_deals_query = db.session.query(
+    canceled_deals_query = mysql_session.query(
         EstateDeal.deal_manager_id,
         func.count(EstateDeal.id)
     ).filter(

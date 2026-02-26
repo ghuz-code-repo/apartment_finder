@@ -1,3 +1,13 @@
 /instance/app.db
 /app/uploads/discount_template.xlsx
 .env
+app/core/__pycache__/*
+app/models/__pycache__/*
+
+app/services/__pycache__/*
+app/static/uploads/*
+app/uploads/*
+app/uploads/xlsx
+app/web/__pycache__/*
+migrations_planning/__pycache__/*
+app/__pycache__/*

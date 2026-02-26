@@ -6,8 +6,11 @@ import os
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TELEGRAM_BOT_TOKEN = '8511926898:AAHujmgGC9vgm23lcu82HEUjtFdwvr91va8'
 
-    # URI для подключения к исходной базе данных MySQL (для импорта)
+    # Попробуйте сначала ID из вашего бота-помощника
+    TELEGRAM_CHANNEL_ID = -5055698551
+    # URI    для подключения к исходной базе данных MySQL (для импорта)
     # Используйте переменные окружения для безопасности
     SOURCE_MYSQL_URI = (
         f"mysql+pymysql://"
@@ -33,7 +36,8 @@ class DevelopmentConfig(Config):
     # Основная база данных
     SQLALCHEMY_DATABASE_URI = os.environ.get('MAIN_DATABASE_URL') or 'sqlite:///main_app.db'
 
-    # Оставляем только одну дополнительную БД
+    # Оставляем 'planning_db' и добавляем 'mysql_source'
     SQLALCHEMY_BINDS = {
-        'planning_db': os.environ.get('PLANNING_DATABASE_URL') or 'sqlite:///planning.db'
+        'planning_db': os.environ.get('PLANNING_DATABASE_URL') or 'sqlite:///planning.db',
+        'mysql_source': Config.SOURCE_MYSQL_URI  # Прямое подключение к MySQL
     }
