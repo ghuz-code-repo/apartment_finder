@@ -33,11 +33,16 @@ class Config:
 class DevelopmentConfig(Config):
     DEBUG = True
 
-    # Основная база данных
-    SQLALCHEMY_DATABASE_URI = os.environ.get('MAIN_DATABASE_URL') or 'sqlite:///main_app.db'
+    # Основная база данных (абсолютный путь в instance/)
+    _basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    _instance_path = os.path.join(_basedir, 'instance')
+
+    SQLALCHEMY_DATABASE_URI = os.environ.get('MAIN_DATABASE_URL') or \
+        'sqlite:///' + os.path.join(_instance_path, 'main_app.db')
 
     # Оставляем 'planning_db' и добавляем 'mysql_source'
     SQLALCHEMY_BINDS = {
-        'planning_db': os.environ.get('PLANNING_DATABASE_URL') or 'sqlite:///planning.db',
+        'planning_db': os.environ.get('PLANNING_DATABASE_URL') or \
+            'sqlite:///' + os.path.join(_instance_path, 'planning.db'),
         'mysql_source': Config.SOURCE_MYSQL_URI  # Прямое подключение к MySQL
     }
