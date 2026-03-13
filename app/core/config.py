@@ -38,5 +38,6 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_BINDS = {
         'planning_db': os.environ.get('PLANNING_DATABASE_URL') or \
             'sqlite:///' + os.path.join(_instance_path, 'planning.db'),
-        'mysql_source': Config.SOURCE_MYSQL_URI  # Прямое подключение к MySQL
     }
+    if Config.SOURCE_MYSQL_URI:
+        SQLALCHEMY_BINDS['mysql_source'] = Config.SOURCE_MYSQL_URI
