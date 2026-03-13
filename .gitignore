@@ -2,6 +2,10 @@
 *.db
 /app/uploads/discount_template.xlsx
 .env
+.idea/
+__pycache__/
+*.pyc
+cookies.txt
 app/core/__pycache__/*
 app/models/__pycache__/*
 
@@ -13,4 +17,3 @@ app/web/__pycache__/*
 migrations_planning/__pycache__/*
 app/__pycache__/*
 instance/*
-__pycache__/*

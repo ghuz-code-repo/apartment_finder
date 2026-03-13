@@ -1,10 +1,16 @@
+import os
 import sqlalchemy
 from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 
-# Взято напрямую из вашего app/core/config.py
-DB_URI = "mysql+pymysql://macro_bi_cmp_528:p[8qG^]Qf3v[qr*1@172.16.0.199:9906/macro_bi_cmp_528"
+load_dotenv()
 
-print(f"--- [DEBUG] Пытаемся подключиться к MySQL: {DB_URI.replace('p[8qG^]Qf3v[qr*1', '***PASSWORD***')} ---")
+DB_URI = os.environ.get('SOURCE_MYSQL_URI', '')
+if not DB_URI:
+    print("ERROR: SOURCE_MYSQL_URI not set in .env")
+    exit(1)
+
+print(f"--- [DEBUG] Пытаемся подключиться к MySQL ---")
 
 try:
     engine = create_engine(DB_URI)
