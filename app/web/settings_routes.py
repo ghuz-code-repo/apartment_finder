@@ -2,7 +2,7 @@
 
 import pandas as pd
 from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
 from app.services import settings_service, report_service
 from .forms import CalculatorSettingsForm
@@ -14,6 +14,7 @@ settings_bp = Blueprint('settings', __name__, template_folder='templates')
 
 @settings_bp.route('/calculator-settings/zero-mortgage/download-template')
 @login_required
+@permission_required('manage_settings')
 def download_matrix_template():
     """Отдает сгенерированный шаблон для матрицы кэшбека."""
     return settings_service.generate_zero_mortgage_template()

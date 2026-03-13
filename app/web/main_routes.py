@@ -5,10 +5,10 @@ from datetime import datetime
 from flask import session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask import abort
-from flask_login import login_required, current_user
+from flask_login import current_user
 from flask_babel import gettext as _
+from ..core.decorators import permission_required, login_required
 from app.services import special_offer_service
-from ..core.decorators import permission_required
 from ..core.db_utils import get_default_session, get_mysql_session
 from ..models import auth_models
 from ..models.estate_models import EstateHouse
@@ -31,6 +31,7 @@ def set_language(lang=None):
 
 @main_bp.route('/show-all-routes')
 @login_required
+@permission_required('manage_settings')
 def show_all_routes():
     """Временная страница для отображения всех зарегистрированных маршрутов."""
     rules = []
@@ -273,6 +274,7 @@ def manage_exclusions():
 
 @main_bp.route('/monthly-specials')
 @login_required
+@permission_required('view_selection')
 def monthly_specials_list():
     """Отображает галерею активных квартир месяца."""
     active_offers = special_offer_service.get_active_special_offers()
@@ -283,6 +285,7 @@ def monthly_specials_list():
 
 @main_bp.route('/special-offer/<int:sell_id>')
 @login_required
+@permission_required('view_selection')
 def special_offer_detail(sell_id):
     """Отображает детальную страницу спец. предложения."""
     offer_details = special_offer_service.get_special_offer_details_by_sell_id(sell_id)

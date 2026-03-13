@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.services import news_service
 from app.models.news_models import News
 from app.core.decorators import permission_required
@@ -8,6 +8,7 @@ news_bp = Blueprint('news', __name__)
 
 @news_bp.route('/market/news')
 @login_required
+@permission_required('view_selection')
 def feed():
     # Загрузка новостей от новых к старым
     news_items = News.query.order_by(News.created_at.desc()).all()

@@ -99,7 +99,7 @@ def setup_database():
                     full_name='Администратор Системы',
                     email='d.plakhotnyi@gh.uz'
                 )
-                admin_user.set_password('admin')
+                admin_user.set_password(os.getenv('ADMIN_PASSWORD', 'ChangeMe!2024'))
                 db.session.add(admin_user)
                 db.session.commit()
                 print("--- [ОТЛАДКА] Пользователь 'admin' успешно создан. ---")

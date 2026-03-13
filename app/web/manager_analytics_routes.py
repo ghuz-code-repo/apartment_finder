@@ -1,7 +1,7 @@
 # app/web/manager_analytics_routes.py
 
 from flask import Blueprint, render_template, request
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from datetime import date
 from app.core.decorators import permission_required
 from app.services import manager_analytics_service, funnel_service  # Добавлен funnel_service

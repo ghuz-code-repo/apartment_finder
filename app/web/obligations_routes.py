@@ -3,7 +3,7 @@
 from datetime import date  # Добавим date
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 
 from app.core.decorators import permission_required
 from ..core.db_utils import get_mysql_session

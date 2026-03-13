@@ -1,7 +1,7 @@
 # app/web/cancellation_routes.py
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.services import cancellation_service
 from app.core.decorators import permission_required
 from flask import send_file

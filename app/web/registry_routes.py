@@ -1,7 +1,7 @@
 # app/web/registry_routes.py
 
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
 from app.services import registry_service
 from app.models.registry_models import RegistryType
@@ -25,8 +25,8 @@ def index():
 
 
 @registry_bp.route('/deals-registry/add', methods=['POST'])
-@permission_required('manage_registry')
 @login_required
+@permission_required('manage_registry')
 def add_deal():
     sell_id = request.form.get('sell_id', type=int)
     reg_type = request.form.get('registry_type')
@@ -51,8 +51,8 @@ def add_deal():
 
 
 @registry_bp.route('/deals-registry/delete/<int:id>', methods=['POST'])
-@permission_required('manage_registry')
 @login_required
+@permission_required('manage_registry')
 def delete_deal(id):
     if registry_service.remove_from_registry(id):
         flash("Запись удалена", "success")

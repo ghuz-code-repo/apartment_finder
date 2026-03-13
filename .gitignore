@@ -13,3 +13,4 @@ app/web/__pycache__/*
 migrations_planning/__pycache__/*
 app/__pycache__/*
 instance/*
+__pycache__/*

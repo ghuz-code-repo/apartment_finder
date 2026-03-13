@@ -9,7 +9,7 @@ from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file
 from flask import jsonify
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from sqlalchemy import or_, extract, func
 from werkzeug.utils import secure_filename
 from app.models.planning_models import PropertyType
@@ -465,6 +465,7 @@ def upload_plan():
 
 @report_bp.route('/commercial-offer/complex/<int:sell_id>')
 @login_required
+@permission_required('view_selection')
 def generate_complex_kp(sell_id):
     card_data = selection_service.get_apartment_card_data(sell_id)
     if not card_data.get('apartment'):

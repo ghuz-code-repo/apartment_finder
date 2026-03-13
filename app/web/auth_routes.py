@@ -1,9 +1,9 @@
 # auth_routes.py
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for
-from flask_login import login_user, logout_user, login_required, current_user
+from flask import Blueprint, render_template, request, flash, redirect, url_for, g
+from flask_login import login_user, logout_user, current_user
 
-from ..core.decorators import permission_required
+from ..core.decorators import permission_required, login_required
 from ..core.db_utils import get_default_session
 from .forms import CreateUserForm, ChangePasswordForm, RoleForm
 
@@ -14,8 +14,17 @@ from ..models import auth_models
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
 
 
+def _is_gateway_mode():
+    """Check if we're running behind the gateway."""
+    return hasattr(g, 'user') and g.user is not None and isinstance(g.user, dict)
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    # In gateway mode, redirect to main page (gateway handles auth)
+    if _is_gateway_mode():
+        return redirect(url_for('main.index'))
+
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
 
@@ -38,6 +47,8 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    if _is_gateway_mode():
+        return redirect('/logout')
     logout_user()
     flash('Вы успешно вышли из системы.', 'success')
     return redirect(url_for('auth.login'))
@@ -47,6 +58,8 @@ def logout():
 @login_required
 @permission_required('manage_users')
 def user_management():
+    if _is_gateway_mode():
+        return redirect('/admin')
     form = CreateUserForm()
     # Загружаем роли из auth_models
     default_session = get_default_session()  # <--- ДОБАВЛЕНО
@@ -91,6 +104,8 @@ def delete_user(user_id):
 @auth_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
+    if _is_gateway_mode():
+        return redirect('/profile')
     form = ChangePasswordForm()
     if form.validate_on_submit():
         if not current_user.check_password(form.current_password.data):
@@ -109,6 +124,8 @@ def change_password():
 @login_required
 @permission_required('manage_users')
 def manage_roles():
+    if _is_gateway_mode():
+        return redirect('/admin')
     default_session = get_default_session()  # <--- ДОБАВЛЕНО
     roles = default_session.query(auth_models.Role).order_by(auth_models.Role.name).all()  # <--- ИЗМЕНЕНО
     return render_template('auth/manage_roles.html', title="Управление ролями", roles=roles)

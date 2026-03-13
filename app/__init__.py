@@ -4,12 +4,13 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy.orm import joinedload, selectinload
-from flask import Flask, request, g, session, current_app
+from flask import Flask, request, g, session, current_app, redirect
 from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
 from .core.db_utils import get_default_session
 from .core.extensions import db, migrate_default, migrate_planning, login_manager
+from .core.decorators import PERMISSION_MAP, _is_gateway_user
 
 babel = Babel()
 
@@ -33,6 +34,76 @@ def select_locale():
     if 'language' in session and session['language'] in current_app.config['LANGUAGES'].keys():
         return session['language']
     return request.accept_languages.best_match(current_app.config['LANGUAGES'].keys())
+
+
+class _GatewayRole:
+    """Mimics role object for gateway users."""
+    def __init__(self, name):
+        self.name = name
+
+
+class GatewayUserProxy:
+    """Proxy that makes gateway user dict/UserContext look like Flask-Login user for templates."""
+
+    def __init__(self, user_data):
+        if isinstance(user_data, dict):
+            self._user = user_data
+        else:
+            # UserContext from auth-connector
+            self._user = user_data.to_dict() if hasattr(user_data, 'to_dict') else {
+                'id': getattr(user_data, 'user_id', 0),
+                'username': getattr(user_data, 'username', 'Gateway User'),
+                'full_name': getattr(user_data, 'full_name', ''),
+                'roles': getattr(user_data, 'roles', []),
+                'permissions': getattr(user_data, 'permissions', []),
+                'is_admin': getattr(user_data, 'is_admin', False),
+            }
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_active(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    @property
+    def id(self):
+        return self._user.get('id') or self._user.get('user_id', 0)
+
+    @property
+    def username(self):
+        return self._user.get('username', 'Gateway User')
+
+    @property
+    def full_name(self):
+        return self._user.get('full_name', self.username)
+
+    @property
+    def role(self):
+        roles = self._user.get('roles', [])
+        role_name = self._user.get('role', roles[0] if roles else 'user')
+        return _GatewayRole(role_name)
+
+    @property
+    def is_admin(self):
+        if self._user.get('is_admin'):
+            return True
+        roles = self._user.get('roles', [])
+        return 'admin' in roles
+
+    def can(self, perm_name):
+        if self.is_admin:
+            return True
+        gateway_perm = PERMISSION_MAP.get(perm_name, perm_name)
+        return gateway_perm in self._user.get('permissions', [])
+
+    def get_id(self):
+        return str(self.id)
 
 
 def create_app(config_class=DevelopmentConfig):
@@ -88,6 +159,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.news_routes import news_bp
         from .web.ai_routes import ai_bp
         from .web.tma_routes import tma_bp
+        from .web.sync_routes import sync_bp
 
         # Регистрация Blueprints
         app.register_blueprint(report_bp, url_prefix='/reports')
@@ -106,6 +178,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(news_bp)
         app.register_blueprint(ai_bp)
         app.register_blueprint(tma_bp, url_prefix='/tma')
+        app.register_blueprint(sync_bp, url_prefix='/api/sync')
 
         @login_manager.user_loader
         def load_user(user_id):
@@ -117,5 +190,40 @@ def create_app(config_class=DevelopmentConfig):
     @app.before_request
     def before_request_tasks():
         g.lang = str(select_locale())
+
+    @app.context_processor
+    def inject_current_user():
+        """Make current_user work in both gateway and local modes."""
+        from flask_login import current_user as flask_login_user
+
+        is_gateway = False
+
+        # Gateway mode: g.user is set by auth middleware
+        if hasattr(g, 'user') and g.user and _is_gateway_user(g.user):
+            is_gateway = True
+            return {
+                'current_user': GatewayUserProxy(g.user),
+                'is_gateway_mode': True,
+            }
+
+        # Local mode: use Flask-Login
+        return {
+            'current_user': flask_login_user,
+            'is_gateway_mode': is_gateway,
+        }
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        """Handle unauthorized access."""
+        # If behind gateway, return 401 (gateway handles redirect)
+        if hasattr(g, 'user'):
+            from flask import abort
+            abort(401)
+        # Local mode: redirect to login
+        return redirect('/login')
+
+    @app.route('/health')
+    def health_check():
+        return {'status': 'ok', 'service': 'apartment-finder'}, 200
 
     return app

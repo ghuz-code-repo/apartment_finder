@@ -1,7 +1,7 @@
 # app/web/complex_calc_routes.py
 
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.services import selection_service, complex_calc_service
 from app.core.decorators import permission_required
 
