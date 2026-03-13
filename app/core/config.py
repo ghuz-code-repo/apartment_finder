@@ -1,9 +1,12 @@
 # app/core/config.py
 
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv(encoding='utf-8')
+except Exception:
+    pass
 
 
 class Config:
