@@ -68,7 +68,7 @@ document.getElementById('trainBtn').addEventListener('click', async () => {
     statusDiv.innerHTML = 'Запущен процесс оптимизации...';
 
     try {
-        const res = await fetch('/ai/api/train', {
+        const res = await fetch('{{ url_for("ai.train_model_api") }}', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'}
         });
@@ -100,7 +100,7 @@ document.getElementById('predictBtn').addEventListener('click', async () => {
 
     try {
         const month = document.getElementById('monthSelect').value;
-        const res = await fetch('/ai/api/get_forecast', {
+        const res = await fetch('{{ url_for("ai.get_forecast_api") }}', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({month: month})
