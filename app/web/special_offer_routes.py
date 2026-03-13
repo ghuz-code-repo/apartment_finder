@@ -1,7 +1,7 @@
 # app/web/special_offer_routes.py
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, abort
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from datetime import date
 
 from app.core.decorators import permission_required

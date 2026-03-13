@@ -1,0 +1,33 @@
+{% extends "layouts/base.html" %}
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Динамика цен конкурентов</h2>
+    <div class="row">
+        {% for name, plot in dynamics_data.items() %}
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">{{ name }}</h5>
+                    <canvas id="chart-{{ loop.index }}"></canvas>
+                </div>
+            </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            new Chart(document.getElementById('chart-{{ loop.index }}'), {
+                type: 'line',
+                data: {
+                    labels: {{ plot.labels|tojson }},
+                    datasets: [{
+                        label: 'Цена за м²',
+                        data: {{ plot.prices|tojson }},
+                        borderColor: '#b99e67',
+                        tension: 0.1
+                    }]
+                }
+            });
+        </script>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

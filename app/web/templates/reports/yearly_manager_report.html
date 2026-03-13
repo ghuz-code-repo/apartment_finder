@@ -1,168 +1,450 @@
 {% extends "layouts/base.html" %}
 
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project_passport_style.css') }}">
+{% endblock %}
+
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>{{ _('Аналитика по менеджерам') }}</h1>
-</div>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <a href="{{ url_for('report.project_dashboard', complex_name=data.complex_name) }}" class="text-muted text-decoration-none small mb-1 d-block">
+            <i class="bi bi-arrow-left"></i> {{ _('Назад к дашборду') }}
+        </a>
+        <h1 class="gradient-heading mb-0">{{ data.complex_name }}</h1>
+    </div>
+    <div id="passport-controls" class="d-flex align-items-center gap-3">
+        {% if current_user.can('manage_settings') %}
+            <button id="edit-btn" class="btn btn-outline-warning">
+                <i class="bi bi-pencil me-2"></i>{{ _('Редактировать') }}
+            </button>
+            <button id="cancel-btn" class="btn btn-secondary" style="display: none;">
+                {{ _('Отмена') }}
+            </button>
+            <button id="save-btn" class="btn btn-success" style="display: none;">
+                <i class="bi bi-save me-2"></i>{{ _('Сохранить') }}
+            </button>
+        {% endif %}
 
-{# --- ВКЛАДКИ --- #}
-<ul class="nav nav-tabs mb-4">
-    <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'general' %}active{% endif %}" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Общий отчет') }}</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'yearly' %}active{% endif %}" href="{{ url_for('manager_analytics.yearly_report') }}">{{ _('Годовой отчет по менеджеру') }}</a>
-    </li>
-</ul>
-
-<div class="card card-glass mb-4">
-    <div class="card-body">
-        <form method="GET" action="{{ url_for('manager_analytics.yearly_report') }}">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-6">
-                    <label for="manager-select" class="form-label">{{ _('Выберите менеджера') }}</label>
-                    <select name="manager_id" id="manager-select" class="form-select" required>
-                        <option value="">{{ _('-- Менеджер --') }}</option>
-                        {% for manager in all_managers %}
-                            <option value="{{ manager.id }}" {% if manager.id == selected_manager_id %}selected{% endif %}>{{ manager.full_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label for="year-select" class="form-label">{{ _('Год') }}</label>
-                    <select name="year" id="year-select" class="form-select">
-                        {% for y in years %}
-                            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary w-100">{{ _('Показать') }}</button>
-                </div>
+        <div class="ms-4 text-center">
+            <label class="form-label">{{ _('Валюта') }}</label>
+            <div class="form-check form-switch fs-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+                <label class="form-check-label" for="currencyToggle" id="currencyLabel">UZS</label>
             </div>
-        </form>
-    </div>
-</div>
-
-{% if report_data %}
-<div class="card card-glass mb-4">
-    <div class="card-header">
-        <h4>{{ _('График показателей:') }} {{ selected_manager.full_name }} ({{ selected_year }} {{ _('г.') }})</h4>
-    </div>
-    <div class="card-body">
-        <canvas id="managerYearlyChart"></canvas>
-    </div>
-</div>
-
-<div class="card card-glass">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover">
-                <thead class="table-light">
-                    <tr>
-                        <th>{{ _('Месяц') }}</th>
-                        <th class="text-center">{{ _('Бронь') }}</th>
-                        <th class="text-center">{{ _('Сделка в работе') }}</th>
-                        <th class="text-center">{{ _('Сделка проведена') }}</th>
-                        <th class="text-center">{{ _('Отказы / Отмены') }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for month_data in report_data %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td class="text-center">{{ month_data.bookings.count }}</td>
-                        <td class="text-center">{{ month_data.deals_in_progress.count }}</td>
-                        <td class="text-center">{{ month_data.deals_completed.count }}</td>
-                        <td class="text-center text-danger">{{ month_data.deals_failed.count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr class="table-light fw-bold">
-                        <td>{{ _('Итого за год') }}</td>
-                        <td class="text-center">{{ annual_totals.bookings }}</td>
-                        <td class="text-center">{{ annual_totals.deals_in_progress }}</td>
-                        <td class="text-center">{{ annual_totals.deals_completed }}</td>
-                        <td class="text-center">{{ annual_totals.deals_failed }}</td>
-                    </tr>
-                </tfoot>
-            </table>
         </div>
     </div>
 </div>
-{% endif %}
-{% endblock %}
+
+<div class="row g-4" id="passport-form-container" data-complex-name="{{ data.complex_name }}">
+
+    <div class="col-lg-8 d-flex flex-column gap-4">
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Общее кол-во квартир') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.total_units }}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Остаток на сегодня') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.total_remainders_count }}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="passport-card">
+                    <span class="passport-label">{{ _('Мес. до кадастра') }}</span>
+                    <span class="passport-value-large">{{ data.dynamic_data.months_to_cadastre or 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="passport-card">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Вид конструкции') }}</span>
+                    <span class="passport-value passport-value-view" data-field="construction_type">{{ data.static_data.construction_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="construction_type" value="{{ data.static_data.construction_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Тип отопления') }}</span>
+                    <span class="passport-value passport-value-view" data-field="heating_type">{{ data.static_data.heating_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="heating_type" value="{{ data.static_data.heating_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Вид отделки') }}</span>
+                    <span class="passport-value passport-value-view" data-field="finishing_type">{{ data.static_data.finishing_type or '...' }}</span>
+                    <input type="text" class="form-control passport-value-edit" id="finishing_type" value="{{ data.static_data.finishing_type or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <span class="passport-label">{{ _('Дата начала строительства') }}</span>
+                    <span class="passport-value passport-value-view" data-field="start_date">{{ data.static_data.start_date or '...' }}</span>
+                    <input type="date" class="form-control passport-value-edit" id="start_date" value="{{ data.static_data.start_date or '' }}">
+                </div>
+                 <div class="col-md-12">
+                    <span class="passport-label">{{ _('Адрес (Интерактивная карта - ссылка)') }}</span>
+                    <span class="passport-value passport-value-view" data-field="address_link">
+                        {% if data.static_data.address_link %}
+                        <a href="{{ data.static_data.address_link }}" target="_blank">{{ data.static_data.address_link }}</a>
+                        {% else %}...{% endif %}
+                    </span>
+                    <input type="text" class="form-control passport-value-edit" id="address_link" value="{{ data.static_data.address_link or '' }}">
+                </div>
+                <div class="col-md-12">
+                    <span class="passport-label">{{ _('Текущий этап строительства') }}</span>
+                    <span class="passport-value passport-value-view" data-field="current_stage">{{ data.static_data.current_stage or '...' }}</span>
+                    <textarea class="form-control passport-value-edit" id="current_stage" rows="3">{{ data.static_data.current_stage or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Действующие скидки') }}</h5>
+            <div class="table-responsive" style="max-height: 300px;">
+                <table class="table table-sm table-striped discount-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Тип недв.') }}</th>
+                            <th>{{ _('Тип оплаты') }}</th>
+                            <th class="text-end">{{ _('МПП') }}</th>
+                            <th class="text-end">{{ _('РОП') }}</th>
+                            <th class="text-end">{{ _('КД') }}</th>
+                            <th class="text-end">{{ _('Акция') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set has_visible_discount = false %}
+                        {% for d in data.dynamic_data.active_discounts %}
+                            {% set has_discount = (d.mpp or 0) > 0 or (d.rop or 0) > 0 or (d.kd or 0) > 0 %}
+                            {% if has_discount %}
+                                {% set has_visible_discount = true %}
+                                <tr>
+                                    <td>{{ _(d.property_type) }}</td>
+                                    <td>
+                                        {% if d.payment_method == '100% оплата' %}
+                                            {{ _('100%% оплата') }}
+                                        {% else %}
+                                            {{ _(d.payment_method) }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{% if (d.mpp or 0) > 0 %}{{ "%.1f"|format(d.mpp * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.rop or 0) > 0 %}{{ "%.1f"|format(d.rop * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.kd or 0) > 0 %}{{ "%.1f"|format(d.kd * 100) }}%{% else %}—{% endif %}</td>
+                                    <td class="text-end">{% if (d.action or 0) > 0 %}{{ "%.1f"|format(d.action * 100) }}%{% else %}—{% endif %}</td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                        {% if not has_visible_discount %}
+                            <tr><td colspan="6" class="text-center">{{ _('Нет данных об активных скидках.') }}</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-4">{{ _('Показатели План-Факт') }}</h5>
+
+            {% set lpf = data.dynamic_data.latest_plan_fact_data %}
+            {% if lpf %}
+                <h6 class="text-muted">{{ _('Последний отчет') }} ({{ lpf.period }})</h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Продажи, шт.') }}</span>
+                            <span class="passport-value">{{ "{:,.0f}".format(lpf.fact_units) }} / <small class="text-muted">{{ "{:,.0f}".format(lpf.plan_units) }}</small></span>
+                            {% set dev = lpf.fact_units - lpf.plan_units %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: {{ "{:,.0f}".format(dev) }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Контрактация') }}</span>
+                            <span class="passport-value">
+                                <span class="currency-value" data-uzs-value="{{ lpf.fact_volume }}">{{ "{:,.0f}".format(lpf.fact_volume) }} UZS</span> /
+                                <small class="text-muted currency-value" data-uzs-value="{{ lpf.plan_volume }}">{{ "{:,.0f}".format(lpf.plan_volume) }} UZS</small>
+                            </span>
+                            {% set dev = lpf.fact_volume - lpf.plan_volume %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: <span class="currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }} UZS</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="remainder-item">
+                            <span class="passport-label">{{ _('Поступления') }}</span>
+                            <span class="passport-value">
+                                <span class="currency-value" data-uzs-value="{{ lpf.fact_income }}">{{ "{:,.0f}".format(lpf.fact_income) }} UZS</span> /
+                                <small class="text-muted currency-value" data-uzs-value="{{ lpf.plan_income }}">{{ "{:,.0f}".format(lpf.plan_income) }} UZS</small>
+                            </span>
+                            {% set dev = lpf.fact_income - lpf.plan_income %}
+                            <span class="passport-label mt-2 {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ _('Отклонение') }}: <span class="currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }} UZS</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-secondary">{{ _('Данные по План-Факту для этого проекта отсутствуют.') }}</div>
+            {% endif %}
+
+            <hr>
+
+            {% set td = data.dynamic_data.total_deviation_data %}
+            <h6 class="text-muted">{{ _('Суммарное отклонение (за все время)') }}</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Продажи, шт.') }}</span>
+                        {% set dev = td.fact_units - td.plan_units %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block">Факт: {{ "{:,.0f}".format(td.fact_units) }} / План: {{ "{:,.0f}".format(td.plan_units) }}</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Контрактация') }}</span>
+                        {% set dev = td.fact_volume - td.plan_volume %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %} currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block currency-value" data-uzs-value="{{ td.fact_volume }}">Факт: {{ "{:,.0f}".format(td.fact_volume) }}</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="passport-card">
+                        <span class="passport-label">{{ _('Поступления') }}</span>
+                        {% set dev = td.fact_income - td.plan_income %}
+                        <span class="passport-value-large {% if dev >= 0 %}text-success{% else %}text-danger{% endif %} currency-value" data-uzs-value="{{ dev }}">{{ "{:,.0f}".format(dev) }}</span>
+                        <small class="text-muted d-block currency-value" data-uzs-value="{{ td.fact_income }}">Факт: {{ "{:,.0f}".format(td.fact_income) }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Анализ коммерческой недвижимости') }}</h5>
+
+            {% set comm = data.dynamic_data.commercial_analysis %}
+            {% if comm and (comm.floor_1.count > 0 or comm.floor_m1.count > 0) %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Показатель') }}</th>
+                            <th class="text-end">{{ _('Этаж -1 (Паркинг)') }}</th>
+                            <th class="text-end">{{ _('Этаж 1') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ _('Кол-во остатков, шт.') }}</td>
+                            <td class="text-end fs-5 fw-bold">{{ comm.floor_m1.count or 0 }}</td>
+                            <td class="text-end fs-5 fw-bold">{{ comm.floor_1.count or 0 }}</td>
+                        </tr>
+                        <tr>
+                            <td>{{ _('Сред. площадь, м²') }}</td>
+
+                            <td class="text-end">{{ (comm.floor_m1.avg_area or 0) | round(1) }}</td>
+                            <td class="text-end">{{ (comm.floor_1.avg_area or 0) | round(1) }}</td>
+                            </tr>
+                        <tr>
+                            <td>{{ _('Сред. цена дна, UZS/м²') }}</td>
+                            <td class="text-end text-success fw-bold currency-value" data-uzs-value="{{ comm.floor_m1.avg_price_sqm or 0 }}">{{ "{:,.0f}".format(comm.floor_m1.avg_price_sqm or 0) }} UZS/м²</td>
+                            <td class="text-end text-success fw-bold currency-value" data-uzs-value="{{ comm.floor_1.avg_price_sqm or 0 }}">{{ "{:,.0f}".format(comm.floor_1.avg_price_sqm or 0) }} UZS/м²</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary">{{ _('Данные для анализа коммерции не загружены.') }}</div>
+            {% endif %}
+        </div>
+
+        <div class="passport-card">
+            <h5 class="card-title mb-3">{{ _('Темпы строительства') }}</h5>
+            <div class="table-responsive">
+                <table class="table" id="construction-stages-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">{{ _('Название этапа') }}</th>
+                            <th style="width: 20%;">{{ _('Дата начала') }}</th>
+                            <th style="width: 20%;">{{ _('План. завершение') }}</th>
+                            <th style="width: 20%;">{{ _('Факт. завершение') }}</th>
+                            <th style="width: 10%;" class="passport-value-edit">{{ _('Действия') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stages-tbody">
+                        {% for stage in data.static_data.construction_stages %}
+                        <tr data-stage-id="{{ stage.id }}">
+                            <td><span class="passport-value-view">{{ stage.stage_name }}</span><input type="text" class="form-control passport-value-edit stage-name-input" value="{{ stage.stage_name }}"></td>
+                            <td><span class="passport-value-view">{{ stage.start_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-start-date-input" value="{{ stage.start_date or '' }}"></td>
+                            <td><span class="passport-value-view">{{ stage.planned_end_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-planned-end-date-input" value="{{ stage.planned_end_date or '' }}"></td>
+                            <td><span class="passport-value-view">{{ stage.actual_end_date or '...' }}</span><input type="date" class="form-control passport-value-edit stage-actual-end-date-input" value="{{ stage.actual_end_date or '' }}"></td>
+                            <td class="passport-value-edit"><button type="button" class="btn btn-sm btn-success save-stage-btn" data-id="{{ stage.id }}"><i class="bi bi-check-lg"></i></button><button type="button" class="btn btn-sm btn-danger delete-stage-btn" data-id="{{ stage.id }}"><i class="bi bi-trash"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <form id="add-stage-form" class="passport-value-edit mt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5"><label class="form-label small">{{ _('Название нового этапа') }}</label><input type="text" id="new-stage-name" class="form-control" required></div>
+                    <div class="col-md-3"><label class="form-label small">{{ _('Дата начала') }}</label><input type="date" id="new-stage-start-date" class="form-control"></div>
+                    <div class="col-md-3"><label class="form-label small">{{ _('План. завершение') }}</label><input type="date" id="new-stage-planned-end-date" class="form-control"></div>
+                    <div class="col-md-1"><button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i></button></div>
+                </div>
+            </form>
+        </div>
+
+    </div> <div class="col-lg-4">
+        <div class="row g-4"> <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-4">{{ _('Команда проекта') }}</h5>
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Руководитель проекта') }}</span>
+                        <span class="passport-value passport-value-view" data-field="project_manager">{{ data.static_data.project_manager or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="project_manager" value="{{ data.static_data.project_manager or '' }}">
+                    </div>
+                     <div class="mb-3">
+                        <span class="passport-label">{{ _('Главный инженер проекта') }}</span>
+                        <span class="passport-value passport-value-view" data-field="chief_engineer">{{ data.static_data.chief_engineer or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="chief_engineer" value="{{ data.static_data.chief_engineer or '' }}">
+                    </div>
+                    <div>
+                        <span class="passport-label">{{ _('Руководитель отдела продаж') }}</span>
+                        <span class="passport-value passport-value-view" data-field="sales_manager">{{ data.static_data.sales_manager or '...' }}</span>
+                        <input type="text" class="form-control passport-value-edit" id="sales_manager" value="{{ data.static_data.sales_manager or '' }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-4">{{ _('Ключевые показатели') }}</h5>
+
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Средний темп продаж (за все время)') }}</span>
+                        <span class="passport-value">{{ "%.1f"|format(data.dynamic_data.all_time_sales_pace) }} {{ _('юнит/мес') }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Плановые средние темпы продаж (юнит/мес)') }}</span>
+                        <span class="passport-value passport-value-view" data-field="planned_sales_pace">{{ data.static_data.planned_sales_pace or '...' }}</span>
+                        <input type="number" step="0.1" class="form-control passport-value-edit" id="planned_sales_pace" value="{{ data.static_data.planned_sales_pace or '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Целевой темп продаж (до кадастра)') }}</span>
+                        <span class="passport-value text-info">
+                            {% if data.dynamic_data.target_sales_pace is not none %}
+                                {{ "%.1f"|format(data.dynamic_data.target_sales_pace) }} {{ _('юнит/мес') }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="passport-label">{{ _('Средняя квадратура остатков (Квартиры)') }}</span>
+                        <span class="passport-value">
+                            {% if data.dynamic_data.avg_area_flats and data.dynamic_data.avg_area_flats > 0 %}
+                                {{ "%.1f"|format(data.dynamic_data.avg_area_flats) }} м²
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div>
+                        <span class="passport-label">{{ _('Полная сумма ожидаемых оплат') }}</span>
+                        <span class="passport-value text-success currency-value" data-uzs-value="{{ data.dynamic_data.expected_payments }}">{{ "{:,.0f}".format(data.dynamic_data.expected_payments) }} UZS</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Виды оплаты') }}</h5>
+                    {% set payments = data.dynamic_data.payment_distribution %}
+                    {% if payments and payments.data and (payments.data | sum > 0) %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tbody>
+                                {% set total_payments = payments.data | sum %}
+                                {% for i in range(payments.labels | length) %}
+                                <tr>
+                                    <td>{{ payments.labels[i] or _('Не указано') }}</td>
+                                    <td class="text-end fw-bold">{{ payments.data[i] }}</td>
+                                    <td class="text-end text-muted" style="width: 25%;">{{ "%.1f"|format(payments.data[i] * 100 / total_payments) }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-secondary">{{ _('Нет данных о распределении платежей.') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="passport-card">
+                    <h5 class="card-title mb-3">{{ _('Остатки по типам') }}</h5>
+
+                    {% set icons = {
+                        'Квартира': 'bi-buildings',
+                        'Коммерческое помещение': 'bi-shop',
+                        'Парковка': 'bi-p-circle',
+                        'Кладовое помещение': 'bi-archive-fill'
+                    } %}
+                    {% set colors = {
+                        'Квартира': 'text-primary',
+                        'Коммерческое помещение': 'text-success',
+                        'Парковка': 'text-warning',
+                        'Кладовое помещение': 'text-info'
+                    } %}
+
+                    <div class="d-flex flex-column gap-3">
+                    {% for prop_type, metrics in data.dynamic_data.remainders_by_type.items() %}
+                        {% set icon_class = icons.get(prop_type, 'bi-building') %}
+                        {% set color_class = colors.get(prop_type, 'text-muted') %}
+
+                        <div class="remainder-item">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi {{ icon_class }} {{ color_class }} fs-2 me-3" style="width: 32px;"></i>
+                                <div>
+                                    <span class="passport-label">{{ _(prop_type) }} ({{ metrics.count }} {{_('шт.')}})</span>
+                                    <span class="passport-value currency-value" data-uzs-value="{{ metrics.total_price }}">{{ "{:,.0f}".format(metrics.total_price) }} UZS</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline" style="padding-left: 56px;">
+                                <small class_alias="text-muted">{{_('Сред. цена дна')}}:</small>
+                                <small class="fw-bold currency-value {{ color_class }}" data-uzs-value="{{ metrics.avg_price_sqm }}">{{ "{:,.0f}".format(metrics.avg_price_sqm) }} UZS/м²</small>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary text-center">{{ _('Нет остатков.') }}</div>
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+            </div>
+    </div> </div> {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    {% if report_data %}
-
-    // Передаем переводы в JavaScript
-    window.i18n = {
-        months: [
-            "{{ _('Янв') }}", "{{ _('Фев') }}", "{{ _('Мар') }}", "{{ _('Апр') }}",
-            "{{ _('Май') }}", "{{ _('Июн') }}", "{{ _('Июл') }}", "{{ _('Авг') }}",
-            "{{ _('Сен') }}", "{{ _('Окт') }}", "{{ _('Ноя') }}", "{{ _('Дек') }}"
-        ],
-        bookings: "{{ _('Бронь') }}",
-        deals_in_progress: "{{ _('Сделка в работе') }}",
-        deals_completed: "{{ _('Сделка проведена') }}"
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 13050 }}";
+    window.passportInitialData = JSON.parse('{{ data.static_data | tojson | safe }}' || '{}');
+    window.passportTranslations = {
+        saving: "{{ _('Сохранение...') }}",
+        save: "{{ _('Сохранить') }}",
+        confirmDelete: "{{ _('Вы уверены, что хотите удалить этот этап?') }}"
     };
-
-    const ctx = document.getElementById('managerYearlyChart').getContext('2d');
-    const monthlyData = {{ report_data|tojson }};
-
-    // Используем переводы
-    const labels = window.i18n.months;
-
-    const datasets = [
-        {
-            label: window.i18n.bookings,
-            data: monthlyData.map(d => d.bookings.count),
-            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 1
-        },
-        {
-            label: window.i18n.deals_in_progress,
-            data: monthlyData.map(d => d.deals_in_progress.count),
-            backgroundColor: 'rgba(255, 206, 86, 0.6)',
-            borderColor: 'rgba(255, 206, 86, 1)',
-            borderWidth: 1
-        },
-        {
-            label: window.i18n.deals_completed,
-            data: monthlyData.map(d => d.deals_completed.count),
-            backgroundColor: 'rgba(75, 192, 192, 0.6)',
-            borderColor: 'rgba(75, 192, 192, 1)',
-            borderWidth: 1
-        }
-    ];
-
-    const config = {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                }
-            }
-        }
-    };
-
-    new Chart(ctx, config);
-    {% endif %}
-});
 </script>
+<script src="{{ url_for('static', filename='js/project_passport_script.js') }}" defer></script>
 {% endblock %}

@@ -113,3 +113,46 @@
 .house-details-table td {
     vertical-align: middle;
 }
+/* =================================================================
+   СТИЛИ ДЛЯ НОВОГО БЛОКА "ТЕМП ПРОДАЖ"
+================================================================= */
+.sales-pace-container {
+    background-color: var(--bs-secondary-bg);
+    border-radius: .75rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.pace-current-block {
+    text-align: center;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.pace-label {
+    font-size: 0.9rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.25rem;
+}
+
+.pace-value-large {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: var(--bs-primary);
+    line-height: 1.1;
+}
+
+.pace-history-block {
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+}
+
+.pace-value-small {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--bs-body-color);
+    line-height: 1.2;
+}

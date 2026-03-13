@@ -4,7 +4,7 @@ from flask import current_app, abort
 from sqlalchemy.orm import joinedload
 
 from . import currency_service
-from ..core.extensions import db
+from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import json
 from datetime import date
 
@@ -12,6 +12,10 @@ from datetime import date
 from ..models.estate_models import EstateHouse, EstateSell
 from ..models import planning_models
 from ..models.exclusion_models import ExcludedSell
+
+# --- ДОБАВЛЯЕМ "ПЕРЕВОДЧИКИ" ---
+from ..models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_russian_value
+
 
 VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
 DEDUCTION_AMOUNT = 3_000_000
@@ -27,6 +31,9 @@ MIN_INITIAL_PAYMENT_PERCENT_EXTENDED = 0.25
 
 def find_apartments_by_budget(budget: float, currency: str, property_type_str: str, floor: str = None,
                               rooms: str = None, payment_method: str = None):
+    mysql_session = get_mysql_session()
+    planning_session = get_planning_session()
+    default_session = get_default_session()
     """
     Финальная версия с исправленной логикой области видимости переменной discount.
     """
@@ -36,24 +43,29 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
     print(f"\n[SELECTION_SERVICE] 🔎 Поиск. Бюджет: {budget} {currency}. Тип: {property_type_str}")
 
     # Используем planning_models
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         print("[SELECTION_SERVICE] ❌ Не найдена активная версия скидок.")
         return {}
 
     property_type_enum = planning_models.PropertyType(property_type_str)
 
+    # --- ИЗМЕНЕНИЕ: Получаем ключ MySQL ('flat') из русского property_type ('Квартира') ---
+    mysql_category_key = map_russian_to_mysql_key(property_type_enum.value)
+    # ---
+
     discounts_map = {
         (d.complex_name, d.payment_method): d
         for d in
-        planning_models.Discount.query.filter_by(version_id=active_version.id, property_type=property_type_enum).all()
+        planning_session.query(planning_models.Discount).filter_by(version_id=active_version.id, property_type=property_type_enum).all()
     }
-    excluded_sell_ids = {e.sell_id for e in ExcludedSell.query.all()}
+    excluded_sell_ids = {e.sell_id for e in default_session.query(ExcludedSell).all()}
 
-    query = db.session.query(EstateSell).options(
+    query = mysql_session.query(EstateSell).options(
         joinedload(EstateSell.house)
     ).filter(
-        EstateSell.estate_sell_category == property_type_enum.value,
+        # --- ИЗМЕНЕНИЕ: Используем ключ MySQL ('flat') для фильтра ---
+        EstateSell.estate_sell_category == mysql_category_key,
         EstateSell.estate_sell_status_name.in_(VALID_STATUSES),
         EstateSell.estate_price.isnot(None),
         EstateSell.estate_price > DEDUCTION_AMOUNT,
@@ -139,22 +151,28 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
 
 
 def get_apartment_card_data(sell_id: int):
+    mysql_session = get_mysql_session()
+    planning_session = get_planning_session()
     """
     Собирает все данные для детальной карточки квартиры.
     """
-    sell = db.session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
+    sell = mysql_session.query(EstateSell).options(joinedload(EstateSell.house)).filter_by(id=sell_id).first()
     if not sell: abort(404)
 
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
 
+    # --- ИЗМЕНЕНИЕ: Конвертируем 'flat' -> 'Квартира' ---
+    russian_category_value = map_mysql_key_to_russian_value(sell.estate_sell_category)
     try:
-        property_type_enum = planning_models.PropertyType(sell.estate_sell_category)
+        # Используем русское значение для поиска в planning_models
+        property_type_enum = planning_models.PropertyType(russian_category_value)
     except ValueError:
         return {'apartment': {}, 'pricing': [], 'all_discounts_for_property_type': []}
+    # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-    all_discounts_for_property_type = planning_models.Discount.query.filter_by(
+    all_discounts_for_property_type = planning_session.query(planning_models.Discount).filter_by(
         version_id=active_version.id,
         property_type=property_type_enum,
         complex_name=sell.house.complex_name
@@ -174,7 +192,9 @@ def get_apartment_card_data(sell_id: int):
     } if sell.house else {}
 
     serialized_apartment = {
-        'id': sell.id, 'house_id': sell.house_id, 'estate_sell_category': sell.estate_sell_category,
+        'id': sell.id, 'house_id': sell.house_id,
+        # --- ИЗМЕНЕНИЕ: Показываем русское название ---
+        'estate_sell_category': russian_category_value,
         'estate_floor': sell.estate_floor, 'estate_rooms': sell.estate_rooms, 'estate_price_m2': sell.estate_price_m2,
         'estate_sell_status_name': sell.estate_sell_status_name, 'estate_price': sell.estate_price,
         'estate_area': sell.estate_area, 'house': serialized_house
@@ -189,7 +209,8 @@ def get_apartment_card_data(sell_id: int):
     base_price = serialized_apartment['estate_price']
     price_after_deduction = base_price - DEDUCTION_AMOUNT
 
-    if sell.estate_sell_category == planning_models.PropertyType.FLAT.value:
+    # --- ИЗМЕНЕНИЕ: Проверяем по русскому значению ---
+    if russian_category_value == planning_models.PropertyType.FLAT.value:
         pm_full_payment = planning_models.PaymentMethod.FULL_PAYMENT
         discount_data_100 = discounts_map.get((serialized_house['complex_name'], pm_full_payment))
         if discount_data_100:

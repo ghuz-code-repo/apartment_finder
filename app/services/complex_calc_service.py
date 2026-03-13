@@ -5,11 +5,10 @@ from dateutil.relativedelta import relativedelta
 import numpy_financial as npf
 from flask import current_app
 from app.services import selection_service, settings_service, currency_service
-
+from ..core.db_utils import get_planning_session
 from app.models import planning_models
 from app.models.planning_models import PaymentMethod
 
-from app.services.discount_service import get_current_usd_rate
 import math
 
 DEFAULT_RATE = 16.5 / 12 / 100
@@ -163,7 +162,7 @@ def calculate_dp_installment_plan(sell_id: int, term_months: int, dp_amount: flo
 
     price_after_discounts = price_for_calc * (1 - total_discount_rate)
 
-    usd_rate = get_current_usd_rate() or currency_service.get_current_effective_rate()
+    usd_rate = currency_service.get_current_effective_rate() or 13050
 
     if dp_type == 'percent':
         dp_uzs = price_after_discounts * (dp_amount / 100)
@@ -263,8 +262,9 @@ def calculate_zero_mortgage(sell_id: int, term_months: int, dp_percent: int, add
             raise ValueError(f"Скидка {disc_key.upper()} превышает максимум ({max_discount * 100}%)")
         total_discount_rate += disc_value
 
-    cashback_entry = planning_models.ZeroMortgageMatrix.query.filter_by(term_months=term_months,
-                                                                        dp_percent=dp_percent).first()
+    planning_session = get_planning_session()
+    cashback_entry = planning_session.query(planning_models.ZeroMortgageMatrix).filter_by(term_months=term_months,
+                                                                                          dp_percent=dp_percent).first()
     if not cashback_entry:
         raise ValueError(f"Не найдены условия для срока {term_months} мес. и ПВ {dp_percent}%")
 

@@ -8,7 +8,7 @@ from collections import defaultdict
 from sqlalchemy import func, extract
 import io
 
-from app.core.extensions import db
+from ..core.db_utils import get_planning_session, get_mysql_session
 
 # Обновленные импорты
 from app.models import auth_models
@@ -26,8 +26,10 @@ def process_manager_plans_from_excel(file_path: str):
     plans_to_save = defaultdict(lambda: defaultdict(float))
     # В регулярном выражении оставляем только "поступления"
     header_pattern = re.compile(r"(поступления) (\d{2}\.\d{2}\.\d{4})", re.IGNORECASE)
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    planning_session = get_planning_session()
 
-    managers_map = {m.full_name: m.id for m in auth_models.SalesManager.query.all()}
+    managers_map = {m.full_name: m.id for m in mysql_session.query(auth_models.SalesManager).all()}
 
     for index, row in df.iterrows():
         manager_name = row.iloc[0]
@@ -54,12 +56,12 @@ def process_manager_plans_from_excel(file_path: str):
 
     updated_count, created_count = 0, 0
     for (manager_id, year, month), values in plans_to_save.items():
-        plan_entry = planning_models.ManagerSalesPlan.query.filter_by(
+        plan_entry = planning_session.query(planning_models.ManagerSalesPlan).filter_by(  # <--- ИЗМЕНЕНО
             manager_id=manager_id, year=year, month=month
         ).first()
         if not plan_entry:
             plan_entry = planning_models.ManagerSalesPlan(manager_id=manager_id, year=year, month=month)
-            db.session.add(plan_entry)
+            planning_session.add(plan_entry)  # <--- ИЗМЕНЕНО
             created_count += 1
 
         # Устанавливаем plan_volume в 0, обновляем только plan_income
@@ -67,24 +69,27 @@ def process_manager_plans_from_excel(file_path: str):
         plan_entry.plan_income = values.get('plan_income', 0.0)
         updated_count += 1
 
-    db.session.commit()
+    planning_session.commit()
     return f"Успешно обработано планов: создано {created_count}, обновлено {updated_count}."
 
 
 def get_manager_performance_details(manager_id: int, year: int):
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    planning_session = get_planning_session()
     """
     Собирает детальную информацию по выполнению плана для одного менеджера за год,
     ЗАРАНЕЕ РАССЧИТЫВАЯ KPI ДЛЯ КАЖДОГО МЕСЯЦА.
     """
-    manager = auth_models.SalesManager.query.get(manager_id)
+    manager = mysql_session.query(auth_models.SalesManager).get(manager_id)
     if not manager:
         return None
 
-    plans_query = planning_models.ManagerSalesPlan.query.filter_by(manager_id=manager_id, year=year).all()
+    plans_query = planning_session.query(planning_models.ManagerSalesPlan).filter_by(manager_id=manager_id,
+                                                                                     year=year).all()  # <--- ИЗМЕНЕНО
     plan_data = {p.month: p for p in plans_query}
 
     effective_date = func.coalesce(EstateDeal.agreement_date, EstateDeal.preliminary_date)
-    fact_volume_query = db.session.query(
+    fact_volume_query = mysql_session.query(
         extract('month', effective_date).label('month'),
         func.sum(EstateDeal.deal_sum).label('fact_volume')
     ).filter(
@@ -94,7 +99,7 @@ def get_manager_performance_details(manager_id: int, year: int):
     ).group_by('month').all()
     fact_volume_data = {row.month: row.fact_volume or 0 for row in fact_volume_query}
 
-    fact_income_query = db.session.query(
+    fact_income_query = mysql_session.query(
         extract('month', FinanceOperation.date_added).label('month'),
         func.sum(FinanceOperation.summa).label('fact_income')
     ).filter(
@@ -102,7 +107,13 @@ def get_manager_performance_details(manager_id: int, year: int):
         extract('year', FinanceOperation.date_added) == year,
         FinanceOperation.status_name == "Проведено",
         or_(
-            FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+            FinanceOperation.payment_type.notin_([
+                "Возврат поступлений при отмене сделки",
+                "Возврат при уменьшении стоимости",
+                "безучпоступление",
+                "Уступка права требования",
+                "Бронь"
+            ]),
             FinanceOperation.payment_type.is_(None)
         )
     ).group_by('month').all()
@@ -136,7 +147,9 @@ def generate_manager_plan_template_excel():
     """
     Генерирует Excel-файл с ФИО всех менеджеров и столбцами планов на текущий год.
     """
-    managers = auth_models.SalesManager.query.order_by(auth_models.SalesManager.full_name).all()
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    managers = mysql_session.query(auth_models.SalesManager).order_by(
+        auth_models.SalesManager.full_name).all()  # <--- ИЗМЕНЕНО
     manager_names = [manager.full_name for manager in managers]
 
     current_year = date.today().year
@@ -180,7 +193,10 @@ def calculate_manager_kpi(plan_income: float, fact_income: float) -> float:
 
 
 def generate_kpi_report_excel(year: int, month: int):
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
     """
+    
     Создает детализированный и отформатированный отчет по KPI менеджеров в формате Excel.
     (Исправленная версия с правильным порядком колонок и формулами)
     """
@@ -190,7 +206,7 @@ def generate_kpi_report_excel(year: int, month: int):
         raise ValueError("Не удалось получить актуальный курс USD.")
 
     # 2. ШАГ А: Получаем все планы из базы `planning_db` за указанный период
-    plans = planning_models.ManagerSalesPlan.query.filter(
+    plans = planning_session.query(planning_models.ManagerSalesPlan).filter(
         planning_models.ManagerSalesPlan.year == year,
         planning_models.ManagerSalesPlan.month == month,
         planning_models.ManagerSalesPlan.plan_income > 0
@@ -203,7 +219,7 @@ def generate_kpi_report_excel(year: int, month: int):
     plans_map = {p.manager_id: p for p in plans}
 
     # 3. ШАГ Б: Получаем из основной базы данных всех менеджеров, чьи ID мы нашли
-    managers = auth_models.SalesManager.query.filter(
+    managers = mysql_session.query(auth_models.SalesManager).filter(
         auth_models.SalesManager.id.in_(manager_ids_with_plans)
     ).order_by(auth_models.SalesManager.full_name).all()
 
@@ -214,7 +230,7 @@ def generate_kpi_report_excel(year: int, month: int):
         if not plan:
             continue
 
-        fact_income_query = db.session.query(
+        fact_income_query = mysql_session.query(
             func.sum(FinanceOperation.summa)
         ).filter(
             FinanceOperation.manager_id == manager.id,
@@ -222,10 +238,18 @@ def generate_kpi_report_excel(year: int, month: int):
             extract('month', FinanceOperation.date_added) == month,
             FinanceOperation.status_name == "Проведено",
             or_(
-                FinanceOperation.payment_type != "Возврат поступлений при отмене сделки",
+                # Замена != на .notin_()
+                FinanceOperation.payment_type.notin_([
+                    "Возврат поступлений при отмене сделки",
+                    "Возврат при уменьшении стоимости",
+                    "безучпоступление",
+                    "Уступка права требования",
+                    "Бронь"
+                ]),
                 FinanceOperation.payment_type.is_(None)
             )
         ).scalar()
+
         fact_income = fact_income_query or 0.0
         kpi_bonus_uzs = calculate_manager_kpi(plan.plan_income, fact_income)
 
@@ -309,7 +333,9 @@ def get_manager_kpis(manager_id: int, year: int):
     Рассчитывает расширенные KPI для одного менеджера на основе ПОСТУПЛЕНИЙ.
     """
     # Запрос для "Любимого ЖК" остается по количеству сделок
-    best_complex_query = db.session.query(
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+
+    best_complex_query = mysql_session.query(
         EstateHouse.complex_name, func.count(EstateDeal.id).label('deal_count')
     ).join(EstateSell, EstateHouse.sells).join(EstateDeal, EstateSell.deals) \
         .filter(
@@ -318,7 +344,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by(EstateHouse.complex_name).order_by(func.count(EstateDeal.id).desc()).first()
 
     # Запрос для "Продано юнитов" остается по количеству сделок
-    units_by_type_query = db.session.query(
+    units_by_type_query = mysql_session.query(
         EstateSell.estate_sell_category, func.count(EstateDeal.id).label('unit_count')
     ).join(EstateDeal, EstateSell.deals).filter(
         EstateDeal.deal_manager_id == manager_id,
@@ -328,7 +354,7 @@ def get_manager_kpis(manager_id: int, year: int):
     # Все расчеты рекордов переведены на поступления
 
     # Лучший год по ПОСТУПЛЕНИЯМ
-    best_year_income_query = db.session.query(
+    best_year_income_query = mysql_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
@@ -337,7 +363,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by('income_year').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     # Лучший месяц за все время по ПОСТУПЛЕНИЯМ
-    best_month_income_query = db.session.query(
+    best_month_income_query = mysql_session.query(
         extract('year', FinanceOperation.date_added).label('income_year'),
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
@@ -347,7 +373,7 @@ def get_manager_kpis(manager_id: int, year: int):
     ).group_by('income_year', 'income_month').order_by(func.sum(FinanceOperation.summa).desc()).first()
 
     # Лучший месяц в выбранном году по ПОСТУПЛЕНИЯМ
-    best_month_in_year_income_query = db.session.query(
+    best_month_in_year_income_query = mysql_session.query(
         extract('month', FinanceOperation.date_added).label('income_month'),
         func.sum(FinanceOperation.summa).label('total_income')
     ).filter(
@@ -387,7 +413,8 @@ def get_manager_complex_ranking(manager_id: int):
     """
     Возвращает рейтинг ЖК по количеству сделок и объему ПОСТУПЛЕНИЙ для менеджера.
     """
-    ranking = db.session.query(
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    ranking = mysql_session.query(
         EstateHouse.complex_name,
         func.sum(FinanceOperation.summa).label('total_income'),
         func.count(func.distinct(EstateDeal.id)).label('deal_count')
@@ -411,7 +438,8 @@ def get_complex_hall_of_fame(complex_name: str, start_date_str: str = None, end_
     Возвращает рейтинг менеджеров по количеству и объему сделок для ЖК.
     """
     sold_statuses = ["Сделка в работе", "Сделка проведена"]
-    query = db.session.query(
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    query = mysql_session.query(
         auth_models.SalesManager.full_name,
         func.count(EstateDeal.id).label('deal_count'),
         func.sum(EstateDeal.deal_sum).label('total_volume'),

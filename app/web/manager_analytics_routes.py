@@ -1,12 +1,12 @@
 # app/web/manager_analytics_routes.py
 
 from flask import Blueprint, render_template, request
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from datetime import date
 from app.core.decorators import permission_required
 from app.services import manager_analytics_service, funnel_service  # Добавлен funnel_service
 from app.models.auth_models import SalesManager
-from ..core.extensions import db
+from ..core.db_utils import get_mysql_session
 
 manager_analytics_bp = Blueprint('manager_analytics', __name__, template_folder='templates')
 
@@ -57,8 +57,8 @@ def show_report():
 
     for key in totals:
         totals[key]['buy_ids'] = list(set(totals[key]['buy_ids']))
-
-    posts_query = db.session.query(SalesManager.post_title).filter(
+    mysql_session = get_mysql_session()
+    posts_query = mysql_session.query(SalesManager.post_title).filter(
         SalesManager.post_title.isnot(None)).distinct().order_by(SalesManager.post_title).all()
     all_posts = [post[0] for post in posts_query]
 
@@ -86,9 +86,11 @@ def yearly_report():
     today = date.today()
     # Получаем параметры из формы
     selected_year = request.args.get('year', today.year, type=int)
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+
     selected_manager_id = request.args.get('manager_id', type=int)
 
-    all_managers = SalesManager.query.order_by(SalesManager.full_name).all()
+    all_managers = mysql_session.query(SalesManager).order_by(SalesManager.full_name).all()
 
     report_data = None
     annual_totals = None
@@ -97,7 +99,7 @@ def yearly_report():
     if selected_manager_id:
         report_data, annual_totals = manager_analytics_service.get_yearly_manager_analytics(selected_manager_id,
                                                                                             selected_year)
-        selected_manager = SalesManager.query.get(selected_manager_id)
+        selected_manager = mysql_session.query(SalesManager).get(selected_manager_id)
 
     return render_template(
         'reports/yearly_manager_report.html',

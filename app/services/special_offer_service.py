@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 from flask import current_app, url_for
 from app.models import planning_models
-from app.core.extensions import db
+from ..core.db_utils import get_planning_session, get_mysql_session
 from app.models.special_offer_models import MonthlySpecial
 from app.models.estate_models import EstateSell, EstateHouse
 from datetime import date
@@ -57,8 +57,9 @@ def _optimize_and_save_image(image_file_storage):
 
 
 def add_special_offer(sell_id, usp_text, extra_discount, image_file):
+    planning_session = get_planning_session()
     """Добавляет новое специальное предложение."""
-    if MonthlySpecial.query.filter_by(sell_id=sell_id).first():
+    if planning_session.query(MonthlySpecial).filter_by(sell_id=sell_id).first():
         raise ValueError(f"Специальное предложение для квартиры с ID {sell_id} уже существует.")
 
     # Оптимизируем и сохраняем изображение
@@ -71,8 +72,8 @@ def add_special_offer(sell_id, usp_text, extra_discount, image_file):
         floor_plan_image_filename=saved_filename,
         expires_at=MonthlySpecial.set_initial_expiry()  # Устанавливаем срок до конца текущего месяца
     )
-    db.session.add(new_special)
-    db.session.commit()
+    planning_session.add(new_special)  # <--- ИЗМЕНЕНО
+    planning_session.commit()
     return new_special
 
 
@@ -81,7 +82,11 @@ def get_active_special_offers():
     today = date.today()
 
     # --- Получаем все стандартные скидки для 100% оплаты ---
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+
+    # --- Получаем все стандартные скидки для 100% оплаты ---
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return []  # Если нет системы скидок, нет и расчета
 
@@ -92,7 +97,7 @@ def get_active_special_offers():
     }
 
     # --- Шаг 1: Получаем все активные спецпредложения из 'planning.db' ---
-    active_specials = MonthlySpecial.query.filter(
+    active_specials = planning_session.query(MonthlySpecial).filter(
         MonthlySpecial.is_active == True,
         MonthlySpecial.expires_at >= today
     ).order_by(MonthlySpecial.created_at.desc()).all()
@@ -104,7 +109,7 @@ def get_active_special_offers():
     sell_ids = list(specials_map.keys())
 
     # --- Шаг 2: Получаем квартиры из основной базы ---
-    sells_data = db.session.query(
+    sells_data = mysql_session.query(
         EstateSell, EstateHouse
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
@@ -156,7 +161,8 @@ def get_active_special_offers():
 def get_special_offer_details_by_sell_id(sell_id: int):
     """Находит спец. предложение по ID КВАРТИРЫ (sell_id)."""
     # Эта функция ищет по sell_id, как и было нужно для публичной страницы
-    special = MonthlySpecial.query.filter_by(sell_id=sell_id).first()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    special = planning_session.query(MonthlySpecial).filter_by(sell_id=sell_id).first()  # <--- ИЗМЕНЕНО
     if not special:
         return None
 
@@ -167,7 +173,9 @@ def get_special_offer_details_by_special_id(special_id: int):
     """Возвращает полную информацию по одному спец. предложению ПО ЕГО ID. (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
 
     # --- Шаг 1: Находим спецпредложение по его собственному ID в 'planning.db' ---
-    special = MonthlySpecial.query.get(special_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    mysql_session = get_mysql_session()
+    special = planning_session.query(MonthlySpecial).get(special_id)
     if not special:
         return None
 
@@ -175,7 +183,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     sell_id = special.sell_id
 
     # --- Получаем стандартные скидки ---
-    active_version = planning_models.DiscountVersion.query.filter_by(is_active=True).first()
+    active_version = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
     if not active_version:
         return None
 
@@ -186,7 +194,7 @@ def get_special_offer_details_by_special_id(special_id: int):
     }
 
     # --- Шаг 2: Получаем детали квартиры из основной базы ---
-    sell_data = db.session.query(EstateSell, EstateHouse).join(EstateHouse,
+    sell_data = mysql_session.query(EstateSell, EstateHouse).join(EstateHouse,
                                                                EstateSell.house_id == EstateHouse.id).filter(
         EstateSell.id == sell_id).first()
     if not sell_data:
@@ -236,7 +244,11 @@ def get_special_offer_details_by_special_id(special_id: int):
 def get_all_special_offers():
     """Возвращает ВСЕ спец. предложения для панели администратора. (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
     # Шаг 1: Получаем ВСЕ спецпредложения из 'planning.db'
-    all_specials_from_db = MonthlySpecial.query.order_by(MonthlySpecial.created_at.desc()).all()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+
+    # Шаг 1: Получаем ВСЕ спецпредложения из 'planning.db'
+    all_specials_from_db = planning_session.query(MonthlySpecial).order_by(MonthlySpecial.created_at.desc()).all()
 
     if not all_specials_from_db:
         return []
@@ -246,7 +258,7 @@ def get_all_special_offers():
     sell_ids = list(specials_map.keys())
 
     # Шаг 2: Получаем детали для этих квартир из основной базы
-    sells_data = db.session.query(
+    sells_data = mysql_session.query(
         EstateSell, EstateHouse
     ).join(
         EstateHouse, EstateSell.house_id == EstateHouse.id
@@ -279,7 +291,8 @@ def get_all_special_offers():
 
 def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
     """Обновляет существующее специальное предложение."""
-    special_to_update = MonthlySpecial.query.get_or_404(special_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    special_to_update = planning_session.query(MonthlySpecial).get_or_404(special_id)
 
     special_to_update.usp_text = usp_text
     special_to_update.extra_discount = extra_discount
@@ -296,13 +309,14 @@ def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
         saved_filename = _optimize_and_save_image(image_file)
         special_to_update.floor_plan_image_filename = saved_filename
 
-    db.session.commit()
+    planning_session.commit()
     return special_to_update
 
 
 def delete_special_offer(special_id):
     """Удаляет специальное предложение и его изображение."""
-    special_to_delete = MonthlySpecial.query.get_or_404(special_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    special_to_delete = planning_session.query(MonthlySpecial).get_or_404(special_id)  # <--- ИЗМЕНЕНО
 
     # Удаляем файл изображения с сервера
     image_path = os.path.join(current_app.static_folder, UPLOAD_FOLDER, special_to_delete.floor_plan_image_filename)
@@ -310,15 +324,16 @@ def delete_special_offer(special_id):
         os.remove(image_path)
 
     # Удаляем запись из базы данных
-    db.session.delete(special_to_delete)
-    db.session.commit()
+    planning_session.delete(special_to_delete)  # <--- ИЗМЕНЕНО
+    planning_session.commit()
 
 
 def extend_special_offer(special_id: int):
     """Продлевает срок действия предложения."""
-    special = MonthlySpecial.query.get_or_404(special_id)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    special = planning_session.query(MonthlySpecial).get_or_404(special_id)  # <--- ИЗМЕНЕНО
     special.extend_offer()
-    db.session.commit()
+    planning_session.commit()  # <--- ИЗМЕНЕНО
     return special
 
 # Тут можно добавить функции update_special_offer и delete_special_offer по аналогии

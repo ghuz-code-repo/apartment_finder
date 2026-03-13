@@ -8,16 +8,17 @@ from flask import current_app
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
 # Импортируем модуль auth_models
 from ..models import auth_models
-from ..core.extensions import db
+from ..core.db_utils import get_default_session
 
 def send_email(subject, html_body):
     """Отправляет email-сообщение с указанной темой и HTML-содержимым."""
     config = current_app.config
     sender_email = config['MAIL_USERNAME']
-
+    default_session = get_default_session()
     # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
     # Обновляем запрос для получения email-адресов получателей
-    recipients_from_db = db.session.query(auth_models.User.email).join(auth_models.EmailRecipient).all()
+    recipients_from_db = default_session.query(auth_models.User.email).join(
+        auth_models.EmailRecipient).all()  # <--- ИЗМЕНЕНО
     recipients = [email for email, in recipients_from_db]
 
     # --- БЛОК ЛОГИРОВАНИЯ (без изменений) ---

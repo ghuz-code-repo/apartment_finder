@@ -1,0 +1,124 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+<style>
+    /* Стиль для времени, видимый в обеих темах */
+    .news-time-badge {
+        background: rgba(212, 175, 55, 0.1);
+        color: #d4af37 !important;
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        font-weight: 500;
+    }
+    .news-media-container {
+        min-height: 300px;
+        background-color: #000;
+    }
+    .news-media-container img, .news-media-container video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    [data-bs-theme="dark"] .card-news {
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">Новости рынка недвижимости</h2>
+        {% if current_user.can('upload_data') %}
+        <button class="btn btn-golden" data-bs-toggle="collapse" data-bs-target="#addNewsForm">
+            <i class="bi bi-megaphone me-2"></i>Добавить новость
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="collapse mb-5" id="addNewsForm">
+        <div class="card card-body shadow-sm border-0">
+            <form action="{{ url_for('news.add_news') }}" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input type="text" name="title" class="form-control" placeholder="Заголовок новости" required>
+                </div>
+                <div class="mb-3">
+                    <textarea name="description" class="form-control" rows="4" placeholder="Текст новости..." required></textarea>
+                </div>
+                <div class="mb-3">
+                    <input type="file" name="files" class="form-control" multiple accept="image/*,video/*">
+                    <div class="form-text">Поддерживаются фото и видео</div>
+                </div>
+                <button type="submit" class="btn btn-success w-100 fw-bold">Опубликовать в ленте и Telegram</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-11">
+            {% for item in news_items %}
+            <div class="card card-news mb-4 shadow-sm border-0 overflow-hidden">
+                <div class="row g-0">
+                    <div class="col-md-5 news-media-container">
+                        {% if item.media %}
+                            <div id="carouselNews-{{ item.id }}" class="carousel slide h-100" data-bs-ride="carousel">
+                                <div class="carousel-inner h-100">
+                                    {% for m in item.media %}
+                                    <div class="carousel-item {{ 'active' if loop.first }} h-100">
+                                        {% if m.media_type == 'image' %}
+                                            <img src="{{ url_for('static', filename=m.file_path) }}">
+                                        {% else %}
+                                            <video src="{{ url_for('static', filename=m.file_path) }}" controls></video>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% if item.media|length > 1 %}
+                                <button class="carousel-control-prev" type="button" data-bs-target="#carouselNews-{{ item.id }}" data-bs-slide="prev">
+                                    <span class="carousel-control-prev-icon"></span>
+                                </button>
+                                <button class="carousel-control-next" type="button" data-bs-target="#carouselNews-{{ item.id }}" data-bs-slide="next">
+                                    <span class="carousel-control-next-icon"></span>
+                                </button>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                <i class="bi bi-image fs-1"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-7">
+                        <div class="card-body d-flex flex-column h-100">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h4 class="fw-bold mb-0 text-truncate" style="max-width: 70%;">{{ item.title }}</h4>
+                                <div class="text-end">
+                                    <span class="badge news-time-badge px-3 py-2">
+                                        <i class="bi bi-clock me-1"></i>
+                                        {{ item.tashkent_time.strftime('%d.%m.%Y %H:%M') }}
+                                    </span>
+                                    {% if current_user.can('upload_data') %}
+                                    <div class="mt-2">
+                                        <a href="{{ url_for('news.delete_news', news_id=item.id) }}"
+                                           class="btn btn-link btn-sm text-danger p-0 text-decoration-none"
+                                           onclick="return confirm('Удалить новость?')">Удалить</a>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <p class="card-text text-secondary" style="white-space: pre-wrap; line-height: 1.6;">{{ item.description }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-newspaper fs-1 d-block mb-3"></i>
+                Лента новостей пуста.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

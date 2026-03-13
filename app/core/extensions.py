@@ -1,8 +1,9 @@
 # app/core/extensions.py
+from flask_login import LoginManager
+from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
-
-# Возможно, здесь или в app/__init__.py нужно импортировать новые модели,
-# чтобы они были зарегистрированы в SQLAlchemy при db.create_all()
-# from app.models import exclusion_models # Пример
+migrate_default = Migrate()  # Для стандартной БД (app.db)
+migrate_planning = Migrate() # Для БД 'planning_db'
+login_manager = LoginManager()

@@ -1,0 +1,111 @@
+.passport-container {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 1.5rem;
+}
+.passport-section {
+    grid-column: span 12;
+}
+.passport-main {
+    grid-column: span 12;
+}
+.passport-sidebar {
+    grid-column: span 12;
+}
+
+@media (min-width: 992px) {
+    .passport-main {
+        grid-column: span 8;
+    }
+    .passport-sidebar {
+        grid-column: span 4;
+    }
+}
+
+.passport-card {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: .75rem;
+    padding: 1.5rem;
+    height: 100%;
+}
+.passport-label {
+    font-size: 0.85rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.25rem;
+    display: block;
+}
+.passport-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--bs-body-color);
+    line-height: 1.2;
+}
+.passport-value-large {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--bs-primary);
+}
+.passport-value-edit {
+    display: none; /* Скрыто по умолчанию */
+}
+.editing .passport-value-view {
+    display: none;
+}
+.editing .passport-value-edit {
+    display: block;
+}
+.discount-table th {
+    font-size: 0.8rem;
+    padding: 0.5rem;
+}
+.discount-table td {
+    font-size: 0.9rem;
+    padding: 0.5rem;
+}
+/* Стили для переключателя валют в заголовке */
+#passport-controls .form-label {
+    font-size: 0.85rem;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0;
+}
+#passport-controls .form-switch {
+    padding-left: 3.5em; /* Увеличиваем отступ, чтобы вместить лейбл UZS/USD */
+}
+#passport-controls .form-check-label {
+    margin-top: 2px; /* Выравниваем лейбл UZS/USD */
+}
+
+/* --- Стили для блока Остатков по типам --- */
+.remainder-item {
+    background-color: var(--bs-secondary-bg); /* Используем более темный фон для контраста */
+    padding: 1rem;
+    border-radius: 0.75rem; /* Скругление как у .passport-card */
+    border: 1px solid var(--bs-border-color-translucent);
+    transition: all 0.2s ease;
+}
+
+.remainder-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px var(--gh-card-shadow);
+    border-color: var(--bs-primary);
+}
+
+.remainder-item .passport-label {
+    font-size: 0.9rem; /* Чуть меньше */
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--bs-secondary-color);
+}
+
+.remainder-item .passport-value {
+    font-size: 1.3rem; /* Крупнее */
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+/* Яркие цвета для иконок и средней цены */
+.remainder-item .text-primary { color: var(--bs-primary) !important; }
+.remainder-item .text-success { color: var(--bs-success) !important; }
+.remainder-item .text-warning { color: var(--bs-warning) !important; }
+.remainder-item .text-info { color: var(--bs-info) !important; }

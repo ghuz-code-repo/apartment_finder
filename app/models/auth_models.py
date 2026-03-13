@@ -1,77 +1,107 @@
 # app/models/auth_models.py
 
-from app.core.extensions import db
-from flask_login import UserMixin
+from flask_login import UserMixin, AnonymousUserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+from app.core.extensions import db
+from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import joinedload, selectinload
 
-# --- ШАГ 1: ОБЪЯВЛЯЕМ МОДЕЛИ БЕЗ __bind_key__ ---
+class Permission:
+    MANAGE_USERS = 0x01
+    MANAGE_SETTINGS = 0x02
+    MANAGE_DISCOUNTS = 0x04
+    UPLOAD_DATA = 0x08
+    VIEW_REPORTS = 0x10
+    MANAGE_CANCELLATIONS = 0x20
+    MANAGE_REGISTRY = 0x40
 
 class Role(db.Model):
-    # __bind_key__ удален, модель будет в основной БД
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(64), unique=True)
+    permissions = db.relationship(
+        'Permission',
+        secondary='role_permissions',
+        back_populates='roles',
+        lazy='joined'
+    )
+    users = db.relationship('User', back_populates='role')
 
-    def __repr__(self):
-        return f'<Role {self.name}>'
 
 class Permission(db.Model):
-    # __bind_key__ удален
     __tablename__ = 'permissions'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    name = db.Column(db.String(64), unique=True)
     description = db.Column(db.String(255))
+    roles = db.relationship('Role', secondary='role_permissions', back_populates='permissions')
 
-class User(db.Model, UserMixin):
-    # __bind_key__ удален
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), index=True, unique=True, nullable=False)
-    full_name = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    phone_number = db.Column(db.String(20), nullable=True)
-    password_hash = db.Column(db.String(256))
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-    def can(self, permission_name):
-        if self.role:
-            return any(p.name == permission_name for p in self.role.permissions)
-        return False
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-class EmailRecipient(db.Model):
-    # __bind_key__ удален
-    __tablename__ = 'email_recipients'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
-
-class SalesManager(db.Model):
-    # __bind_key__ удален
-    __tablename__ = 'sales_managers'
-    id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(255), unique=True, nullable=False)
-    post_title = db.Column(db.String(255), nullable=True)
-    data_hash = db.Column(db.String(64), index=True, nullable=True)
-    def __repr__(self):
-        return f'<SalesManager {self.full_name}>'
-
-# --- ШАГ 2: ОБЪЯВЛЯЕМ ВСПОМОГАТЕЛЬНУЮ ТАБЛИЦУ (БЕЗ info) ---
-role_permissions = db.Table('role_permissions',
+role_permissions = db.Table(
+    'role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),
     db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id'), primary_key=True)
 )
 
-# --- ШАГ 3: ОПРЕДЕЛЯЕМ СВЯЗИ (RELATIONSHIPS) ---
-User.role = db.relationship('Role', back_populates='users')
-Role.users = db.relationship('User', back_populates='role', lazy='dynamic')
 
-Role.permissions = db.relationship('Permission', secondary=role_permissions, back_populates='roles')
-Permission.roles = db.relationship('Role', secondary=role_permissions, back_populates='permissions')
+class User(UserMixin, db.Model):
+    # --- ЭТО ЛОКАЛЬНЫЙ ПОЛЬЗОВАТЕЛЬ ДЛЯ ЛОГИНА (main_app.db) ---
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, index=True)
+    full_name = db.Column(db.String(120), nullable=True)
+    email = db.Column(db.String(120), index=True, nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True)
+    password_hash = db.Column(db.String(256))
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
+    role = db.relationship('Role', back_populates='users')
 
-User.email_subscriptions = db.relationship('EmailRecipient', back_populates='user', uselist=False, cascade="all, delete-orphan")
-EmailRecipient.user = db.relationship('User', back_populates='email_subscriptions')
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def can(self, perm_name):
+        if self.role is None:
+            return False
+        # Если администратор — разрешаем всё автоматически
+        if self.is_admin:
+            return True
+        # Проверка прав с приведением к нижнему регистру для избежания ошибок
+        return any(p.name.lower() == perm_name.lower() for p in self.role.permissions)
+
+    @property
+    def is_admin(self):
+        return self.role and self.role.name == 'ADMIN'
+
+
+class AnonymousUser(AnonymousUserMixin):
+    def can(self, perm_name):
+        return False
+
+    @property
+    def is_admin(self):
+        return False
+
+
+class SalesManager(db.Model):
+    # --- ЭТО МЕНЕДЖЕР ИЗ MYSQL (mysql_source) ---
+    __bind_key__ = 'mysql_source'
+    __tablename__ = 'users'  # <-- Указываем на таблицу 'users' в MySQL
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+    # Мы говорим SQLAlchemy:
+    # "Свойство 'full_name' в Python соответствует столбцу 'users_name' в MySQL"
+    full_name = db.Column('users_name', db.String(255), nullable=False)
+    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
+    post_title = db.Column(db.String(255), nullable=True)
+
+    # Связь с ManagerSalesPlan (в planning_models)
+    plans = db.relationship(
+        'app.models.planning_models.ManagerSalesPlan',
+        primaryjoin='SalesManager.id == foreign(app.models.planning_models.ManagerSalesPlan.manager_id)',
+        back_populates='manager'
+    )

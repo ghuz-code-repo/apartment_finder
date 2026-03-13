@@ -2,11 +2,11 @@
 
 import pandas as pd
 from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file
-from flask_login import login_required
+from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
 from app.services import settings_service, report_service
 from .forms import CalculatorSettingsForm
-from ..core.extensions import db
+from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from ..models.estate_models import EstateHouse
 from ..models import planning_models
 from ..models import auth_models
@@ -14,6 +14,7 @@ settings_bp = Blueprint('settings', __name__, template_folder='templates')
 
 @settings_bp.route('/calculator-settings/zero-mortgage/download-template')
 @login_required
+@permission_required('manage_settings')
 def download_matrix_template():
     """Отдает сгенерированный шаблон для матрицы кэшбека."""
     return settings_service.generate_zero_mortgage_template()
@@ -44,6 +45,7 @@ def manage_settings():
         # Обработка загрузки файла
         if form.excel_file.data:
             f = form.excel_file.data
+            planning_session = get_planning_session()
             try:
                 # 1. Читаем Excel, пропуская первую строку с объединенным заголовком "ПВ"
                 df = pd.read_excel(f, header=1)
@@ -62,7 +64,7 @@ def manage_settings():
                 df_unpivoted.rename(columns={id_vars: 'term_months'}, inplace=True)
 
                 # 3. Очищаем старую матрицу и загружаем новую
-                planning_models.ZeroMortgageMatrix.query.delete()
+                planning_session.query(planning_models.ZeroMortgageMatrix).delete()
                 for _, row in df_unpivoted.iterrows():
                     entry = planning_models.ZeroMortgageMatrix(
                         term_months=int(row['term_months']),
@@ -72,11 +74,11 @@ def manage_settings():
                         cashback_percent=float(row['cashback_percent']) if row['cashback_percent'] < 1 else float(
                             row['cashback_percent']) / 100.0
                     )
-                    db.session.add(entry)
-                db.session.commit()
+                    planning_session.add(entry)
+                planning_session.commit()
                 flash('Матрица для "Ипотеки под 0%%" успешно обновлена.', 'success')
             except Exception as e:
-                db.session.rollback()
+                planning_session.rollback()
                 flash(f'Ошибка при обработке файла матрицы: {e}', 'danger')
 
         return redirect(url_for('settings.manage_settings'))
@@ -106,7 +108,11 @@ def manage_inventory_exclusions():
         return redirect(url_for('settings.manage_inventory_exclusions'))
 
     # Получаем список всех ЖК и исключенных ЖК
-    all_complexes = db.session.query(EstateHouse.complex_name).distinct().order_by(EstateHouse.complex_name).all()
+    mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
+    # Получаем список всех ЖК и исключенных ЖК
+    all_complexes = mysql_session.query(EstateHouse.complex_name).distinct().order_by(
+        EstateHouse.complex_name).all()  # <--- ИЗМЕНЕНО
+    excluded_complexes = settings_service.get_all_excluded_complexes()
     excluded_complexes = settings_service.get_all_excluded_complexes()
     excluded_names = {c.complex_name for c in excluded_complexes}
 
@@ -122,25 +128,27 @@ def manage_inventory_exclusions():
 @permission_required('manage_settings')
 def manage_email_recipients():
     """Страница для управления получателями email-уведомлений."""
+    default_session = get_default_session() # <--- ДОБАВЛЕНО
+
     if request.method == 'POST':
         selected_user_ids = request.form.getlist('recipient_ids', type=int)
 
         # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
         # Обращаемся к модели через auth_models
-        auth_models.EmailRecipient.query.delete()
+        default_session.query(auth_models.EmailRecipient).delete() # <--- ИЗМЕНЕНО
 
         for user_id in selected_user_ids:
             recipient = auth_models.EmailRecipient(user_id=user_id)
-            db.session.add(recipient)
+            default_session.add(recipient) # <--- ИЗМЕНЕНО
 
-        db.session.commit()
+        default_session.commit() # <--- ИЗМЕНЕНО
         flash('Список получателей уведомлений успешно обновлен.', 'success')
         return redirect(url_for('settings.manage_email_recipients'))
 
     # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
     # Обращаемся к моделям через auth_models
-    all_users = auth_models.User.query.order_by(auth_models.User.full_name).all()
-    subscribed_user_ids = {r.user_id for r in auth_models.EmailRecipient.query.all()}
+    all_users = default_session.query(auth_models.User).order_by(auth_models.User.full_name).all() # <--- ИЗМЕНЕНО
+    subscribed_user_ids = {r.user_id for r in default_session.query(auth_models.EmailRecipient).all()} # <--- ИЗМЕНЕНО
 
     return render_template(
         'settings/manage_recipients.html',

@@ -1,0 +1,32 @@
+services:
+  # Веб-приложение Flask
+  web:
+    build:
+      context: ..
+      dockerfile: apartment_finder/Dockerfile
+    container_name: apartment-finder-app
+    env_file:
+      - .env
+    labels:
+      - "nginx.service=finder"
+      - "nginx.auth=true"
+    volumes:
+      # Монтируем директории для хранения данных
+      - ./instance:/app/instance
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:80/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - default
+      - service_network
+
+volumes:
+  mysql_data:
+
+networks:
+  service_network:
+    external: true

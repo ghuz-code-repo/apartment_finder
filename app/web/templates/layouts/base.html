@@ -48,32 +48,59 @@
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'discount.discounts_overview' %}active{% endif %}" href="{{ url_for('discount.discounts_overview') }}">{{ _('Система скидок') }}</a>
                             </li>
-                            {% if current_user.can('view_selection') %}
-                            <li class="nav-item">
-                                <a class="nav-link {% if request.endpoint == 'main.monthly_specials_list' %}active{% endif %}" href="{{ url_for('main.monthly_specials_list') }}">
-                                    <i class="bi bi-star-fill text-warning"></i> {{ _('Квартиры месяца') }}
-                                </a>
-                            </li>
-                            {% endif %}
-                            {# CHANGE: Replaced role check with permission check #}
+
                             {% if current_user.can('view_plan_fact_report') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint == 'report' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Отчетность') }}
                                 </a>
                                 <ul class="dropdown-menu">
-                                    {# Each item can have its own permission check if needed, but the parent one covers the dropdown #}
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('report.financial_model_selection') }}">{{ _('Финансовая модель') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
+                                    {% if current_user.can('view_inventory_report') %}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.deal_registry_report') }}">{{ _('Реестр сделок и недвижимости') }}</a></li>
+                                    {% endif %}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.quarterly_analytics') }}">{{ _('Квартальная аналитика') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('report.refund_report') }}">{{ _('Отчет по возвратам') }}</a></li>
+                                    <li><a class="dropdown-item fw-bold" href="{{ url_for('ai.forecast_page') }}" style="color: var(--gh-gold);">
+                                        <i class="bi bi-robot me-1"></i> {{ _('ИИ Прогноз продаж') }}
+                                    </a></li>
+                                    {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('registry.index') }}">{{ _('Реестр спец. сделок') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('cancellations.index') }}">{{ _('Реестр расторжений') }}</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.manager_performance_report') }}">{{ _('Планы менеджеров') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Аналитика по менеджерам') }}</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('obligations.obligation_control') }}">{{ _('Контроль обязательств') }}</a></li>
                                 </ul>
                             </li>
                             {% endif %}
-
-                            {# CHANGE: Replaced role check with permission check #}
-                            {% if current_user.can('manage_discounts') or current_user.can('manage_users') %}
+                            {% if current_user.can('manage_competitors') %}
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="navbarMarket" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Рынок
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="navbarMarket">
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('competitor.map_view') }}">
+                                            Конкуренты
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('competitor.market_dynamics') }}">Динамика рынка</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('news.feed') }}">
+                                            Новости рынка
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                            {% endif %}
+                            {% if current_user.can('manage_discounts') or current_user.can('manage_settings') or current_user.can('manage_specials') or current_user.can('upload_data') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint in ['auth', 'settings'] or request.endpoint in ['discount.versions_index', 'discount.upload_discounts', 'report.upload_plan'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Администрирование') }}
@@ -87,12 +114,7 @@
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_exclusions') }}">{{ _('Управление исключениями') }}</a></li>
                                     {% endif %}
 
-                                    {% if current_user.can('manage_users') %}
-                                    <li><a class="dropdown-item" href="{{ url_for('auth.manage_roles') }}">{{ _('Управление ролями') }}</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><h6 class="dropdown-header">{% trans %}Системные настройки{% endtrans %}</h6></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('auth.user_management') }}">{{ _('Пользователи') }}</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('settings.manage_email_recipients') }}">{{ _('Получатели уведомлений') }}</a></li>
+                                    {% if current_user.can('manage_settings') %}
                                     <li><a class="dropdown-item" href="{{ url_for('settings.manage_settings') }}">{{ _('Настройки калькуляторов') }}</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('report.currency_settings') }}">{{ _('Настройки курса') }}</a></li>
                                     {% endif %}
@@ -127,9 +149,16 @@
                                     {{ current_user.username }} ({{ current_user.role.name }})
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
+                                    {% if is_gateway_mode %}
+                                    <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-fill me-2"></i>{{ _('Профиль') }}</a></li>
+                                    <li><a class="dropdown-item" href="/menu"><i class="bi bi-grid-fill me-2"></i>{{ _('Меню сервисов') }}</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>{{ _('Выйти') }}</a></li>
+                                    {% else %}
                                     <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}"><i class="bi bi-key-fill me-2"></i>{{ _('Сменить пароль') }}</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>{{ _('Выйти') }}</a></li>
+                                    {% endif %}
                                 </ul>
                             </div>
                         {% endif %}

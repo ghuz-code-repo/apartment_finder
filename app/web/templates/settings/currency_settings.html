@@ -31,6 +31,9 @@
             <div class="card-header"><h5 class="mb-0">{{ _('1. Выберите источник курса') }}</h5></div>
             <div class="card-body">
                 <form method="POST">
+                    <button type="submit" name="update_cbu" value="1" class="btn btn-warning mb-3">
+                        {{ _('Обновить курс с ЦБ сейчас') }}
+                    </button>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="rate_source" id="source_cbu" value="cbu" {% if settings.rate_source == 'cbu' %}checked{% endif %}>
                         <label class="form-check-label" for="source_cbu">{{ _('Курс Центрального Банка (обновляется автоматически)') }}</label>
@@ -44,8 +47,26 @@
             </div>
         </div>
 
+        <div class="card card-glass mb-4">
+            <div class="card-header"><h5 class="mb-0">{{ _('2. Метод расчета операций') }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" name="use_historical_rate" id="use_historical"
+                               {% if settings.use_historical_rate %}checked{% endif %}>
+                        <label class="form-check-label" for="use_historical">
+                            {{ _('Расчёт контрактаций и поступлений по курсу на дату операции') }}
+                        </label>
+                    </div>
+                    <button type="submit" name="update_calculation_logic" class="btn btn-primary">
+                        {{ _('Применить логику') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+
         <div class="card card-glass">
-            <div class="card-header"><h5 class="mb-0">{{ _('2. Установите ручной курс') }}</h5></div>
+            <div class="card-header"><h5 class="mb-0">{{ _('3. Установите ручной курс') }}</h5></div>
             <div class="card-body">
                 <form method="POST">
                     <div class="mb-3">

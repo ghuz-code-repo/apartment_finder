@@ -1,0 +1,149 @@
+{% extends "layouts/base.html" %}
+{% block title %}Финмодель: {{ complex_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h3 mb-0"><i class="bi bi-bank2 text-primary me-2"></i>{{ complex_name }}</h2>
+        <div class="d-flex gap-2">
+            <div class="btn-group shadow-sm" role="group">
+                <input type="radio" class="btn-check" name="currency-toggle" id="cur-uzs" value="UZS" checked>
+                <label class="btn btn-outline-secondary" for="cur-uzs">UZS</label>
+                <input type="radio" class="btn-check" name="currency-toggle" id="cur-usd" value="USD">
+                <label class="btn btn-outline-secondary" for="cur-usd">USD</label>
+            </div>
+            <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#editTargetsModal">
+                <i class="bi bi-gear-fill me-1"></i> Настроить цели
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100 border-0 shadow-sm bg-primary text-white p-3">
+                <div class="small opacity-75">Целевая выручка</div>
+                <div class="h4 mb-0 fw-bold currency-val" data-uzs="{{ data.metrics.total_target_revenue }}">
+                    {{ "{:,.0f}".format(data.metrics.total_target_revenue) }} <small>UZS</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 border-0 shadow-sm bg-success text-white p-3">
+                <div class="small opacity-75">Факт поступлений</div>
+                <div class="h4 mb-1 fw-bold currency-val" data-uzs="{{ data.metrics.fact_revenue }}">
+                    {{ "{:,.0f}".format(data.metrics.fact_revenue) }} <small>UZS</small>
+                </div>
+                <div class="progress bg-white bg-opacity-25" style="height: 4px;">
+                    <div class="progress-bar bg-white" style="width: {{ data.metrics.completion_percent }}%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 border-0 shadow-sm bg-warning text-dark p-3">
+                <div class="small opacity-75">Остаток площади (ТЗ)</div>
+                <div class="h4 mb-0 fw-bold">{{ "{:,.2f}".format(data.metrics.remaining_area) }} <small>м²</small></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100 border-0 shadow-sm bg-info text-white p-3">
+                <div class="small opacity-75">Рек. цена продажи</div>
+                <div class="h4 mb-0 fw-bold currency-val" id="main-rec-price" data-uzs="{{ data.metrics.recommended_price }}">
+                    {{ "{:,.0f}".format(data.metrics.recommended_price) }} <small>UZS/м²</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 fw-bold">Симулятор маржинальности</div>
+                <div class="card-body bg-light mx-3 mb-3 rounded-3">
+                    <div class="mb-4">
+                        <label class="form-label d-flex justify-content-between">
+                            Бюджет стройки (млрд) <span class="fw-bold text-primary"><span id="val-budget">0</span> <span class="cur-label">UZS</span></span>
+                        </label>
+                        {% set current_budget_bil = (data.target.total_construction_budget / 1e9)|int %}
+                        <input type="range" class="form-range" id="range-budget"
+                               min="{{ (current_budget_bil * 0.3)|int or 1 }}"
+                               max="{{ (current_budget_bil * 3.0)|int or 2000 }}"
+                               value="{{ current_budget_bil or 100 }}">
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label d-flex justify-content-between">
+                            Целевая маржа <span class="fw-bold text-primary"><span id="val-margin">0</span> %</span>
+                        </label>
+                        <input type="range" class="form-range" id="range-margin" min="0" max="100"
+                               value="{{ data.target.target_margin_percent|int or 20 }}">
+                    </div>
+                    <div class="text-center p-3 border border-primary border-dashed rounded bg-white">
+                        <div class="text-muted small text-uppercase mb-1">Необходимая цена/м²:</div>
+                        <div class="h3 fw-bold text-primary mb-0" id="sim-result-price">---</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const rate = parseFloat("{{ data.usd_rate }}") || 1;
+    const area = parseFloat("{{ data.metrics.remaining_area }}") || 0;
+    const factUZS = parseFloat("{{ data.metrics.fact_revenue }}") || 0;
+    const otherUZS = parseFloat("{{ data.target.estimated_other_costs }}") || 0;
+
+    let currentCurrency = 'UZS';
+
+    function format(val, isPrice = false) {
+        let v = currentCurrency === 'USD' ? val / rate : val;
+        let suffix = currentCurrency === 'USD' ? (isPrice ? ' $/м²' : ' $') : (isPrice ? ' UZS/м²' : ' UZS');
+        return Math.round(v).toLocaleString() + suffix;
+    }
+
+    function updateAll() {
+        // Обновление статических карточек
+        document.querySelectorAll('.currency-val').forEach(el => {
+            const uzs = parseFloat(el.dataset.uzs);
+            el.innerHTML = format(uzs, el.id.includes('price'));
+        });
+        document.querySelectorAll('.cur-label').forEach(el => el.innerText = currentCurrency);
+        updateSim();
+    }
+
+    function updateSim() {
+        const budgetBil = parseFloat(document.getElementById('range-budget').value);
+        const margin = parseFloat(document.getElementById('range-margin').value) / 100;
+
+        document.getElementById('val-budget').innerText = budgetBil.toLocaleString();
+        document.getElementById('val-margin').innerText = (margin * 100).toFixed(0);
+
+        if (area <= 0) {
+            document.getElementById('sim-result-price').innerText = "Остаток 0 м²";
+            return;
+        }
+
+        const budgetUZS = budgetBil * 1e9;
+        const totalTargetUZS = (budgetUZS * (1 + margin)) + otherUZS;
+        const remainingNeededUZS = Math.max(0, totalTargetUZS - factUZS);
+        const recPriceUZS = remainingNeededUZS / area;
+
+        document.getElementById('sim-result-price').innerText = format(recPriceUZS, true);
+    }
+
+    document.querySelectorAll('input[name="currency-toggle"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            currentCurrency = e.target.value;
+            updateAll();
+        });
+    });
+
+    document.getElementById('range-budget').addEventListener('input', updateSim);
+    document.getElementById('range-margin').addEventListener('input', updateSim);
+
+    updateAll();
+});
+</script>
+{% endblock %}

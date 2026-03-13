@@ -1,0 +1,249 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+    {{ super() }}
+    <style>
+        .chart-container-large { position: relative; height: 65vh; min-height: 500px; }
+
+        .card-glass {
+            background-color: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 1rem;
+        }
+
+        .filter-panel {
+            background-color: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color);
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label-custom {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.4rem;
+            display: block;
+        }
+
+        /* Стили для таблицы */
+        .pace-table th {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background-color: var(--bs-body-bg);
+        }
+        .pace-value {
+            font-weight: bold;
+            color: var(--bs-success);
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ _('Темпы продаж') }}</h1>
+        <p class="text-muted small mb-0">{{ _('Аналитика динамики и средних показателей') }}</p>
+    </div>
+
+    <div class="btn-group">
+        <a href="{{ url_for('report.sales_pace_report', view_mode='chart') }}"
+           class="btn btn-outline-primary {% if view_mode == 'chart' %}active{% endif %}">
+            <i class="bi bi-graph-up"></i> {{ _('График') }}
+        </a>
+        <a href="{{ url_for('report.sales_pace_report', view_mode='table') }}"
+           class="btn btn-outline-primary {% if view_mode == 'table' %}active{% endif %}">
+            <i class="bi bi-table"></i> {{ _('Таблица (Среднее)') }}
+        </a>
+    </div>
+</div>
+
+<div class="filter-panel">
+    <form method="GET" class="row g-3 align-items-end">
+        <input type="hidden" name="view_mode" value="{{ view_mode }}">
+
+        {% if view_mode == 'chart' %}
+            <div class="col-md-4">
+                <label class="form-label-custom">{{ _('Проект / Дом') }}</label>
+                <select name="house" class="form-select">
+                    <option value="">{{ _('Все проекты') }}</option>
+                    {% for house in all_houses %}
+                        <option value="{{ house.id }}" {% if house.id == selected_house %}selected{% endif %}>
+                            {{ house.complex_name }} ({{ house.name }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% else %}
+            <div class="col-md-2">
+                <label class="form-label-custom">{{ _('С даты') }}</label>
+                <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label-custom">{{ _('По дату') }}</label>
+                <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+            </div>
+        {% endif %}
+
+        <div class="col-md-3">
+            <label class="form-label-custom">{{ _('Тип недвижимости') }}</label>
+            <select name="type" class="form-select">
+                <option value="">{{ _('Все типы') }}</option>
+                <option value="flat" {% if selected_type == 'flat' %}selected{% endif %}>{{ _('Квартира') }}</option>
+                <option value="comm" {% if selected_type == 'comm' %}selected{% endif %}>{{ _('Коммерция') }}</option>
+                <option value="garage" {% if selected_type == 'garage' %}selected{% endif %}>{{ _('Парковка') }}</option>
+                <option value="storageroom" {% if selected_type == 'storageroom' %}selected{% endif %}>{{ _('Кладовка') }}</option>
+            </select>
+        </div>
+
+        <div class="col-md-auto ms-auto">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">{{ _('Обновить') }}</button>
+                <a href="{{ url_for('report.sales_pace_report', view_mode=view_mode) }}" class="btn btn-outline-secondary">{{ _('Сброс') }}</a>
+            </div>
+        </div>
+
+        {% if view_mode == 'chart' %}
+            <div class="col-12 mt-3 pt-3 border-top">
+                <div class="d-flex justify-content-between">
+                    <div class="btn-group btn-group-sm">
+                        <input type="radio" class="btn-check" name="period" id="pM" checked>
+                        <label class="btn btn-outline-secondary" for="pM">Месяцы</label>
+                        <input type="radio" class="btn-check" name="period" id="pY">
+                        <label class="btn btn-outline-secondary" for="pY">Годы</label>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <input type="radio" class="btn-check" name="mode" id="mAgg" checked>
+                        <label class="btn btn-outline-success" for="mAgg">Сумма</label>
+                        <input type="radio" class="btn-check" name="mode" id="mDet">
+                        <label class="btn btn-outline-success" for="mDet">По ЖК</label>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </form>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body">
+        {% if view_mode == 'chart' %}
+            <div class="chart-container-large">
+                <canvas id="paceChart"></canvas>
+            </div>
+        {% else %}
+            {% if table_data %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle pace-table">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>{{ _('Проект') }}</th>
+                                <th class="text-center">{{ _('Продаж за период') }}</th>
+                                <th class="text-center">{{ _('Срок') }}</th>
+                                <th class="text-end">{{ _('Темп (шт/мес)') }}</th>
+
+                                <th class="text-center table-active border-start">{{ _('Остаток') }}</th>
+                                <th class="text-end table-active">{{ _('Средняя цена ($)') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in table_data %}
+                            <tr>
+                                <td class="text-muted small">{{ loop.index }}</td>
+                                <td class="fw-bold">{{ row.complex }}</td>
+                                <td class="text-center">{{ row.total_sales }}</td>
+                                <td class="text-center text-muted small">{{ row.months }}</td>
+                                <td class="text-end pace-value fs-5">{{ row.avg_pace }}</td>
+
+                                <td class="text-center table-active border-start fw-bold">
+                                    {% if row.stock > 0 %}
+                                        <span class="badge bg-secondary text-light">{{ row.stock }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end table-active small fw-bold text-success">
+                                    {{ row.avg_price_usd }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                    {{ _('Нет данных о продажах за выбранный период и тип недвижимости.') }}
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if view_mode == 'chart' %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('paceChart');
+    const chartData = {{ charts_json|safe }};
+    let chartInstance = null;
+
+    function updateChart() {
+        const isYearly = document.getElementById('pY').checked;
+        const isAgg = document.getElementById('mAgg').checked;
+        const period = isYearly ? 'yearly' : 'monthly';
+        const data = chartData[period];
+
+        if (chartInstance) chartInstance.destroy();
+
+        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+        const textColor = isDark ? '#adb5bd' : '#6c757d';
+
+        let datasets = [];
+        if (isAgg) {
+            datasets = [{
+                label: 'Всего сделок',
+                data: data.aggregate,
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            }];
+        } else {
+            datasets = data.datasets.map(ds => ({ ...ds, tension: 0.3 }));
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels: data.labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                    y: { grid: { color: gridColor }, ticks: { color: textColor }, beginAtZero: true }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: textColor, usePointStyle: true } },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
+        });
+    }
+
+    document.querySelectorAll('input[name="period"], input[name="mode"]').forEach(el => {
+        el.addEventListener('change', updateChart);
+    });
+
+    updateChart();
+});
+</script>
+{% endif %}
+{% endblock %}

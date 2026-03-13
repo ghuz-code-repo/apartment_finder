@@ -1,0 +1,172 @@
+{% extends "layouts/base.html" %}
+{% block title %}ИИ Прогноз продаж 2026{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-robot me-2"></i>ИИ Прогноз продаж на 2026 год</h2>
+        <button id="trainBtn" class="btn btn-outline-warning">
+            <i class="bi bi-cpu me-1"></i> Оптимизировать модель (200 ит.)
+        </button>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Выберите месяц 2026 года:</label>
+                    <select id="monthSelect" class="form-select">
+                        <option value="1">Январь</option>
+                        <option value="2">Февраль</option>
+                        <option value="3">Март</option>
+                        <option value="4">Апрель</option>
+                        <option value="5">Май</option>
+                        <option value="6">Июнь</option>
+                        <option value="7">Июль</option>
+                        <option value="8">Август</option>
+                        <option value="9">Сентябрь</option>
+                        <option value="10">Октябрь</option>
+                        <option value="11">Ноябрь</option>
+                        <option value="12">Декабрь</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button id="predictBtn" class="btn btn-primary w-100">Сформировать</button>
+                </div>
+                <div id="modelStatus" class="col-md-6 text-end text-muted small"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="resultsArea" style="display: none;">
+        <div class="table-responsive">
+            <table class="table table-hover border">
+                <thead class="table-light">
+                    <tr>
+                        <th>Проект (ЖК)</th>
+                        <th>Средняя цена за м²</th>
+                        <th class="text-center">Остаток (кв.)</th>
+                        <th class="text-center">Прогноз сделок (шт.)</th>
+                        <th>Емкость (вымываемость)</th>
+                    </tr>
+                </thead>
+                <tbody id="forecastTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Обработчик для кнопки оптимизации модели
+document.getElementById('trainBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('trainBtn');
+    const statusDiv = document.getElementById('modelStatus');
+
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Обучение...';
+    statusDiv.innerHTML = 'Запущен процесс оптимизации...';
+
+    try {
+        const res = await fetch('{{ url_for("ai.train_model_api") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            statusDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Модель обучена. MAE: ${data.mae}</span>`;
+            alert('Модель успешно оптимизирована');
+        } else {
+            statusDiv.innerHTML = `<span class="text-danger">Ошибка: ${data.message}</span>`;
+        }
+    } catch (e) {
+        statusDiv.innerHTML = '<span class="text-danger">Ошибка сервера</span>';
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+});
+
+// Обработчик для формирования прогноза
+document.getElementById('predictBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('predictBtn');
+    const tbody = document.getElementById('forecastTable');
+
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>...';
+
+    try {
+        const month = document.getElementById('monthSelect').value;
+        const res = await fetch('{{ url_for("ai.get_forecast_api") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({month: month})
+        });
+
+        if (!res.ok) throw new Error('Ошибка сервера');
+        const data = await res.json();
+
+        tbody.innerHTML = '';
+
+        let totalStock = 0;
+        let totalForecast = 0;
+        let totalPriceWeighted = 0;
+
+        data.forEach(item => {
+            const price = (item.avg_price || 0).toLocaleString();
+            const forecast = item.forecast || 0;
+            const stock = item.stock || 0;
+            const ratio = stock > 0 ? Math.min((forecast / stock) * 100, 100) : 0;
+
+            // Накапливаем итоги
+            totalStock += stock;
+            totalForecast += forecast;
+            totalPriceWeighted += (item.avg_price || 0) * stock;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${item.project}</strong></td>
+                    <td>${price} UZS</td>
+                    <td class="text-center">${stock}</td>
+                    <td class="text-center"><span class="badge bg-success fs-6">${forecast}</span></td>
+                    <td>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-info" style="width: ${ratio}%"></div>
+                        </div>
+                    </td>
+                </tr>`;
+        });
+
+        // Добавляем строку ИТОГО, если есть данные
+        if (data.length > 0) {
+            const avgPrice = totalStock > 0 ? Math.round(totalPriceWeighted / totalStock) : 0;
+            const overallRatio = totalStock > 0 ? Math.min((totalForecast / totalStock) * 100, 100) : 0;
+
+            tbody.innerHTML += `
+                <tr class="table-secondary fw-bold">
+                    <td>ИТОГО</td>
+                    <td>${avgPrice.toLocaleString()} UZS</td>
+                    <td class="text-center">${totalStock}</td>
+                    <td class="text-center"><span class="badge bg-primary fs-6">${totalForecast}</span></td>
+                    <td>
+                        <div class="progress" style="height: 12px;">
+                            <div class="progress-bar bg-primary" style="width: ${overallRatio}%"></div>
+                        </div>
+                    </td>
+                </tr>`;
+        }
+
+        document.getElementById('resultsArea').style.display = 'block';
+    } catch (e) {
+        alert('Не удалось получить прогноз. Проверьте обучение модели.');
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+});
+</script>
+{% endblock %}

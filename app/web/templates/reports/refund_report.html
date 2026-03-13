@@ -1,0 +1,88 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0 text-body">{{ title }}</h1>
+
+    <form class="d-flex align-items-center gap-2" method="GET">
+        <select name="year" class="form-select form-select-sm" style="width: 100px;">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+        <select name="month" class="form-select form-select-sm" style="width: 120px;">
+            {% for m in months %}
+            <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>
+                {{ _(datetime(2024, m, 1).strftime('%B')) }}
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Показать</button>
+
+        <div class="form-check form-switch ms-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="currencyToggle">
+            <label class="form-check-label fw-bold text-body" for="currencyToggle" id="currencyLabel">UZS</label>
+        </div>
+    </form>
+</div>
+
+<div class="card border-secondary-subtle shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-body-secondary small text-uppercase opacity-75">
+                    <tr>
+                        <th class="ps-4 py-3 text-body">Проект (ЖК)</th>
+                        <th class="text-end py-3 text-body">Плановые возвраты</th>
+                        <th class="text-end py-3 text-body">Фактические возвраты</th>
+                        <th class="text-end pe-4 py-3 text-body">Разница (Остаток)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total_p = 0 %}
+                    {% set total_a = 0 %}
+                    {% for complex_name, vals in data.items() %}
+                        {% set diff = vals.planned - vals.actual %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-body">{{ complex_name }}</td>
+                            <td class="text-end currency-value" data-uzs-value="{{ vals.planned }}">
+                                {{ "{:,.0f}".format(vals.planned)|replace(',', ' ') }}
+                            </td>
+                            <td class="text-end text-danger currency-value" data-uzs-value="{{ vals.actual }}">
+                                {{ "{:,.0f}".format(vals.actual)|replace(',', ' ') }}
+                            </td>
+                            <td class="text-end fw-medium {{ 'text-warning' if diff > 0 else 'text-success' }} currency-value" data-uzs-value="{{ diff }}">
+                                {{ "{:,.0f}".format(diff)|replace(',', ' ') }}
+                            </td>
+                        </tr>
+                        {% set total_p = total_p + vals.planned %}
+                        {% set total_a = total_a + vals.actual %}
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-body-tertiary fw-bold border-top">
+                    <tr>
+                        <td class="ps-4">ИТОГО:</td>
+                        <td class="text-end currency-value" data-uzs-value="{{ total_p }}">
+                            {{ "{:,.0f}".format(total_p)|replace(',', ' ') }}
+                        </td>
+                        <td class="text-end text-danger currency-value" data-uzs-value="{{ total_a }}">
+                            {{ "{:,.0f}".format(total_a)|replace(',', ' ') }}
+                        </td>
+                        <td class="text-end pe-4 currency-value" data-uzs-value="{{ total_p - total_a }}">
+                            {{ "{:,.0f}".format(total_p - total_a)|replace(',', ' ') }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.body.dataset.usdRate = "{{ usd_to_uzs_rate or 12650 }}";
+</script>
+<script src="{{ url_for('static', filename='js/report_script.js') }}"></script>
+{% endblock %}

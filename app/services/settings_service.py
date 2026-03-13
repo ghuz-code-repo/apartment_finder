@@ -1,6 +1,6 @@
 # app/services/settings_service.py
 
-from app.core.extensions import db
+from ..core.db_utils import get_planning_session, get_default_session
 import pandas as pd
 import io
 from flask import make_response
@@ -12,7 +12,6 @@ from ..models.exclusion_models import ExcludedComplex
 import pandas as pd
 from app.models.finance_models import ZeroMortgageMatrix
 from app.models.planning_models import CalculatorSettings
-from app import db
 import json
 from datetime import datetime
 def get_calculator_settings():
@@ -21,17 +20,19 @@ def get_calculator_settings():
     Использует паттерн "Синглтон", всегда работая с записью id=1.
     """
     # Используем planning_models.CalculatorSettings
-    settings = planning_models.CalculatorSettings.query.get(1)
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
+    settings = planning_session.query(planning_models.CalculatorSettings).get(1)  # <--- ИЗМЕНЕНО
     if not settings:
         settings = planning_models.CalculatorSettings(id=1)
-        db.session.add(settings)
-        db.session.commit()
+        planning_session.add(settings)  # <--- ИЗМЕНЕНО
+        planning_session.commit()  # <--- ИЗМЕНЕНО
     return settings
 
 
 def get_all_excluded_complexes():
     """Возвращает список всех исключенных ЖК."""
-    return ExcludedComplex.query.order_by(ExcludedComplex.complex_name).all()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    return default_session.query(ExcludedComplex).order_by(ExcludedComplex.complex_name).all()  # <--- ИЗМЕНЕНО
 
 
 def toggle_complex_exclusion(complex_name: str):
@@ -39,18 +40,19 @@ def toggle_complex_exclusion(complex_name: str):
     Добавляет ЖК в список исключений, если его там нет,
     или удаляет, если он там уже есть.
     """
-    existing = ExcludedComplex.query.filter_by(complex_name=complex_name).first()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    existing = default_session.query(ExcludedComplex).filter_by(complex_name=complex_name).first()  # <--- ИЗМЕНЕНО
     if existing:
-        db.session.delete(existing)
+        default_session.delete(existing)
         message = f"Проект '{complex_name}' был удален из списка исключений."
         category = "success"
     else:
         new_exclusion = ExcludedComplex(complex_name=complex_name)
-        db.session.add(new_exclusion)
+        default_session.add(new_exclusion)
         message = f"Проект '{complex_name}' был добавлен в список исключений."
         category = "info"
 
-    db.session.commit()
+    default_session.commit()
     return message, category
 
 
@@ -64,12 +66,14 @@ def update_calculator_settings(form_data):
     settings.time_value_rate_annual = float(form_data.get('time_value_rate_annual', 16.5))
     settings.standard_installment_min_dp_percent = float(form_data.get('standard_installment_min_dp_percent', 15.0))
     settings.zero_mortgage_whitelist = form_data.get('zero_mortgage_whitelist', '')
-    db.session.commit()
+    planning_session = get_planning_session()
+    planning_session.commit()
 def save_zero_mortgage_matrix(file_storage):
     """
     Parses a CSV file with mortgage matrix and saves it to the database.
     Deactivates previous active matrices.
     """
+    default_session = get_default_session()
     try:
         df = pd.read_csv(file_storage, index_col=0)
         # Преобразуем столбцы 'ПВ2', 'ПВ3' и т.д. в '30', '40'
@@ -77,15 +81,15 @@ def save_zero_mortgage_matrix(file_storage):
         df.columns = [str(int(col.replace('ПВ', '')) * 10) for col in df.columns]
         matrix_json = df.to_dict(orient='index')
 
-        ZeroMortgageMatrix.query.filter_by(is_active=True).update({"is_active": False})
+        default_session.query(ZeroMortgageMatrix).filter_by(is_active=True).update({"is_active": False})
 
         matrix_name = f"matrix_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         new_matrix = ZeroMortgageMatrix(name=matrix_name, data=matrix_json, is_active=True)
-        db.session.add(new_matrix)
-        db.session.commit()
+        default_session.add(new_matrix)  # <--- ИЗМЕНЕНО
+        default_session.commit()  # <--- ИЗМЕНЕНО
         return True, "Матрица успешно обновлена."
     except Exception as e:
-        db.session.rollback()
+        default_session.rollback()  # <--- ИЗМЕНЕНО
         return False, f"Ошибка при обработке файла: {e}"
 
 
@@ -118,7 +122,8 @@ def generate_zero_mortgage_template():
 
 def get_active_zero_mortgage_matrix():
     """ Fetches the active zero mortgage matrix data. """
-    matrix = ZeroMortgageMatrix.query.filter_by(is_active=True).first()
+    default_session = get_default_session()  # <--- ДОБАВЛЕНО
+    matrix = default_session.query(ZeroMortgageMatrix).filter_by(is_active=True).first()  # <--- ИЗМЕНЕНО
     return matrix.data if matrix else None
 
 
@@ -126,19 +131,20 @@ def save_zero_mortgage_projects(project_ids_str):
     """ Saves the list of applicable project IDs for zero mortgage into CalculatorSettings. """
     # Используем существующую функцию для получения настроек
     settings = get_calculator_settings()
+    planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
     if not settings:
         settings = CalculatorSettings()
-        db.session.add(settings)
+        planning_session.add(settings)
 
     try:
         project_ids = [int(p_id.strip()) for p_id in project_ids_str.split(',') if p_id.strip()]
         settings.zero_mortgage_project_ids = json.dumps(project_ids)
-        db.session.commit()
+        planning_session.commit()
         return True, "Список объектов для 'Ипотеки под ноль' обновлен."
     except ValueError:
         return False, "ID объектов должны быть целыми числами."
     except Exception as e:
-        db.session.rollback()
+        planning_session.rollback()
         return False, f"Произошла ошибка при сохранении ID объектов: {e}"
 
 
