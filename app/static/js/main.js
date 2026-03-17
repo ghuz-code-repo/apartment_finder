@@ -3,8 +3,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const themeSwitcherBtn = document.getElementById('theme-switcher-btn');
     const themeIcon = document.getElementById('theme-icon');
 
-    const getStoredTheme = () => localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    const setStoredTheme = theme => localStorage.setItem('theme', theme);
+    function getCookie(name) {
+        var m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+        return m ? m[2] : null;
+    }
+    const getStoredTheme = () => getCookie('gh_theme') || localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const setStoredTheme = theme => {
+        localStorage.setItem('theme', theme);
+        document.cookie = 'gh_theme=' + theme + ';path=/;max-age=31536000;SameSite=Lax';
+    };
 
     // Function to update the switcher icon based on the current theme
     const updateIcon = (theme) => {
