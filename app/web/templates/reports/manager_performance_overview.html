@@ -10,7 +10,7 @@
             <i class="bi bi-download me-2"></i>{{ _('Скачать ведомость KPI') }}
         </button>
 
-        {% if current_user.can('upload_data') %}
+        {% if current_user.can('managers_plan_import') %}
             <a href="{{ url_for('report.upload_manager_plan') }}" class="btn btn-golden-outline">
                 {# --- ИЗМЕНЕНИЕ 3 --- #}
                 <i class="bi bi-upload me-2"></i>{{ _('Загрузить планы') }}

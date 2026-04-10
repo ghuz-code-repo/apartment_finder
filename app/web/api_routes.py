@@ -50,7 +50,7 @@ search_model = apartments_ns.model('ApartmentSearchInput', {
 class ApartmentSearchResource(Resource):
     @apartments_ns.expect(search_model, validate=True)
     @login_required
-    @permission_required('view_selection')
+    @permission_required('selection_view')
     def post(self):
         """Поиск квартир по бюджету и другим критериям"""
         data = api.payload
@@ -69,7 +69,7 @@ class ApartmentSearchResource(Resource):
 @apartments_ns.param('sell_id', 'Идентификатор квартиры')
 class ApartmentResource(Resource):
     @login_required
-    @permission_required('view_selection')
+    @permission_required('selection_details_view')
     def get(self, sell_id):
         """Получение детальной информации по ID квартиры"""
         card_data = selection_service.get_apartment_card_data(sell_id)
@@ -93,7 +93,7 @@ plan_fact_parser.add_argument('property_type', type=str, required=True, help='Т
 class PlanFactReportResource(Resource):
     @reports_ns.expect(plan_fact_parser)
     @login_required
-    @permission_required('view_plan_fact_report')
+    @permission_required('reports_plan_fact_view')
     def get(self):
         """Возвращает детальный план-факт отчет"""
         args = plan_fact_parser.parse_args()
@@ -116,7 +116,7 @@ inventory_parser.add_argument('currency', type=str, default='UZS', choices=['UZS
 class InventorySummaryResource(Resource):
     @reports_ns.expect(inventory_parser)
     @login_required
-    @permission_required('view_inventory_report')
+    @permission_required('reports_inventory_view')
     def get(self):
         """Возвращает сводку по товарному запасу"""
         args = inventory_parser.parse_args()
@@ -147,7 +147,7 @@ discounts_ns = api.namespace('discounts', description='Просмотр сист
 class DiscountOverviewResource(Resource):
     @discounts_ns.doc('get_discounts_overview')
     @login_required
-    @permission_required('view_discounts')
+    @permission_required('discounts_view')
     def get(self):
         """Возвращает полную информацию по действующей системе скидок"""
         discounts_data = discount_service.get_discounts_with_summary()
@@ -180,7 +180,7 @@ passport_model = passport_ns.model('ProjectPassportInput', {
 class PassportSaveResource(Resource):
     @passport_ns.expect(passport_model, validate=True)
     @login_required
-    @permission_required('manage_settings')
+    @permission_required('projects_passport_update')
     def post(self):
         """Сохраняет статические данные Паспорта проекта."""
         data = api.payload
@@ -250,7 +250,7 @@ stage_update_model = stages_ns.model('StageUpdateInput', {
 class StageAddResource(Resource):
     @stages_ns.expect(stage_add_model, validate=True)
     @login_required
-    @permission_required('manage_settings')
+    @permission_required('projects_passport_update')
     def post(self):
         """(ADMIN) Добавляет новый этап строительства."""
         data = api.payload
@@ -281,7 +281,7 @@ class StageAddResource(Resource):
 class StageUpdateResource(Resource):
     @stages_ns.expect(stage_update_model, validate=True)
     @login_required
-    @permission_required('manage_settings')
+    @permission_required('projects_passport_update')
     def post(self, stage_id):
         """(ADMIN) Обновляет существующий этап строительства."""
         data = api.payload
@@ -309,7 +309,7 @@ class StageUpdateResource(Resource):
 @stages_ns.route('/delete/<int:stage_id>')
 class StageDeleteResource(Resource):
     @login_required
-    @permission_required('manage_settings')
+    @permission_required('projects_passport_update')
     def post(self, stage_id):
         """(ADMIN) Удаляет этап строительства."""
         planning_session = get_planning_session()

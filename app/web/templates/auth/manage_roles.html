@@ -36,10 +36,14 @@
                         </td>
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
+                                {% if current_user.can('roles_update') %}
                                 <a href="{{ url_for('auth.role_form', role_id=role.id) }}" class="btn btn-sm btn-outline-primary">{{ _('Изменить') }}</a>
+                                {% endif %}
+                                {% if current_user.can('roles_delete') %}
                                 <form method="POST" action="{{ url_for('auth.delete_role', role_id=role.id) }}" onsubmit="return confirm('{{ _('Вы уверены, что хотите удалить роль %(rolename)s?', rolename=role.name) }}');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">{{ _('Удалить') }}</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

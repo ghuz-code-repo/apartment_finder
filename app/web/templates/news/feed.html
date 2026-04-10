@@ -29,7 +29,7 @@
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold">Новости рынка недвижимости</h2>
-        {% if current_user.can('upload_data') %}
+        {% if current_user.can('news_create') %}
         <button class="btn btn-golden" data-bs-toggle="collapse" data-bs-target="#addNewsForm">
             <i class="bi bi-megaphone me-2"></i>Добавить новость
         </button>
@@ -98,7 +98,7 @@
                                         <i class="bi bi-clock me-1"></i>
                                         {{ item.tashkent_time.strftime('%d.%m.%Y %H:%M') }}
                                     </span>
-                                    {% if current_user.can('upload_data') %}
+                                    {% if current_user.can('news_delete') %}
                                     <div class="mt-2">
                                         <a href="{{ url_for('news.delete_news', news_id=item.id) }}"
                                            class="btn btn-link btn-sm text-danger p-0 text-decoration-none"

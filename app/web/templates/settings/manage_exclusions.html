@@ -12,6 +12,7 @@
     <div class="card-body">
         <p class="text-muted small">{{ _('Квартиры из этого списка не будут отображаться в результатах поиска по бюджету.') }}</p>
 
+        {% if current_user.can('settings_exclusions_view') %}
         <form method="POST" action="{{ url_for('main.manage_exclusions') }}">
             <input type="hidden" name="action" value="add">
             <div class="row g-3 align-items-end">
@@ -30,6 +31,7 @@
                 </div>
             </div>
         </form>
+        {% endif %}
         <hr>
         <h6>{{ _('Список исключенных квартир') }}</h6>
 
@@ -51,6 +53,7 @@
                         <td>{{ excluded_sell.comment or '—' }}</td>
                         <td>{{ excluded_sell.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                         <td class="text-end">
+                            {% if current_user.can('settings_exclusions_view') %}
                             <form method="POST" action="{{ url_for('main.manage_exclusions') }}" onsubmit="return confirm('{{ _('Вы уверены, что хотите удалить исключение для ID %(sell_id)s?', sell_id=excluded_sell.sell_id) }}');">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="sell_id_to_manage" value="{{ excluded_sell.sell_id }}">
@@ -58,6 +61,7 @@
                                     <i class="bi bi-trash"></i> {{ _('Удалить') }}
                                 </button>
                             </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

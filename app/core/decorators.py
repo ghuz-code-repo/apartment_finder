@@ -18,26 +18,13 @@ def _is_gateway_user(user):
         return True
     return False
 
-# Mapping from old local permission names to gateway permission names
-PERMISSION_MAP = {
-    'view_selection': 'finder.view_selection',
-    'view_discounts': 'finder.view_discounts',
-    'view_version_history': 'finder.view_version_history',
-    'view_plan_fact_report': 'finder.view_plan_fact_report',
-    'view_inventory_report': 'finder.view_inventory_report',
-    'view_manager_report': 'finder.view_manager_report',
-    'view_project_dashboard': 'finder.view_project_dashboard',
-    'manage_discounts': 'finder.manage_discounts',
-    'manage_settings': 'finder.manage_settings',
-    'manage_users': 'finder.manage_users',
-    'upload_data': 'finder.upload_data',
-    'download_kpi_report': 'finder.download_kpi_report',
-    'manage_specials': 'finder.manage_specials',
-    'view_ai_forecast': 'finder.view_ai_forecast',
-    'manage_competitors': 'finder.manage_competitors',
-    'manage_cancellations': 'finder.manage_cancellations',
-    'manage_registry': 'finder.manage_registry',
-}
+# Mapping from local permission names to gateway permission names
+# Import from central permissions_setup to keep single source of truth
+try:
+    from permissions_setup import PERMISSION_MAP
+except ImportError:
+    # Fallback: inline map for when permissions_setup is unavailable
+    PERMISSION_MAP = {}
 
 
 def _get_current_user():

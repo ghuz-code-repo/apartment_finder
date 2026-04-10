@@ -8,7 +8,7 @@ news_bp = Blueprint('news', __name__)
 
 @news_bp.route('/market/news')
 @login_required
-@permission_required('view_selection')
+@permission_required('news_view')
 def feed():
     # Загрузка новостей от новых к старым
     news_items = News.query.order_by(News.created_at.desc()).all()
@@ -16,7 +16,7 @@ def feed():
 
 @news_bp.route('/market/news/add', methods=['POST'])
 @login_required
-@permission_required('upload_data')
+@permission_required('news_create')
 def add_news():
     title = request.form.get('title')
     description = request.form.get('description')
@@ -28,7 +28,7 @@ def add_news():
 
 @news_bp.route('/market/news/delete/<int:news_id>')
 @login_required
-@permission_required('upload_data')
+@permission_required('news_delete')
 def delete_news(news_id):
     news_service.delete_news(news_id)
     flash('Новость удалена', 'info')

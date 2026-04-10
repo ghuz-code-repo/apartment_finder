@@ -15,7 +15,7 @@
         <h1 class="gradient-heading mb-0">{{ data.complex_name }}</h1>
     </div>
     <div id="passport-controls" class="d-flex align-items-center gap-3">
-        {% if current_user.can('manage_settings') %}
+        {% if current_user.can('projects_passport_view') %}
             <button id="edit-btn" class="btn btn-outline-warning">
                 <i class="bi bi-pencil me-2"></i>{{ _('Редактировать') }}
             </button>

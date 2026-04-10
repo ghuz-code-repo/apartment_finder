@@ -42,12 +42,12 @@
     <div class="col-md-3 filter-panel p-3 overflow-auto">
         <div class="action-buttons mb-4">
             <h6 class="text-muted text-uppercase small fw-bold mb-3">{{ _('Управление данными') }}</h6>
-            {% if current_user.can('upload_data') %}
+            {% if current_user.can('competitors_import_view') %}
             <a href="{{ url_for('competitor.import_view') }}" class="btn btn-golden-outline btn-sm">
                 <i class="bi bi-upload"></i> {{ _('Импорт из Excel') }}
             </a>
             {% endif %}
-            {% if current_user.can('view_reports') %}
+            {% if current_user.can('competitors_our_export') %}
             <a href="{{ url_for('competitor.export_our') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-download"></i> {{ _('Экспорт данных') }}
             </a>

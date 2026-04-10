@@ -38,7 +38,7 @@ report_bp = Blueprint('report', __name__, template_folder='templates')
 
 @report_bp.route('/refund-report')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_refund_view')
 def refund_report():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -64,7 +64,7 @@ def refund_report():
 
 @report_bp.route('/manager-kpi-calculate/<int:manager_id>/<int:year>/<int:month>')
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_kpi_calculate')
 def calculate_manager_kpi(manager_id, year, month):
     planning_session = get_planning_session()
     mysql_session = get_mysql_session()
@@ -115,7 +115,7 @@ def calculate_manager_kpi(manager_id, year, month):
 
 @report_bp.route('/export-expected-income-details')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_expected_income_export')
 def export_expected_income_details():
     ids_str = request.args.get('ids', '')
     excel_stream = report_service.generate_ids_excel(ids_str)
@@ -135,7 +135,7 @@ def export_expected_income_details():
 
 @report_bp.route('/inventory-summary')
 @login_required
-@permission_required('view_inventory_report')
+@permission_required('reports_inventory_view')
 def inventory_summary():
     target_date = request.args.get('date')
     group_by = request.args.get('group_by', 'complex')
@@ -173,7 +173,7 @@ def inventory_summary():
 
 @report_bp.route('/financial-model')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_financial_model_view')
 def financial_model_selection():
     """Страница выбора ЖК для просмотра финансовой модели."""
     # Получаем список всех названий ЖК через существующий data_service
@@ -191,7 +191,7 @@ def financial_model_selection():
 
 @report_bp.route('/financial-model/<path:complex_name>', methods=['GET', 'POST'])
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_financial_model_view')
 def financial_model(complex_name):
     from app.services import financial_model_service
     from app.core.db_utils import get_planning_session
@@ -250,7 +250,7 @@ def financial_model(complex_name):
 
 @report_bp.route('/deal-registry-report')
 @login_required
-@permission_required('view_inventory_report')
+@permission_required('reports_deal_registry_view')
 def deal_registry_report():
     page = request.args.get('page', 1, type=int)
     # per_page можно вынести в настройки
@@ -266,7 +266,7 @@ def deal_registry_report():
 
 @report_bp.route('/export-deal-registry')
 @login_required
-@permission_required('view_inventory_report')
+@permission_required('reports_deal_registry_export')
 def export_deal_registry():
     excel_stream = report_service.generate_deal_registry_excel()
     if excel_stream is None:
@@ -283,7 +283,7 @@ def export_deal_registry():
 
 @report_bp.route('/export-inventory-summary')
 @login_required
-@permission_required('view_inventory_report')
+@permission_required('reports_inventory_export')
 def export_inventory_summary():
     selected_currency = request.args.get('currency', 'UZS')
     target_date = request.args.get('date') # Получаем дату из параметров запроса
@@ -315,7 +315,7 @@ def export_inventory_summary():
 
 @report_bp.route('/reports/quarterly-analytics')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_quarterly_view')
 def quarterly_analytics():
     complexes = data_service.get_all_complex_names()
     if not complexes:
@@ -342,7 +342,7 @@ def quarterly_analytics():
 
 @report_bp.route('/project-dashboard/<path:complex_name>/generate-pricelist', methods=['POST'])
 @login_required
-@permission_required('view_project_dashboard')
+@permission_required('projects_pricelist_export')
 def generate_pricelist_files(complex_name):
     prop_type = request.form.get('property_type')
     percent_val = request.form.get('percent', '0').replace(',', '.')
@@ -382,7 +382,7 @@ def generate_pricelist_files(complex_name):
 
 @report_bp.route('/download-plan-template')
 @login_required
-@permission_required('upload_data')
+@permission_required('reports_plan_template_export')
 def download_plan_template():
     excel_stream = report_service.generate_plan_template_excel()
     return send_file(
@@ -395,7 +395,7 @@ def download_plan_template():
 
 @report_bp.route('/plan-fact', methods=['GET'])
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_plan_fact_view')
 def plan_fact_report():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -442,7 +442,7 @@ def plan_fact_report():
 
 @report_bp.route('/upload-plan', methods=['GET', 'POST'])
 @login_required
-@permission_required('upload_data')
+@permission_required('reports_plan_import')
 def upload_plan():
     form = UploadPlanForm()
     if form.validate_on_submit():
@@ -465,7 +465,7 @@ def upload_plan():
 
 @report_bp.route('/commercial-offer/complex/<int:sell_id>')
 @login_required
-@permission_required('view_selection')
+@permission_required('complex_calc_print')
 def generate_complex_kp(sell_id):
     card_data = selection_service.get_apartment_card_data(sell_id)
     if not card_data.get('apartment'):
@@ -499,7 +499,7 @@ def generate_complex_kp(sell_id):
 
 @report_bp.route('/project-dashboard/<path:complex_name>')
 @login_required
-@permission_required('view_project_dashboard')
+@permission_required('projects_dashboard_view')
 def project_dashboard(complex_name):
     selected_prop_type = request.args.get('property_type', None)
 
@@ -525,7 +525,7 @@ def project_dashboard(complex_name):
 
 @report_bp.route('/project-passport/<path:complex_name>')
 @login_required
-@permission_required('view_project_dashboard')  # Используем то же право, что и для дашборда
+@permission_required('projects_passport_view')  # Используем то же право, что и для дашборда
 def project_passport(complex_name):
     """Отображает страницу "Паспорт проекта"."""
 
@@ -546,7 +546,7 @@ def project_passport(complex_name):
 
 @report_bp.route('/currency-settings', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_currency_view')
 def currency_settings():
     if request.method == 'POST':
         # 1. Смена источника
@@ -591,7 +591,7 @@ def currency_settings():
 
 @report_bp.route('/export-annual-plan-fact')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_annual_plan_fact_export')
 def export_annual_plan_fact():
     year = request.args.get('year', date.today().year, type=int)
     # Получаем валюту из параметров запроса
@@ -618,7 +618,7 @@ def export_annual_plan_fact():
 
 @report_bp.route('/export-commercial-inventory')
 @login_required
-@permission_required('view_inventory_report')
+@permission_required('reports_commercial_inventory_export')
 def export_commercial_inventory():
     selected_currency = request.args.get('currency', 'UZS')
     usd_rate = currency_service.get_current_effective_rate()
@@ -638,7 +638,7 @@ def export_commercial_inventory():
     )
 @report_bp.route('/export-plan-fact')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_plan_fact_export')
 def export_plan_fact():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -670,7 +670,7 @@ def export_plan_fact():
 
 @report_bp.route('/manager-performance-report', methods=['GET'])
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_performance_view')
 def manager_performance_report():
     # --- ИСПРАВЛЕНИЕ: Используем get_default_session() ---
     default_session = get_default_session()
@@ -714,7 +714,7 @@ def manager_performance_report():
 
 @report_bp.route('/download-kpi-report')
 @login_required
-@permission_required('download_kpi_report')
+@permission_required('managers_kpi_export')
 def download_kpi_report():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -741,7 +741,7 @@ def download_kpi_report():
 
 @report_bp.route('/manager-performance-report/<int:manager_id>', methods=['GET'])
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_performance_detail_view')
 def manager_performance_detail(manager_id):
     current_year = date.today().year
     year = request.args.get('year', current_year, type=int)
@@ -775,7 +775,7 @@ def manager_performance_detail(manager_id):
 
 @report_bp.route('/upload-manager-plan', methods=['GET', 'POST'])
 @login_required
-@permission_required('upload_data')
+@permission_required('managers_plan_import')
 def upload_manager_plan():
     form = UploadManagerPlanForm()
     if form.validate_on_submit():
@@ -796,7 +796,7 @@ def upload_manager_plan():
 
 @report_bp.route('/download-manager-plan-template')
 @login_required
-@permission_required('upload_data')
+@permission_required('managers_plan_template_export')
 def download_manager_plan_template():
     excel_stream = manager_report_service.generate_manager_plan_template_excel()
     filename = f"manager_plans_template_{date.today().year}.xlsx"
@@ -810,7 +810,7 @@ def download_manager_plan_template():
 
 @report_bp.route('/hall-of-fame/<path:complex_name>')
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_hall_of_fame_view')
 def hall_of_fame(complex_name):
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
@@ -830,7 +830,7 @@ def hall_of_fame(complex_name):
 
 @report_bp.route('/funnel-leads')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_funnel_leads_view')
 def funnel_leads():
     """
     Отображает список заявок для конкретного узла воронки.
@@ -850,7 +850,7 @@ def funnel_leads():
 
 @report_bp.route('/sales-funnel')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_sales_funnel_view')
 def sales_funnel():
     end_date_str = request.args.get('end_date') or date.today().isoformat()
     start_date_str = request.args.get('start_date') or (date.today() - timedelta(days=30)).isoformat()
@@ -868,7 +868,7 @@ def sales_funnel():
     )
 @report_bp.route('/project-passport/competitor-template')
 @login_required
-@permission_required('manage_settings') # Используем право админа
+@permission_required('projects_competitor_template_export') # Используем право админа
 def download_competitor_template():
     """Отдает Excel-шаблон для таблицы конкурентов."""
     excel_stream = project_dashboard_service.generate_competitor_template_excel()
@@ -881,7 +881,7 @@ def download_competitor_template():
 
 @report_bp.route('/project-passport/upload-competitors/<path:complex_name>', methods=['POST'])
 @login_required
-@permission_required('manage_settings') # Используем право админа
+@permission_required('projects_competitor_import') # Используем право админа
 def upload_competitor_data(complex_name):
     """Обрабатывает загрузку Excel-файла с данными о конкурентах."""
     if 'competitor_file' not in request.files:
@@ -905,7 +905,7 @@ def upload_competitor_data(complex_name):
 
 @report_bp.route('/sales-pace-report')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('reports_sales_pace_view')
 def sales_pace_report():
     from app.models.estate_models import EstateHouse
 
@@ -957,7 +957,7 @@ def sales_pace_report():
 
 @report_bp.route('/project-passport/download-pptx/<path:complex_name>')
 @login_required
-@permission_required('view_project_dashboard')  # Используем то же право
+@permission_required('projects_passport_export')  # Используем то же право
 def download_project_passport_pptx(complex_name):
     """
     Генерирует и отдает "Паспорт проекта" в виде .pptx файла.

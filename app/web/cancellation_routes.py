@@ -11,7 +11,7 @@ cancellation_bp = Blueprint('cancellations', __name__, template_folder='template
 
 @cancellation_bp.route('/cancellations/export')
 @login_required
-@permission_required('manage_cancellations')
+@permission_required('cancellations_export')
 def export_excel():
     output = cancellation_service.generate_cancellations_excel()
     if not output:
@@ -29,7 +29,7 @@ def export_excel():
 
 @cancellation_bp.route('/cancellations')
 @login_required
-@permission_required('manage_cancellations')
+@permission_required('cancellations_view')
 def index():
     data = cancellation_service.get_cancellations()
     return render_template('reports/cancellations.html', title="Реестр расторжений", data=data)
@@ -37,7 +37,7 @@ def index():
 
 @cancellation_bp.route('/cancellations/add', methods=['POST'])
 @login_required
-@permission_required('manage_cancellations')
+@permission_required('cancellations_create')
 def add():
     sell_id = request.form.get('sell_id', type=int)
     is_free = 'is_free' in request.form
@@ -59,7 +59,7 @@ def add():
 
 @cancellation_bp.route('/cancellations/delete/<int:id>', methods=['POST'])
 @login_required
-@permission_required('manage_cancellations')
+@permission_required('cancellations_delete')
 def delete(id):
     if cancellation_service.delete_cancellation(id):
         flash("Запись удалена", "success")
@@ -70,7 +70,7 @@ def delete(id):
 
 @cancellation_bp.route('/cancellations/update_manual', methods=['POST'])
 @login_required
-@permission_required('manage_cancellations')
+@permission_required('cancellations_update')
 def update_manual():
     registry_id = request.form.get('registry_id', type=int)
     manual_number = request.form.get('manual_number')

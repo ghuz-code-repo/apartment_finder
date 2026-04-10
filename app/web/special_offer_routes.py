@@ -14,7 +14,7 @@ special_offer_bp = Blueprint('special_offer', __name__, template_folder='templat
 
 @special_offer_bp.route('/manage', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_specials')
+@permission_required('specials_create')
 def manage_specials():
     """Страница управления 'Квартирами месяца'."""
     form = MonthlySpecialForm()
@@ -47,7 +47,7 @@ def manage_specials():
 
 @special_offer_bp.route('/edit/<int:special_id>', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_specials')
+@permission_required('specials_update')
 def edit_special(special_id):
     """Страница редактирования спец. предложения."""
     offer = special_offer_service.get_special_offer_details_by_special_id(special_id)
@@ -82,7 +82,7 @@ def edit_special(special_id):
 
 @special_offer_bp.route('/delete/<int:special_id>', methods=['POST'])
 @login_required
-@permission_required('manage_specials')
+@permission_required('specials_delete')
 def delete_special(special_id):
     """Удаляет спец. предложение."""
     try:
@@ -95,7 +95,7 @@ def delete_special(special_id):
 
 @special_offer_bp.route('/extend/<int:special_id>', methods=['POST'])
 @login_required
-@permission_required('manage_specials')
+@permission_required('specials_update')
 def extend_special(special_id):
     """Продлевает срок действия предложения."""
     try:

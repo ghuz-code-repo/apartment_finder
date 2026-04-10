@@ -55,6 +55,7 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% if current_user.can('specials_update') %}
                                 <a href="{{ url_for('special_offer.edit_special', special_id=offer['special_id']) }}" class="btn btn-sm btn-warning">
                                     <i class="bi bi-pencil-fill"></i>
                                 </a>
@@ -63,11 +64,14 @@
                                         <i class="bi bi-calendar-plus-fill"></i>
                                     </button>
                                 </form>
+                                {% endif %}
+                                {% if current_user.can('specials_delete') %}
                                 <form method="POST" action="{{ url_for('special_offer.delete_special', special_id=offer['special_id']) }}" class="d-inline ms-1" onsubmit="return confirm('Вы уверены, что хотите удалить это предложение?');">
                                     <button type="submit" class="btn btn-sm btn-danger">
                                         <i class="bi bi-trash-fill"></i>
                                     </button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

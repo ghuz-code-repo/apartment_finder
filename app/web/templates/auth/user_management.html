@@ -34,7 +34,7 @@
                                 </td>
                                 <td><span class="badge bg-info">{{ user.role.name if user.role else _('Нет роли') }}</span></td>
                                 <td>
-                                    {% if user.id != current_user.id %}
+                                    {% if user.id != current_user.id and current_user.can('users_delete') %}
                                     <form method="POST" action="{{ url_for('auth.delete_user', user_id=user.id) }}" onsubmit="return confirm('{{ _('Вы уверены, что хотите удалить пользователя %(username)s?', username=user.username) }}');">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ _('Удалить') }}"><i class="bi bi-trash"></i></button>
                                     </form>

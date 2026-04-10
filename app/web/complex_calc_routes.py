@@ -9,7 +9,7 @@ complex_calc_bp = Blueprint('complex_calc', __name__, template_folder='templates
 
 @complex_calc_bp.route('/complex-calculations/<int:sell_id>')
 @login_required
-@permission_required('view_selection')
+@permission_required('complex_calc_view')
 def show_page(sell_id):
     """Отображает страницу сложных расчетов."""
     card_data = selection_service.get_apartment_card_data(sell_id)
@@ -21,7 +21,7 @@ def show_page(sell_id):
 
 @complex_calc_bp.route('/calculate-installment', methods=['POST'])
 @login_required
-@permission_required('view_selection')
+@permission_required('complex_calc_calculate')
 def calculate_installment():
     """Обрабатывает AJAX-запрос для расчета стандартной рассрочки."""
     data = request.get_json()
@@ -54,7 +54,7 @@ def calculate_installment():
 
 @complex_calc_bp.route('/calculate-dp-installment', methods=['POST'])
 @login_required
-@permission_required('view_selection')
+@permission_required('complex_calc_calculate')
 def calculate_dp_installment():
     """Обрабатывает AJAX-запрос для расчета рассрочки на ПВ."""
     data = request.get_json()
@@ -84,7 +84,7 @@ def calculate_dp_installment():
 
 @complex_calc_bp.route('/calculate-zero-mortgage', methods=['POST'])
 @login_required
-@permission_required('view_selection')
+@permission_required('complex_calc_calculate')
 def calculate_zero_mortgage():
     """Обрабатывает AJAX-запрос для расчета ипотеки под 0%."""
     data = request.get_json()

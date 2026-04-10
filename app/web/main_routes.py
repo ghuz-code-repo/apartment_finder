@@ -31,7 +31,7 @@ def set_language(lang=None):
 
 @main_bp.route('/show-all-routes')
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_routes_view')
 def show_all_routes():
     """Временная страница для отображения всех зарегистрированных маршрутов."""
     rules = []
@@ -53,7 +53,7 @@ def show_all_routes():
 
 @main_bp.route('/search-by-id', methods=['POST'])
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_view')
 def search_by_id():
     sell_id = request.form.get('search_id')
     if sell_id:
@@ -70,8 +70,42 @@ def search_by_id():
 
 @main_bp.route('/')
 @login_required
-@permission_required('view_selection')
 def index():
+    """Redirect to first available page based on user permissions."""
+    user = current_user
+
+    # Ordered list of pages to try: (permission_name, endpoint)
+    pages = [
+        ('selection_view', 'main.selection'),
+        ('discounts_view', 'discount.discounts_overview'),
+        ('reports_plan_fact_view', 'report.plan_fact_report'),
+        ('reports_inventory_view', 'report.inventory_summary'),
+        ('managers_analytics_view', 'manager_analytics.show_report'),
+        ('managers_performance_view', 'report.manager_performance_report'),
+        ('competitors_map_view', 'competitor.map_view'),
+        ('ai_forecast_view', 'ai.forecast_page'),
+        ('registry_view', 'registry.index'),
+        ('cancellations_view', 'cancellations.index'),
+        ('news_view', 'news.feed'),
+        ('settings_calculator_view', 'settings.manage_settings'),
+        ('users_view', 'auth.user_management'),
+    ]
+
+    for perm, endpoint in pages:
+        if user.is_admin if hasattr(user, 'is_admin') and user.is_admin else False:
+            return redirect(url_for('main.selection'))
+        if user.can(perm):
+            return redirect(url_for(endpoint))
+
+    # Fallback: if no permissions match, show selection (will be 403 if truly no access)
+    return redirect(url_for('main.selection'))
+
+
+@main_bp.route('/home')
+@login_required
+@permission_required('selection_view')
+def home():
+    """Original index page with apartment list."""
     page = request.args.get('page', 1, type=int)
     PER_PAGE = 40
     sells_pagination = get_sells_with_house_info(page=page, per_page=PER_PAGE)
@@ -85,7 +119,7 @@ def index():
 
 @main_bp.route('/selection', methods=['GET', 'POST'])
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_view')
 def selection():
     results = None
     filter_options = get_filter_options()
@@ -133,7 +167,7 @@ def selection():
 
 @main_bp.route('/apartment/<int:sell_id>')
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_details_view')
 def apartment_details(sell_id):
     card_data = get_apartment_card_data(sell_id)
     all_discounts_data = card_data.pop('all_discounts_for_property_type', [])
@@ -148,7 +182,7 @@ def apartment_details(sell_id):
 
 @main_bp.route('/commercial-offer/<int:sell_id>')
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_commercial_offer_view')
 def generate_commercial_offer(sell_id):
     card_data = get_apartment_card_data(sell_id)
     if not card_data.get('apartment'):
@@ -219,7 +253,7 @@ def generate_commercial_offer(sell_id):
 
 @main_bp.route('/exclusions', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_exclusions_view')
 def manage_exclusions():
     default_session = get_default_session()  # <--- ДОБАВЛЕНО
     mysql_session = get_mysql_session()
@@ -274,7 +308,7 @@ def manage_exclusions():
 
 @main_bp.route('/monthly-specials')
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_specials_view')
 def monthly_specials_list():
     """Отображает галерею активных квартир месяца."""
     active_offers = special_offer_service.get_active_special_offers()
@@ -285,7 +319,7 @@ def monthly_specials_list():
 
 @main_bp.route('/special-offer/<int:sell_id>')
 @login_required
-@permission_required('view_selection')
+@permission_required('selection_specials_view')
 def special_offer_detail(sell_id):
     """Отображает детальную страницу спец. предложения."""
     offer_details = special_offer_service.get_special_offer_details_by_sell_id(sell_id)

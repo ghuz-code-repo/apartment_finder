@@ -9,7 +9,7 @@ competitor_bp = Blueprint('competitor', __name__)
 
 @competitor_bp.route('/competitors/map')
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_map_view')
 def map_view():
     projects = data_service.get_all_complex_names()
     competitors = Competitor.query.all()
@@ -17,14 +17,14 @@ def map_view():
 
 @competitor_bp.route('/competitors/import-view')
 @login_required
-@permission_required('upload_data')
+@permission_required('competitors_import_view')
 def import_view():
     return render_template('competitors/import.html')
 
 # --- НАШИ ЖК ---
 @competitor_bp.route('/competitors/our/export')
 @login_required
-@permission_required('view_plan_fact_report')
+@permission_required('competitors_our_export')
 def export_our():
     return send_file(
         competitor_service.export_our_projects(),
@@ -34,7 +34,7 @@ def export_our():
 
 @competitor_bp.route('/competitors/our/import', methods=['POST'])
 @login_required
-@permission_required('upload_data')
+@permission_required('competitors_our_import')
 def import_our():
     file = request.files.get('file')
     if file:
@@ -45,7 +45,7 @@ def import_our():
 # --- КОНКУРЕНТЫ ---
 @competitor_bp.route('/competitors/external/export')
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_external_export')
 def export_comp():
     return send_file(
         competitor_service.export_competitors(),
@@ -55,7 +55,7 @@ def export_comp():
 
 @competitor_bp.route('/competitors/external/import', methods=['POST'])
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_external_import')
 def import_comp():
     file = request.files.get('file')
     if file:
@@ -65,7 +65,7 @@ def import_comp():
 
 @competitor_bp.route('/competitors/compare/<int:comp_id>')
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_compare_view')
 def compare(comp_id):
     our_project = request.args.get('our_project')
     data = competitor_service.get_comparison(comp_id, our_project)
@@ -75,7 +75,7 @@ def compare(comp_id):
 
 @competitor_bp.route('/competitors/media/<int:media_id>/delete', methods=['POST'])
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_media_delete')
 def delete_media(media_id):
     media = competitor_service.get_media_by_id(media_id)
     if media:
@@ -87,14 +87,14 @@ def delete_media(media_id):
 
 @competitor_bp.route('/competitors/dynamics')
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_dynamics_view')
 def market_dynamics():
     dynamics_data = competitor_service.get_market_dynamics_data()
     return render_template('competitors/dynamics.html', dynamics_data=dynamics_data)
 
 @competitor_bp.route('/competitors/<int:comp_id>')
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_profile_view')
 def competitor_profile(comp_id):
     # Получаем данные конкурента по ID через сервис
     comp = competitor_service.get_competitor_by_id(comp_id)
@@ -114,7 +114,7 @@ def competitor_profile(comp_id):
 
 @competitor_bp.route('/competitors/<int:comp_id>/update', methods=['POST'])
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_profile_update')
 def update_info(comp_id):
     competitor_service.update_competitor_info(comp_id, request.form)
     flash('Информация обновлена', 'success')
@@ -122,7 +122,7 @@ def update_info(comp_id):
 
 @competitor_bp.route('/competitors/<int:comp_id>/upload', methods=['POST'])
 @login_required
-@permission_required('manage_competitors')
+@permission_required('competitors_media_upload')
 def upload_media(comp_id):
     if 'file' in request.files:
         competitor_service.save_media(comp_id, request.files['file'])

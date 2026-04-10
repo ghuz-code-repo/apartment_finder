@@ -45,91 +45,132 @@
                 <div class="collapse navbar-collapse" id="mainNav">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         {% if current_user.is_authenticated %}
+                            {% if current_user.can('selection_view') %}
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'main.selection' %}active{% endif %}" href="{{ url_for('main.selection') }}">{{ _('Система подбора') }}</a>
                             </li>
+                            {% endif %}
+                            {% if current_user.can('discounts_view') %}
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'discount.discounts_overview' %}active{% endif %}" href="{{ url_for('discount.discounts_overview') }}">{{ _('Система скидок') }}</a>
                             </li>
+                            {% endif %}
 
-                            {% if current_user.can('view_plan_fact_report') %}
+                            {% if current_user.can('reports_plan_fact_view') or current_user.can('reports_sales_funnel_view') or current_user.can('reports_financial_model_view') or current_user.can('reports_inventory_view') or current_user.can('reports_deal_registry_view') or current_user.can('reports_quarterly_view') or current_user.can('reports_refund_view') or current_user.can('reports_sales_pace_view') or current_user.can('ai_forecast_view') or current_user.can('registry_view') or current_user.can('cancellations_view') or current_user.can('managers_performance_view') or current_user.can('managers_analytics_view') or current_user.can('managers_obligations_view') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint == 'report' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Отчетность') }}
                                 </a>
                                 <ul class="dropdown-menu">
+                                    {% if current_user.can('reports_plan_fact_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_sales_funnel_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_financial_model_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.financial_model_selection') }}">{{ _('Финансовая модель') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_inventory_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.inventory_summary') }}">{{ _('Сводка по остаткам') }}</a></li>
-                                    {% if current_user.can('view_inventory_report') %}
+                                    {% endif %}
+                                    {% if current_user.can('reports_deal_registry_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.deal_registry_report') }}">{{ _('Реестр сделок и недвижимости') }}</a></li>
                                     {% endif %}
+                                    {% if current_user.can('reports_quarterly_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.quarterly_analytics') }}">{{ _('Квартальная аналитика') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_refund_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.refund_report') }}">{{ _('Отчет по возвратам') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('ai_forecast_view') %}
                                     <li><a class="dropdown-item fw-bold" href="{{ url_for('ai.forecast_page') }}" style="color: var(--gh-gold);">
                                         <i class="bi bi-robot me-1"></i> {{ _('ИИ Прогноз продаж') }}
                                     </a></li>
-                                    {# --- ДОБАВЛЕНО: Ссылка на новый отчет --- #}
+                                    {% endif %}
+                                    {% if current_user.can('reports_sales_pace_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_pace_report') }}">{{ _('Темпы продаж (Сравнение)') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('registry_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('registry.index') }}">{{ _('Реестр спец. сделок') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('cancellations_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('cancellations.index') }}">{{ _('Реестр расторжений') }}</a></li>
+                                    {% endif %}
                                     <li><hr class="dropdown-divider"></li>
+                                    {% if current_user.can('managers_performance_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.manager_performance_report') }}">{{ _('Планы менеджеров') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('managers_analytics_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('manager_analytics.show_report') }}">{{ _('Аналитика по менеджерам') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('managers_obligations_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('obligations.obligation_control') }}">{{ _('Контроль обязательств') }}</a></li>
+                                    {% endif %}
                                 </ul>
                             </li>
                             {% endif %}
-                            {% if current_user.can('manage_competitors') %}
+                            {% if current_user.can('competitors_map_view') or current_user.can('competitors_dynamics_view') or current_user.can('news_view') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" id="navbarMarket" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     Рынок
                                 </a>
                                 <ul class="dropdown-menu" aria-labelledby="navbarMarket">
+                                    {% if current_user.can('competitors_map_view') %}
                                     <li>
                                         <a class="dropdown-item" href="{{ url_for('competitor.map_view') }}">
                                             Конкуренты
                                         </a>
                                     </li>
+                                    {% endif %}
+                                    {% if current_user.can('competitors_dynamics_view') %}
                                     <li>
                                         <a class="dropdown-item" href="{{ url_for('competitor.market_dynamics') }}">Динамика рынка</a>
                                     </li>
+                                    {% endif %}
+                                    {% if current_user.can('news_view') %}
                                     <li>
                                         <a class="dropdown-item" href="{{ url_for('news.feed') }}">
                                             Новости рынка
                                         </a>
                                     </li>
+                                    {% endif %}
                                 </ul>
                             </li>
                             {% endif %}
-                            {% if current_user.can('manage_discounts') or current_user.can('manage_settings') or current_user.can('manage_specials') or current_user.can('upload_data') %}
+                            {% if current_user.can('discounts_versions_view') or current_user.can('settings_exclusions_view') or current_user.can('settings_calculator_view') or current_user.can('settings_currency_view') or current_user.can('specials_create') or current_user.can('reports_plan_import') or current_user.can('discounts_import') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint in ['auth', 'settings'] or request.endpoint in ['discount.versions_index', 'discount.upload_discounts', 'report.upload_plan'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Администрирование') }}
                                 </a>
                                 <ul class="dropdown-menu">
-                                    {% if current_user.can('manage_discounts') %}
+                                    {% if current_user.can('discounts_versions_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('discount.versions_index') }}">{{ _('Управление скидками') }}</a></li>
                                     {% endif %}
 
-                                    {% if current_user.can('manage_settings') %}
+                                    {% if current_user.can('settings_exclusions_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_exclusions') }}">{{ _('Управление исключениями') }}</a></li>
                                     {% endif %}
 
-                                    {% if current_user.can('manage_settings') %}
+                                    {% if current_user.can('settings_calculator_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('settings.manage_settings') }}">{{ _('Настройки калькуляторов') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('settings_currency_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.currency_settings') }}">{{ _('Настройки курса') }}</a></li>
                                     {% endif %}
 
-                                    {% if current_user.can('manage_specials') %}
+                                    {% if current_user.can('specials_create') %}
                                     <li><a class="dropdown-item" href="{{ url_for('special_offer.manage_specials') }}">{{ _('Настройки спец. предложений') }}</a></li>
                                     {% endif %}
 
-                                    {% if current_user.can('upload_data') %}
+                                    {% if current_user.can('reports_plan_import') or current_user.can('discounts_import') %}
                                     <li><hr class="dropdown-divider"></li>
                                     <li><h6 class="dropdown-header">{% trans %}Загрузка данных{% endtrans %}</h6></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_plan_import') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.upload_plan') }}">{{ _('Загрузить план') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('discounts_import') %}
                                     <li><a class="dropdown-item" href="{{ url_for('discount.upload_discounts') }}">{{ _('Загрузить скидки') }}</a></li>
                                     {% endif %}
                                 </ul>

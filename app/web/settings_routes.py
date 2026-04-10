@@ -14,13 +14,13 @@ settings_bp = Blueprint('settings', __name__, template_folder='templates')
 
 @settings_bp.route('/calculator-settings/zero-mortgage/download-template')
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_zero_mortgage_template')
 def download_matrix_template():
     """Отдает сгенерированный шаблон для матрицы кэшбека."""
     return settings_service.generate_zero_mortgage_template()
 @settings_bp.route('/download-zero-mortgage-template')
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_zero_mortgage_template')
 def download_zero_mortgage_template():
     """Отдает пользователю шаблон Excel для матрицы 'Ипотека под 0%'."""
     excel_stream = report_service.generate_zero_mortgage_template_excel()
@@ -32,7 +32,7 @@ def download_zero_mortgage_template():
     )
 @settings_bp.route('/calculator-settings', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_calculator_view')
 def manage_settings():
     form = CalculatorSettingsForm()
     settings = settings_service.get_calculator_settings()
@@ -97,7 +97,7 @@ def manage_settings():
 
 @settings_bp.route('/manage-inventory-exclusions', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_inventory_exclusions_view')
 def manage_inventory_exclusions():
     """Страница для управления исключенными ЖК из сводки по остаткам."""
     if request.method == 'POST':
@@ -125,7 +125,7 @@ def manage_inventory_exclusions():
 
 @settings_bp.route('/email-recipients', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_settings')
+@permission_required('settings_email_view')
 def manage_email_recipients():
     """Страница для управления получателями email-уведомлений."""
     default_session = get_default_session() # <--- ДОБАВЛЕНО

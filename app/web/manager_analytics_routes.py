@@ -13,7 +13,7 @@ manager_analytics_bp = Blueprint('manager_analytics', __name__, template_folder=
 
 @manager_analytics_bp.route('/report')
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_analytics_view')
 def show_report():
     today = date.today()
     year = request.args.get('year', today.year, type=int)
@@ -81,7 +81,7 @@ def show_report():
 
 @manager_analytics_bp.route('/yearly-report')
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_yearly_view')
 def yearly_report():
     today = date.today()
     # Получаем параметры из формы
@@ -118,7 +118,7 @@ def yearly_report():
 # НОВЫЙ МАРШРУТ для отображения списка заявок
 @manager_analytics_bp.route('/leads-list')
 @login_required
-@permission_required('view_manager_report')
+@permission_required('managers_leads_view')
 def leads_list():
     ids_str = request.args.get('ids', '')
     title = request.args.get('title', 'Список заявок')

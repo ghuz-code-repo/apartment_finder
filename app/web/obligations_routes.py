@@ -14,7 +14,7 @@ obligations_bp = Blueprint('obligations', __name__, template_folder='templates')
 
 @obligations_bp.route('/obligation-control', methods=['GET', 'POST'])
 @login_required
-@permission_required('view_plan_fact_report') # Или другое подходящее право
+@permission_required('managers_obligations_view')
 def obligation_control():
     mysql_session = get_mysql_session()  # <--- ДОБАВЛЕНО
 

@@ -4,6 +4,7 @@
 <h1 class="mb-4">{{ title }}</h1>
 
 {# --- Форма добавления/обновления обязательства --- #}
+{% if current_user.can('managers_obligations_view') %}
 <div class="card card-glass mb-4">
     <div class="card-header">
         <h5><i class="bi bi-journal-plus me-2"></i>Добавить или обновить обязательство</h5>
@@ -49,6 +50,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 {# --- Форма для расчета требуемой цены --- #}
 <div class="card card-glass mb-4">
@@ -139,6 +141,7 @@
                         <td>{{ _(obl.property_type) }}</td> {# <-- Выводим тип #}
                         <td class="text-end fw-bold">${{ "{:,.0f}".format(obl.amount_usd) }}</td>
                         <td class="text-end">
+                            {% if current_user.can('managers_obligations_view') %}
                             <form method="POST" action="{{ url_for('obligations.obligation_control') }}" onsubmit="return confirm('Вы уверены, что хотите удалить обязательство для {{ obl.project_name }} ({{ _(obl.property_type) }})?');" class="d-inline">
                                 <input type="hidden" name="action" value="delete_obligation">
                                 <input type="hidden" name="obligation_id" value="{{ obl.id }}">
@@ -146,6 +149,7 @@
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

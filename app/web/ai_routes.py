@@ -8,14 +8,14 @@ ai_bp = Blueprint('ai', __name__, url_prefix='/ai')
 
 @ai_bp.route('/forecast', methods=['GET'])
 @login_required
-@permission_required('view_ai_forecast')
+@permission_required('ai_forecast_view')
 def forecast_page():
     return render_template('ai/forecast.html')
 
 
 @ai_bp.route('/api/train', methods=['POST'])
 @login_required
-@permission_required('view_ai_forecast')
+@permission_required('ai_train')
 def train_model_api():
     result = AIForecastService.train_with_validation()
 
@@ -34,7 +34,7 @@ def train_model_api():
 
 @ai_bp.route('/api/get_forecast', methods=['POST'])
 @login_required
-@permission_required('view_ai_forecast')
+@permission_required('ai_predict')
 def get_forecast_api():
     month = request.json.get('month')
     if not month:

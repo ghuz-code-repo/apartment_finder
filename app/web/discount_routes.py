@@ -28,7 +28,7 @@ discount_bp = Blueprint('discount', __name__, template_folder='templates')
 
 @discount_bp.route('/discounts')
 @login_required
-@permission_required('view_discounts')
+@permission_required('discounts_view')
 def discounts_overview():
     # Сервис get_discounts_with_summary сам должен быть обновлен для работы с planning_models
     discounts_data = get_discounts_with_summary()
@@ -37,7 +37,7 @@ def discounts_overview():
 
 @discount_bp.route('/download-template')
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_template_export')
 def download_template():
     excel_data_stream = generate_discount_template_excel()
     return send_file(
@@ -50,7 +50,7 @@ def download_template():
 
 @discount_bp.route('/upload-discounts', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_import')
 def upload_discounts():
     form = UploadExcelForm()
     if form.validate_on_submit():
@@ -82,7 +82,7 @@ def upload_discounts():
 
 @discount_bp.route('/versions')
 @login_required
-@permission_required('view_version_history')
+@permission_required('discounts_versions_view')
 def versions_index():
     # Обращаемся к моделям через planning_models
     planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
@@ -100,7 +100,7 @@ def versions_index():
 
 @discount_bp.route('/versions/view/<int:version_id>')
 @login_required
-@permission_required('view_version_history')
+@permission_required('discounts_versions_view')
 def view_version(version_id):
     planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
     version = planning_session.query(planning_models.DiscountVersion).get_or_404(version_id)  # <--- ИЗМЕНЕНО
@@ -119,7 +119,7 @@ def view_version(version_id):
 
 @discount_bp.route('/versions/edit/<int:version_id>', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_versions_update')
 def edit_version(version_id):
     planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
     version = planning_session.query(planning_models.DiscountVersion).get_or_404(version_id)  # <--- ИЗМЕНЕНО
@@ -159,7 +159,7 @@ def edit_version(version_id):
 
 @discount_bp.route('/versions/create-draft', methods=['POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_versions_create')
 def create_draft_version():
     planning_session = get_planning_session()  # <--- ДОБАВЛЕНО
     active_version = planning_session.query(planning_models.DiscountVersion).filter_by(
@@ -178,7 +178,7 @@ def create_draft_version():
 
 @discount_bp.route('/versions/activate/<int:version_id>', methods=['POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_versions_update')
 def activate_discount_version(version_id):
     activation_comment = request.form.get('comment')
     if not activation_comment:
@@ -198,7 +198,7 @@ def activate_discount_version(version_id):
 
 @discount_bp.route('/versions/delete/<int:version_id>', methods=['POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_versions_delete')
 def delete_version(version_id):
     try:
         delete_draft_version(version_id)
@@ -212,7 +212,7 @@ def delete_version(version_id):
 
 @discount_bp.route('/versions/comment/save', methods=['POST'])
 @login_required
-@permission_required('manage_discounts')
+@permission_required('discounts_comment_create')
 def save_complex_comment():
     data = request.get_json()
     version_id = data.get('version_id')

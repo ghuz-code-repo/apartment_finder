@@ -56,7 +56,7 @@ def logout():
 
 @auth_bp.route('/users', methods=['GET', 'POST'])
 @login_required
-@permission_required('manage_users')
+@permission_required('users_view')
 def user_management():
     if _is_gateway_mode():
         return redirect('/admin')
@@ -87,7 +87,7 @@ def user_management():
 
 @auth_bp.route('/users/delete/<int:user_id>', methods=['POST'])
 @login_required
-@permission_required('manage_users')
+@permission_required('users_delete')
 def delete_user(user_id):
     if user_id == current_user.id:
         flash('Вы не можете удалить свою учетную запись.', 'danger')
@@ -122,7 +122,7 @@ def change_password():
 
 @auth_bp.route('/roles')
 @login_required
-@permission_required('manage_users')
+@permission_required('roles_view')
 def manage_roles():
     if _is_gateway_mode():
         return redirect('/admin')
@@ -134,7 +134,7 @@ def manage_roles():
 @auth_bp.route('/role/edit/<int:role_id>', methods=['GET', 'POST'])
 @auth_bp.route('/role/new', methods=['GET', 'POST'], defaults={'role_id': None})
 @login_required
-@permission_required('manage_users')
+@permission_required('roles_update')
 def role_form(role_id):
     default_session = get_default_session()
     if role_id:
@@ -174,7 +174,7 @@ def role_form(role_id):
 
 @auth_bp.route('/role/delete/<int:role_id>', methods=['POST'])
 @login_required
-@permission_required('manage_users')
+@permission_required('roles_delete')
 def delete_role(role_id):
     default_session = get_default_session()  # <--- ДОБАВЛЕНО
     role = default_session.query(auth_models.Role).get_or_404(role_id)
