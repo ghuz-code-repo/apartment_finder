@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask import abort
+from flask import g
 from flask_login import current_user
 from flask_babel import gettext as _
 from ..core.decorators import permission_required, login_required
@@ -72,7 +73,12 @@ def search_by_id():
 @login_required
 def index():
     """Redirect to first available page based on user permissions."""
-    user = current_user
+    # Use gateway user if available, otherwise Flask-Login current_user
+    user = getattr(g, 'user', None) or current_user
+
+    # If user is not authenticated or has no .can() method, redirect to login
+    if not hasattr(user, 'can'):
+        return redirect(url_for('auth.login'))
 
     # Ordered list of pages to try: (permission_name, endpoint)
     pages = [
@@ -92,9 +98,10 @@ def index():
     ]
 
     for perm, endpoint in pages:
-        if user.is_admin if hasattr(user, 'is_admin') and user.is_admin else False:
+        if hasattr(user, 'is_admin') and user.is_admin:
             return redirect(url_for('main.selection'))
         if user.can(perm):
+            return redirect(url_for(endpoint))
             return redirect(url_for(endpoint))
 
     # Fallback: if no permissions match, show selection (will be 403 if truly no access)
