@@ -209,8 +209,8 @@ function runComparison() {
     resultDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-golden"></div></div>';
 
     let url = type === 'our'
-        ? `/competitors/compare/{{ comp.id }}?our_project=${encodeURIComponent(value)}`
-        : `/competitors/compare/${value}?our_project={{ comp.name }}`;
+        ? `${window.APP_PREFIX}/competitors/compare/{{ comp.id }}?our_project=${encodeURIComponent(value)}`
+        : `${window.APP_PREFIX}/competitors/compare/${value}?our_project={{ comp.name }}`;
 
     fetch(url)
         .then(r => r.text())

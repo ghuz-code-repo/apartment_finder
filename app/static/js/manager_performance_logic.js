@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
             resultSpan.style.display = 'inline-block';
             this.disabled = true;
 
-            fetch(`/reports/manager-kpi-calculate/${managerId}/${year}/${month}`)
+            fetch(`${window.APP_PREFIX}/reports/manager-kpi-calculate/${managerId}/${year}/${month}`)
                 .then(response => response.ok ? response.json() : Promise.reject('Network error'))
                 .then(result => {
                     if (result.success) {

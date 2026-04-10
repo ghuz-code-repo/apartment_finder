@@ -175,7 +175,7 @@
                             <h6 class="mb-1 fw-bold">${c.name}</h6>
                             <div class="small mb-2 text-muted">${c.class}</div>
                             <div class="d-grid">
-                                <a href="/competitors/${c.id}" class="btn btn-xs btn-golden">
+                                <a href="${window.APP_PREFIX}/competitors/${c.id}" class="btn btn-xs btn-golden">
                                     <i class="bi bi-info-circle"></i> Подробнее
                                 </a>
                             </div>
@@ -193,7 +193,7 @@
         const detailsBox = document.getElementById('comparisonDetails');
         detailsBox.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-golden"></div></div>';
 
-        fetch(`/competitors/compare/${compId}?our_project=` + encodeURIComponent(projectName))
+        fetch(`${window.APP_PREFIX}/competitors/compare/${compId}?our_project=` + encodeURIComponent(projectName))
             .then(r => r.text())
             .then(html => {
                 detailsBox.innerHTML = html;

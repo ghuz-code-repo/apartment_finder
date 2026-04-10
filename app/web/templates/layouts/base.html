@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
     <script>
+        window.APP_PREFIX = "{{ request.script_root }}";
         (function() {
             function getCookie(name) {
                 var m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');

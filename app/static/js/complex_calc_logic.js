@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     calc_type: 'standard_installment',
                     details: formatForUrl(installmentCalcData)
                 });
-                window.open(`/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
+                window.open(`${window.APP_PREFIX}/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
             }
         });
     }
@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     calc_type: 'dp_installment',
                     details: formatForUrl(dpInstallmentCalcData)
                 });
-                window.open(`/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
+                window.open(`${window.APP_PREFIX}/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
             }
         });
     }
@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     calc_type: 'zero_mortgage',
                     details: formatForUrl(zeroMortgageCalcData)
                 });
-                window.open(`/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
+                window.open(`${window.APP_PREFIX}/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
             }
         });
     }

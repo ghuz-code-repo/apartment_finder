@@ -169,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     mortgage_type_to_print: mortgageType
                 });
 
-                const printUrl = `/commercial-offer/${sellId}?${queryParams.toString()}`;
+                const printUrl = `${window.APP_PREFIX}/commercial-offer/${sellId}?${queryParams.toString()}`;
                 window.open(printUrl, '_blank');
                 printModalInstance.hide();
             });

@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Используем перевод
             saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${i18n.saving || 'Сохранение...'}`;
 
-            fetch('/api/v1/passport/save', {
+            fetch(`${window.APP_PREFIX}/api/v1/passport/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 planned_end_date: plannedEndDateInput.value || null
             };
 
-            fetch('/api/v1/passport/stages/add', {
+            fetch(`${window.APP_PREFIX}/api/v1/passport/stages/add`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
 
-        fetch(`/api/v1/passport/stages/update/${stageId}`, {
+        fetch(`${window.APP_PREFIX}/api/v1/passport/stages/update/${stageId}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Используем перевод
         if (confirm(i18n.confirmDelete || 'Вы уверены, что хотите удалить этот этап?')) {
-            fetch(`/api/v1/passport/stages/delete/${stageId}`, {
+            fetch(`${window.APP_PREFIX}/api/v1/passport/stages/delete/${stageId}`, {
                 method: 'POST'
             })
             .then(res => res.json())
