@@ -2,13 +2,10 @@
 
 from datetime import date
 from flask_wtf import FlaskForm
-from wtforms import (StringField, PasswordField, SubmitField, FileField, SelectField,
+from wtforms import (StringField, SubmitField, FileField, SelectField,
                      SelectMultipleField, TextAreaField, IntegerField, FloatField)
-from wtforms.validators import DataRequired, Length, EqualTo, ValidationError, Email, NumberRange, Optional
-from wtforms.widgets import CheckboxInput
-from ..models import auth_models
+from wtforms.validators import DataRequired, Length, ValidationError, NumberRange, Optional
 from flask_babel import lazy_gettext as _
-from wtforms import StringField, SubmitField, FileField
 from flask_wtf.file import FileAllowed
 class UploadExcelForm(FlaskForm):
     """Форма для загрузки Excel файла."""
@@ -25,36 +22,6 @@ class UploadZeroMortgageMatrixForm(FlaskForm):
         validators=[DataRequired(message=_("Необходимо выбрать файл."))]
     )
     submit = SubmitField(_('Загрузить матрицу'))
-class CreateUserForm(FlaskForm):
-    """Форма создания пользователя."""
-    username = StringField(_('Имя пользователя'), validators=[DataRequired(), Length(min=4, max=64)])
-    full_name = StringField(_('ФИО'), validators=[DataRequired()])
-    email = StringField(_('Email'), validators=[DataRequired(), Email(message=_("Некорректный email адрес."))])
-    phone_number = StringField(_('Номер телефона (опционально)'))
-    role = SelectField(_('Роль'), coerce=int, validators=[DataRequired()])
-    password = PasswordField(_('Пароль'), validators=[DataRequired(), Length(min=6)])
-    confirm_password = PasswordField(_('Подтвердите пароль'), validators=[DataRequired(), EqualTo('password')])
-    submit = SubmitField(_('Создать пользователя'))
-
-    def validate_username(self, username):
-        """Проверка, что имя пользователя еще не занято."""
-        if auth_models.User.query.filter_by(username=username.data).first():
-            raise ValidationError(_('Это имя пользователя уже занято.'))
-
-    def validate_email(self, email):
-        """Проверка, что email еще не занят."""
-        if auth_models.User.query.filter_by(email=email.data).first():
-            raise ValidationError(_('Этот email уже зарегистрирован.'))
-
-
-class ChangePasswordForm(FlaskForm):
-    """Форма смены пароля."""
-    current_password = PasswordField(_('Текущий пароль'), validators=[DataRequired()])
-    new_password = PasswordField(_('Новый пароль'), validators=[DataRequired(), Length(min=6)])
-    confirm_new_password = PasswordField(_('Подтвердите новый пароль'), validators=[DataRequired(), EqualTo('new_password')])
-    submit = SubmitField(_('Сменить пароль'))
-
-
 class UploadPlanForm(FlaskForm):
     """Форма для загрузки Excel файла с планами."""
     excel_file = FileField(
@@ -108,17 +75,6 @@ class UploadManagerPlanForm(FlaskForm):
         validators=[DataRequired(message=_("Необходимо выбрать файл."))]
     )
     submit = SubmitField(_('Загрузить планы'))
-
-
-class RoleForm(FlaskForm):
-    """Форма для создания и редактирования ролей."""
-    name = StringField(_('Название роли'), validators=[DataRequired(), Length(min=2, max=80)])
-    permissions = SelectMultipleField(
-        _('Разрешения для роли'),
-        coerce=int,
-        widget=CheckboxInput()
-    )
-    submit = SubmitField(_('Сохранить'))
 
 
 class MonthlySpecialForm(FlaskForm):

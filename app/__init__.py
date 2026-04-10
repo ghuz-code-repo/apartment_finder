@@ -3,13 +3,11 @@ import os
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy.orm import joinedload, selectinload
-from flask import Flask, request, g, session, current_app, redirect
+from flask import Flask, request, g, session, current_app, abort
 from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
-from .core.db_utils import get_default_session
-from .core.extensions import db, migrate_default, migrate_planning, login_manager
+from .core.extensions import db, migrate_default, migrate_planning
 from .core.decorators import PERMISSION_MAP, _is_gateway_user
 
 babel = Babel()
@@ -122,11 +120,6 @@ def create_app(config_class=DevelopmentConfig):
     migrate_planning.init_app(app, db, directory='migrations_planning',
                               include_symbol=lambda name, table: table.info.get('bind_key') == 'planning_db')
 
-    login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message = "Пожалуйста, войдите в систему для доступа к этой странице."
-    login_manager.login_message_category = "info"
-
     babel.init_app(app, locale_selector=select_locale)
     app.json_encoder = CustomJSONEncoder
 
@@ -180,47 +173,23 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(tma_bp, url_prefix='/tma')
         app.register_blueprint(sync_bp, url_prefix='/api/sync')
 
-        @login_manager.user_loader
-        def load_user(user_id):
-            default_session = get_default_session()
-            return default_session.query(auth_models.User).options(
-                joinedload(auth_models.User.role).selectinload(auth_models.Role.permissions)
-            ).get(int(user_id))
-
     @app.before_request
     def before_request_tasks():
         g.lang = str(select_locale())
 
     @app.context_processor
     def inject_current_user():
-        """Make current_user work in both gateway and local modes."""
-        from flask_login import current_user as flask_login_user
-
-        is_gateway = False
-
-        # Gateway mode: g.user is set by auth middleware
+        """Inject gateway user as current_user for templates."""
         if hasattr(g, 'user') and g.user and _is_gateway_user(g.user):
-            is_gateway = True
             return {
                 'current_user': GatewayUserProxy(g.user),
                 'is_gateway_mode': True,
             }
-
-        # Local mode: use Flask-Login
+        # No gateway user — not authenticated
         return {
-            'current_user': flask_login_user,
-            'is_gateway_mode': is_gateway,
+            'current_user': None,
+            'is_gateway_mode': False,
         }
-
-    @login_manager.unauthorized_handler
-    def unauthorized():
-        """Handle unauthorized access."""
-        # If behind gateway, return 401 (gateway handles redirect)
-        if hasattr(g, 'user'):
-            from flask import abort
-            abort(401)
-        # Local mode: redirect to login
-        return redirect('/login')
 
     @app.route('/health')
     def health_check():

@@ -6,12 +6,10 @@ from flask import session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask import abort
 from flask import g
-from flask_login import current_user
 from flask_babel import gettext as _
 from ..core.decorators import permission_required, login_required
 from app.services import special_offer_service
 from ..core.db_utils import get_default_session, get_mysql_session
-from ..models import auth_models
 from ..models.estate_models import EstateHouse
 from ..models.exclusion_models import ExcludedSell
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
@@ -73,14 +71,16 @@ def search_by_id():
 @login_required
 def index():
     """Redirect to first available page based on user permissions."""
-    # Use gateway user if available, otherwise Flask-Login current_user
-    user = getattr(g, 'user', None) or current_user
+    # Gateway-only: get user from g.user
+    user = getattr(g, 'user', None)
+    if not user or not hasattr(user, 'can'):
+        abort(401)
 
-    # If user is not authenticated or has no .can() method, redirect to login
-    if not hasattr(user, 'can'):
-        return redirect(url_for('auth.login'))
+    # Admin — сразу на подбор
+    if hasattr(user, 'is_admin') and user.is_admin:
+        return redirect(url_for('main.selection'))
 
-    # Ordered list of pages to try: (permission_name, endpoint)
+    # Ordered list: (permission, endpoint). First match wins.
     pages = [
         ('selection_view', 'main.selection'),
         ('discounts_view', 'discount.discounts_overview'),
@@ -94,18 +94,14 @@ def index():
         ('cancellations_view', 'cancellations.index'),
         ('news_view', 'news.feed'),
         ('settings_calculator_view', 'settings.manage_settings'),
-        ('users_view', 'auth.user_management'),
     ]
 
     for perm, endpoint in pages:
-        if hasattr(user, 'is_admin') and user.is_admin:
-            return redirect(url_for('main.selection'))
         if user.can(perm):
             return redirect(url_for(endpoint))
-            return redirect(url_for(endpoint))
 
-    # Fallback: if no permissions match, show selection (will be 403 if truly no access)
-    return redirect(url_for('main.selection'))
+    # No matching permissions — 403
+    abort(403)
 
 
 @main_bp.route('/home')
@@ -342,35 +338,9 @@ def special_offer_detail(sell_id):
                            card_data=full_card_data)
 
 
+
 @main_bp.route('/fix-permissions')
 @login_required
 def fix_permissions():
-    """Разовый маршрут для исправления прав доступа."""
-    if not current_user.role or current_user.role.name != 'ADMIN':
-        return "Доступ только для администраторов!", 403
-
-    # 1. Находим роль ADMIN
-    default_session = get_default_session()  # <--- ДОБАВЛЕНО
-
-    # 1. Находим роль ADMIN
-    admin_role = default_session.query(auth_models.Role).filter_by(name='ADMIN').first()
-    if not admin_role:
-        return "Ошибка: роль 'ADMIN' не найдена."
-
-    # 2. Находим (или создаем) право 'manage_specials'
-    permission_to_add = default_session.query(auth_models.Permission).filter_by(name='manage_specials').first()
-    if not permission_to_add:
-        permission_to_add = auth_models.Permission(name='manage_specials', description='Управление квартирами месяца')
-        default_session.add(permission_to_add)  # <--- ИЗМЕНЕНО
-        # Сразу коммитим, чтобы право появилось в БД
-        default_session.commit()
-
-    # 3. Проверяем, есть ли уже это право у роли
-    has_permission = any(p.id == permission_to_add.id for p in admin_role.permissions)
-
-    if not has_permission:
-        admin_role.permissions.append(permission_to_add)
-        default_session.commit()  # <--- ИЗМЕНЕНО
-        return "Успех! Право 'manage_specials' было добавлено к роли ADMIN. Теперь страница должна открыться."
-    else:
-        return "Право 'manage_specials' уже было у роли ADMIN. Проблема может быть в другом."
+    """Deprecated: permissions are now managed by the gateway."""
+    abort(404)

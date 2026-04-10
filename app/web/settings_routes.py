@@ -9,7 +9,6 @@ from .forms import CalculatorSettingsForm
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from ..models.estate_models import EstateHouse
 from ..models import planning_models
-from ..models import auth_models
 settings_bp = Blueprint('settings', __name__, template_folder='templates')
 
 @settings_bp.route('/calculator-settings/zero-mortgage/download-template')
@@ -127,32 +126,5 @@ def manage_inventory_exclusions():
 @login_required
 @permission_required('settings_email_view')
 def manage_email_recipients():
-    """Страница для управления получателями email-уведомлений."""
-    default_session = get_default_session() # <--- ДОБАВЛЕНО
-
-    if request.method == 'POST':
-        selected_user_ids = request.form.getlist('recipient_ids', type=int)
-
-        # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-        # Обращаемся к модели через auth_models
-        default_session.query(auth_models.EmailRecipient).delete() # <--- ИЗМЕНЕНО
-
-        for user_id in selected_user_ids:
-            recipient = auth_models.EmailRecipient(user_id=user_id)
-            default_session.add(recipient) # <--- ИЗМЕНЕНО
-
-        default_session.commit() # <--- ИЗМЕНЕНО
-        flash('Список получателей уведомлений успешно обновлен.', 'success')
-        return redirect(url_for('settings.manage_email_recipients'))
-
-    # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-    # Обращаемся к моделям через auth_models
-    all_users = default_session.query(auth_models.User).order_by(auth_models.User.full_name).all() # <--- ИЗМЕНЕНО
-    subscribed_user_ids = {r.user_id for r in default_session.query(auth_models.EmailRecipient).all()} # <--- ИЗМЕНЕНО
-
-    return render_template(
-        'settings/manage_recipients.html',
-        title="Получатели уведомлений",
-        all_users=all_users,
-        subscribed_user_ids=subscribed_user_ids
-    )
+    """Email recipients are now managed via gateway notification service."""
+    return redirect('/admin/notifications')

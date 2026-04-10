@@ -193,16 +193,10 @@
                                     {{ current_user.username }} ({{ current_user.role.name }})
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
-                                    {% if is_gateway_mode %}
                                     <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-fill me-2"></i>{{ _('Профиль') }}</a></li>
                                     <li><a class="dropdown-item" href="/menu"><i class="bi bi-grid-fill me-2"></i>{{ _('Меню сервисов') }}</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>{{ _('Выйти') }}</a></li>
-                                    {% else %}
-                                    <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}"><i class="bi bi-key-fill me-2"></i>{{ _('Сменить пароль') }}</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>{{ _('Выйти') }}</a></li>
-                                    {% endif %}
                                 </ul>
                             </div>
                         {% endif %}
