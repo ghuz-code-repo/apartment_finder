@@ -71,10 +71,12 @@ def search_by_id():
 @login_required
 def index():
     """Redirect to first available page based on user permissions."""
-    # Gateway-only: get user from g.user
-    user = getattr(g, 'user', None)
-    if not user or not hasattr(user, 'can'):
+    from app import GatewayUserProxy
+    # Gateway-only: get user from g.user, wrap in proxy for .can()
+    raw_user = getattr(g, 'user', None)
+    if not raw_user:
         abort(401)
+    user = GatewayUserProxy(raw_user)
 
     # Admin — сразу на подбор
     if hasattr(user, 'is_admin') and user.is_admin:
