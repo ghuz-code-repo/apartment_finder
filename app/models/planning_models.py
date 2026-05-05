@@ -211,7 +211,7 @@ class ManagerSalesPlan(db.Model):
     plan_income = db.Column(db.Float, nullable=False, default=0.0)
     manager = db.relationship(
         'app.models.auth_models.SalesManager',
-        primaryjoin='ManagerSalesPlan.manager_id == foreign(app.models.auth_models.SalesManager.id)',
+        primaryjoin='foreign(ManagerSalesPlan.manager_id) == app.models.auth_models.SalesManager.id',
         back_populates='plans',
         viewonly=True,
         overlaps='manager,plans'
