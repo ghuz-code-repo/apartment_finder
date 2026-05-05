@@ -11,8 +11,11 @@ def send_email(subject, html_body):
     config = current_app.config
     sender_email = config['MAIL_USERNAME']
     # Recipients configured via environment variable (gateway manages user emails)
-    recipients_str = config.get('MAIL_RECIPIENTS', '')
-    recipients = [r.strip() for r in recipients_str.split(',') if r.strip()]
+    raw_recipients = config.get('MAIL_RECIPIENTS', '')
+    if isinstance(raw_recipients, (list, tuple)):
+        recipients = [str(r).strip() for r in raw_recipients if str(r).strip()]
+    else:
+        recipients = [r.strip() for r in str(raw_recipients).split(',') if r.strip()]
 
     # --- БЛОК ЛОГИРОВАНИЯ (без изменений) ---
     print("\n" + "=" * 50)
