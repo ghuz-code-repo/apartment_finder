@@ -386,11 +386,11 @@ def get_historical_inventory_data(target_date_str: str):
     sold_before_target_subquery = mysql_session.query(EstateDeal.estate_sell_id).filter(
         EstateDeal.deal_status_name.notin_(["Отменено", "Не определён"]),
         EstateDeal.deal_date_start <= target_date
-    ).subquery()
+    ).scalar_subquery()
 
     has_any_active_deal_subquery = mysql_session.query(EstateDeal.estate_sell_id).filter(
         EstateDeal.deal_status_name.notin_(["Отменено", "Не определён"])
-    ).subquery()
+    ).scalar_subquery()
 
     valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
 
