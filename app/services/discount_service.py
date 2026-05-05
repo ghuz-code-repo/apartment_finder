@@ -475,6 +475,76 @@ def create_blank_version(comment: str):
     return new_version
 
 
+def get_active_version():
+    """Возвращает активную версию скидок (или None)."""
+    planning_session = get_planning_session()
+    return planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+
+
+_DISCOUNT_NUMERIC_FIELDS = (
+    'mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action',
+)
+_DISCOUNT_EPS = 1e-9
+
+
+def _discount_signature(discount):
+    """Нормализованный кортеж значений скидки для сравнения."""
+    return (
+        tuple(round(getattr(discount, f) or 0.0, 6) for f in _DISCOUNT_NUMERIC_FIELDS),
+        discount.cadastre_date,
+    )
+
+
+def versions_have_same_discounts(version_a, version_b) -> bool:
+    """
+    True, если у двух версий одинаковый набор скидок (ключ + числовые поля + дата кадастра).
+    Комментарии к ЖК в сравнении не участвуют — они не часть «скидок» как таковых.
+    """
+    if version_a is None or version_b is None:
+        return False
+
+    def _index(version):
+        return {
+            (d.complex_name, d.property_type, d.payment_method): _discount_signature(d)
+            for d in version.discounts
+        }
+
+    map_a = _index(version_a)
+    map_b = _index(version_b)
+
+    if map_a.keys() != map_b.keys():
+        return False
+
+    for key, sig_a in map_a.items():
+        sig_b = map_b[key]
+        # Числовые поля сравниваем с допуском
+        nums_a, date_a = sig_a
+        nums_b, date_b = sig_b
+        if date_a != date_b:
+            return False
+        if any(abs(a - b) > _DISCOUNT_EPS for a, b in zip(nums_a, nums_b)):
+            return False
+
+    return True
+
+
+def discard_version(version_id: int):
+    """
+    Удаляет версию вместе с её скидками.
+    В отличие от delete_draft_version игнорирует флаг was_ever_activated —
+    предназначен для отката только что созданной незакоммиченной версии.
+    """
+    planning_session = get_planning_session()
+    version = planning_session.query(planning_models.DiscountVersion).get(version_id)
+    if not version:
+        return
+    if version.is_active:
+        raise PermissionError("Нельзя удалить активную версию.")
+    planning_session.delete(version)
+    planning_session.commit()
+    print(f"[DISCOUNT SERVICE] 🗑️ Откатили версию №{version.version_number} (ID: {version_id})")
+
+
 def clone_version_for_editing(active_version):
     """
     Создает полную копию активной версии в виде нового неактивного черновика.
