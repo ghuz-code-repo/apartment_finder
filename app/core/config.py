@@ -16,13 +16,17 @@ class Config:
     TELEGRAM_CHANNEL_ID = int(os.environ.get('TELEGRAM_CHANNEL_ID', '0'))
     SOURCE_MYSQL_URI = os.environ.get('SOURCE_MYSQL_URI', '')
 
-    # Настройки для отправки Email
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'mail.gh.uz')
-    MAIL_PORT = int(os.environ.get('MAIL_SERVER_PORT', 587))
-    MAIL_USE_TLS = True
-    MAIL_USERNAME = os.environ.get('SEND_FROM_EMAIL', 'robot@gh.uz')
-    MAIL_PASSWORD = os.environ.get('SEND_FROM_EMAIL_PASSWORD', '')
-    MAIL_RECIPIENTS = ['d.plakhotnyi@gh.uz']
+    # Email отправляется через централизованный notification-service.
+    # Здесь храним только список получателей (поддерживается list или CSV-строка через env).
+    _mail_recipients_env = os.environ.get('MAIL_RECIPIENTS')
+    MAIL_RECIPIENTS = (
+        [r.strip() for r in _mail_recipients_env.split(',') if r.strip()]
+        if _mail_recipients_env
+        else ['d.plakhotnyi@gh.uz']
+    )
+    NOTIFICATION_SERVICE_URL = os.environ.get(
+        'NOTIFICATION_SERVICE_URL', 'http://notification-service:80'
+    )
     USD_TO_UZS_RATE = 13050.0
 
 

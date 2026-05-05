@@ -391,7 +391,75 @@ def _generate_version_comparison_summary(old_version, new_version, comments_data
         if key not in new_discounts:
             changes['removed'].append(f"Удалена скидка для {key[0]} ({key[1]}, {key[2]})")
 
-    return render_template_string("""...""", old_v=old_version, new_v=new_version, changes=changes) # HTML template left as is for brevity
+    template = """
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body { font-family: Arial, sans-serif; color: #222; font-size: 14px; line-height: 1.5; }
+            h2 { color: #1a4d8c; border-bottom: 2px solid #1a4d8c; padding-bottom: 6px; }
+            h3 { color: #1a4d8c; margin-top: 24px; }
+            .meta { background: #f4f6fa; padding: 10px 14px; border-left: 4px solid #1a4d8c; margin-bottom: 18px; }
+            .meta b { color: #1a4d8c; }
+            ul { padding-left: 22px; }
+            li { margin-bottom: 6px; }
+            .empty { color: #888; font-style: italic; }
+            .added li { color: #1f7a3a; }
+            .removed li { color: #a32020; }
+            .footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #ddd; color: #888; font-size: 12px; }
+        </style>
+    </head>
+    <body>
+        <h2>Активирована новая версия скидок №{{ new_v.version_number }}</h2>
+
+        <div class="meta">
+            <b>Предыдущая версия:</b> №{{ old_v.version_number }}<br>
+            <b>Новая версия:</b> №{{ new_v.version_number }}{% if new_v.comment %} — {{ new_v.comment }}{% endif %}
+        </div>
+
+        {% if changes.user_comments %}
+            <h3>Комментарии</h3>
+            <ul>
+            {% for complex_name, comment in changes.user_comments.items() %}
+                <li><strong>{{ complex_name }}:</strong> {{ comment }}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+
+        <h3>Изменённые скидки ({{ changes.modified|length }})</h3>
+        {% if changes.modified %}
+            <ul>
+            {% for item in changes.modified %}
+                <li>{{ item|safe }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty">Изменений нет.</p>
+        {% endif %}
+
+        <h3>Добавленные скидки ({{ changes.added|length }})</h3>
+        {% if changes.added %}
+            <ul class="added">
+            {% for item in changes.added %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty">Нет добавленных скидок.</p>
+        {% endif %}
+
+        <h3>Удалённые скидки ({{ changes.removed|length }})</h3>
+        {% if changes.removed %}
+            <ul class="removed">
+            {% for item in changes.removed %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty">Удалённых скидок нет.</p>
+        {% endif %}
+
+        <div class="footer">Это автоматическое уведомление ApartmentFinder.</div>
+    </body>
+    </html>
+    """
+    return render_template_string(template, old_v=old_version, new_v=new_version, changes=changes)
 
 
 def create_blank_version(comment: str):
