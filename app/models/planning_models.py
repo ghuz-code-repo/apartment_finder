@@ -212,7 +212,9 @@ class ManagerSalesPlan(db.Model):
     manager = db.relationship(
         'app.models.auth_models.SalesManager',
         primaryjoin='ManagerSalesPlan.manager_id == foreign(app.models.auth_models.SalesManager.id)',
-        backref='sales_plans'
+        back_populates='plans',
+        viewonly=True,
+        overlaps='manager,plans'
     )
 
     __table_args__ = (

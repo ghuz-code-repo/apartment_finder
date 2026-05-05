@@ -25,5 +25,7 @@ class SalesManager(db.Model):
     plans = db.relationship(
         'app.models.planning_models.ManagerSalesPlan',
         primaryjoin='SalesManager.id == foreign(app.models.planning_models.ManagerSalesPlan.manager_id)',
-        back_populates='manager'
+        back_populates='manager',
+        viewonly=True,
+        overlaps='manager'
     )

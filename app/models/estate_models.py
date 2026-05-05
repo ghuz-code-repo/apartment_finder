@@ -37,7 +37,9 @@ class EstateDeal(db.Model):
     # (SalesManager - это класс, который смотрит на таблицу 'users')
     manager = db.relationship(
         'SalesManager',
-        primaryjoin='EstateDeal.deal_manager_id == foreign(app.models.auth_models.SalesManager.id)'
+        primaryjoin='EstateDeal.deal_manager_id == foreign(app.models.auth_models.SalesManager.id)',
+        viewonly=True,
+        overlaps='manager,plans'
     )
 
     __bind_key__ = 'mysql_source'
