@@ -368,6 +368,53 @@ def get_discounts_with_summary():
         mysql_session.close()
 
 
+def _versions_have_identical_discounts(version_a, version_b) -> bool:
+    """
+    True, если набор скидок двух версий полностью совпадает по бизнес-ключу
+    (ЖК, тип недвижимости, тип оплаты) и значениям всех редактируемых полей.
+    Комментарии к ЖК не сравниваются — Excel-загрузка их не затрагивает.
+    """
+    fields = ('mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action')
+
+    def _snapshot(version):
+        result = {}
+        for d in version.discounts:
+            key = (d.complex_name, d.property_type, d.payment_method)
+            result[key] = tuple(getattr(d, f) or 0.0 for f in fields) + (d.cadastre_date,)
+        return result
+
+    snap_a = _snapshot(version_a)
+    snap_b = _snapshot(version_b)
+
+    if snap_a.keys() != snap_b.keys():
+        return False
+
+    for key, vals_a in snap_a.items():
+        vals_b = snap_b[key]
+        # Дата кадастра — сравниваем напрямую, числа — с эпсилоном.
+        if vals_a[-1] != vals_b[-1]:
+            return False
+        for x, y in zip(vals_a[:-1], vals_b[:-1]):
+            if abs(x - y) > 1e-9:
+                return False
+    return True
+
+
+def is_duplicate_of_active(version_id: int) -> bool:
+    """
+    True, если набор скидок версии version_id полностью совпадает с активной.
+    Если активной версии нет — всегда False (любая загрузка имеет смысл).
+    """
+    planning_session = get_planning_session()
+    candidate = planning_session.query(planning_models.DiscountVersion).get(version_id)
+    if not candidate:
+        return False
+    active = planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
+    if not active or active.id == candidate.id:
+        return False
+    return _versions_have_identical_discounts(active, candidate)
+
+
 def _generate_version_comparison_summary(old_version, new_version, comments_data=None):
     if comments_data is None: comments_data = {}
     old_discounts = {(d.complex_name, d.property_type.value, d.payment_method.value): d for d in old_version.discounts}
@@ -473,76 +520,6 @@ def create_blank_version(comment: str):
     planning_session.flush()
     print(f"[DISCOUNT SERVICE] ✔️ Подготовлена пустая версия №{new_version_number}")
     return new_version
-
-
-def get_active_version():
-    """Возвращает активную версию скидок (или None)."""
-    planning_session = get_planning_session()
-    return planning_session.query(planning_models.DiscountVersion).filter_by(is_active=True).first()
-
-
-_DISCOUNT_NUMERIC_FIELDS = (
-    'mpp', 'rop', 'kd', 'opt', 'gd', 'holding', 'shareholder', 'action',
-)
-_DISCOUNT_EPS = 1e-9
-
-
-def _discount_signature(discount):
-    """Нормализованный кортеж значений скидки для сравнения."""
-    return (
-        tuple(round(getattr(discount, f) or 0.0, 6) for f in _DISCOUNT_NUMERIC_FIELDS),
-        discount.cadastre_date,
-    )
-
-
-def versions_have_same_discounts(version_a, version_b) -> bool:
-    """
-    True, если у двух версий одинаковый набор скидок (ключ + числовые поля + дата кадастра).
-    Комментарии к ЖК в сравнении не участвуют — они не часть «скидок» как таковых.
-    """
-    if version_a is None or version_b is None:
-        return False
-
-    def _index(version):
-        return {
-            (d.complex_name, d.property_type, d.payment_method): _discount_signature(d)
-            for d in version.discounts
-        }
-
-    map_a = _index(version_a)
-    map_b = _index(version_b)
-
-    if map_a.keys() != map_b.keys():
-        return False
-
-    for key, sig_a in map_a.items():
-        sig_b = map_b[key]
-        # Числовые поля сравниваем с допуском
-        nums_a, date_a = sig_a
-        nums_b, date_b = sig_b
-        if date_a != date_b:
-            return False
-        if any(abs(a - b) > _DISCOUNT_EPS for a, b in zip(nums_a, nums_b)):
-            return False
-
-    return True
-
-
-def discard_version(version_id: int):
-    """
-    Удаляет версию вместе с её скидками.
-    В отличие от delete_draft_version игнорирует флаг was_ever_activated —
-    предназначен для отката только что созданной незакоммиченной версии.
-    """
-    planning_session = get_planning_session()
-    version = planning_session.query(planning_models.DiscountVersion).get(version_id)
-    if not version:
-        return
-    if version.is_active:
-        raise PermissionError("Нельзя удалить активную версию.")
-    planning_session.delete(version)
-    planning_session.commit()
-    print(f"[DISCOUNT SERVICE] 🗑️ Откатили версию №{version.version_number} (ID: {version_id})")
 
 
 def clone_version_for_editing(active_version):

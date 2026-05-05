@@ -66,14 +66,11 @@ def upload_discounts():
             new_version = discount_service.create_blank_version(comment=comment)
             result_message = process_discounts_from_excel(file_path, new_version.id)
 
-            # Проверяем, отличается ли загруженная версия от активной.
-            # Если содержание идентично — откатываем новую версию и предупреждаем пользователя.
-            active_version = discount_service.get_active_version()
-            if active_version and discount_service.versions_have_same_discounts(active_version, new_version):
-                discount_service.discard_version(new_version.id)
+            # Проверка на дубликат активной версии — нет смысла активировать идентичную.
+            if discount_service.is_duplicate_of_active(new_version.id):
+                discount_service.delete_draft_version(new_version.id)
                 flash(
-                    f"Эта версия ничем не отличается от активной №{active_version.version_number} "
-                    f"и не была загружена.",
+                    "Эта версия ничем не отличается от активной — загрузка отменена.",
                     "warning",
                 )
                 return redirect(url_for('discount.upload_discounts'))
