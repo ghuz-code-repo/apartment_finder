@@ -21,8 +21,8 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - default
       - service_network
+      - egress_network      # Доступ к внешним ресурсам: MySQL MacroCRM (172.16.0.199)
 
 volumes:
   mysql_data:
@@ -30,3 +30,6 @@ volumes:
 networks:
   service_network:
     external: true
+  egress_network:
+    external: true
+    name: egress_network
