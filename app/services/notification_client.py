@@ -24,6 +24,14 @@ class NotificationServiceClient:
         self.timeout = timeout if timeout is not None else int(
             os.getenv('NOTIFICATION_SERVICE_TIMEOUT', '10')
         )
+        # Персональный ключ сервиса для аутентификации в notification-service
+        self.api_key = os.getenv('NOTIFICATION_API_KEY') or os.getenv('INTERNAL_API_KEY', '')
+
+    def _headers(self) -> dict:
+        headers = {}
+        if self.api_key:
+            headers['X-API-Key'] = self.api_key
+        return headers
 
     def send_email(
         self,
@@ -50,6 +58,7 @@ class NotificationServiceClient:
             f"{self.base_url}/api/v1/notifications",
             json=payload,
             timeout=self.timeout,
+            headers=self._headers(),
         )
         response.raise_for_status()
         return response.json()
@@ -86,6 +95,7 @@ class NotificationServiceClient:
             f"{self.base_url}/api/v1/notifications/batch",
             json={'notifications': notifications},
             timeout=self.timeout,
+            headers=self._headers(),
         )
         response.raise_for_status()
         return response.json()
