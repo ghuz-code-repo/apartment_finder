@@ -29,6 +29,11 @@ class Config:
     )
     USD_TO_UZS_RATE = 13050.0
 
+    # До какого зума карта запрашивает тайлы у сервера. Глубже Leaflet
+    # растягивает последний доступный уровень: каждый следующий зум
+    # учетверяет число тайлов, а на глаз разница уже невелика.
+    TILE_MAX_NATIVE_ZOOM = int(os.environ.get('TILE_MAX_NATIVE_ZOOM', '17'))
+
 
 # --- ИЗМЕНЕНИЯ НУЖНО ВНЕСТИ ЗДЕСЬ ---
 class DevelopmentConfig(Config):

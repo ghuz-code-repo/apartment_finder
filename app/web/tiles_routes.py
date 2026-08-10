@@ -191,6 +191,153 @@ def iter_tiles(bbox, min_zoom, max_zoom):
 DEFAULT_BBOX = (41.16, 69.05, 41.45, 69.45)
 
 
+def seed_tiles(cache_root, bbox, style='light', min_zoom=10, max_zoom=17,
+               workers=4, delay=0.05, progress=None):
+    """Скачивает недостающие тайлы района. Уже сохранённые пропускает.
+
+    cache_root передаётся готовым: функция работает и из потока, где
+    контекста приложения нет.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    targets = list(iter_tiles(bbox, min_zoom, max_zoom))
+    stats = {'ok': 0, 'cached': 0, 'fail': 0, 'total': len(targets)}
+    lock = threading.Lock()
+
+    def work(item):
+        z, x, y = item
+        path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
+        if os.path.exists(path):
+            with lock:
+                stats['cached'] += 1
+            return
+        try:
+            content = _fetch_tile(style, z, x, y)
+            _store_tile(path, content)
+            with lock:
+                stats['ok'] += 1
+        except Exception as exc:
+            with lock:
+                stats['fail'] += 1
+            logger.debug('seed %s/%s/%s/%s: %s', style, z, x, y, exc)
+        # Пауза сознательно: OSM Tile Usage Policy не разрешает выкачивать
+        # тайлы на полной скорости, и агрессивный seed приводит к бану.
+        time.sleep(delay)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for i, _ in enumerate(pool.map(work, targets), 1):
+            if progress and i % 500 == 0:
+                progress(i, stats)
+    return stats
+
+
+# --------------------------------------------------------------------------
+# Автоматический прогрев при старте
+# --------------------------------------------------------------------------
+
+def _seed_signature(bbox, style, min_zoom, max_zoom):
+    coords = ','.join(f'{c:.4f}' for c in bbox)
+    return f'{style}|{coords}|{min_zoom}-{max_zoom}'
+
+
+def _try_acquire_lock(lock_path, stale_after=6 * 3600):
+    """Отдаёт лок ровно одному процессу. gunicorn импортирует модуль в
+    каждом воркере, и без этого они полезли бы качать одно и то же."""
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return True
+    except FileExistsError:
+        try:
+            # Контейнер могли убить с зависшим локом — перезахватываем.
+            if time.time() - os.path.getmtime(lock_path) > stale_after:
+                os.unlink(lock_path)
+                return _try_acquire_lock(lock_path, stale_after)
+        except OSError:
+            pass
+        return False
+
+
+def start_background_seed(app):
+    """Прогревает кэш тайлов в фоне после старта приложения.
+
+    Включается TILE_SEED_ON_STARTUP=1. Работа идёт в daemon-потоке: seed
+    занимает десятки минут, и держать на нём старт gunicorn нельзя —
+    healthcheck не дождётся.
+    """
+    if os.getenv('TILE_SEED_ON_STARTUP', '0').lower() not in ('1', 'true', 'yes'):
+        return
+
+    style = os.getenv('TILE_SEED_STYLE', 'light')
+    min_zoom = int(os.getenv('TILE_SEED_MIN_ZOOM', '10'))
+    max_zoom = int(os.getenv('TILE_SEED_MAX_ZOOM', '17'))
+    workers = int(os.getenv('TILE_SEED_WORKERS', '2'))
+    delay = float(os.getenv('TILE_SEED_DELAY', '0.1'))
+    raw_bbox = os.getenv('TILE_SEED_BBOX', '')
+    if raw_bbox:
+        try:
+            bbox = tuple(float(v) for v in raw_bbox.replace(',', ' ').split())
+            if len(bbox) != 4:
+                raise ValueError('нужно четыре числа: SOUTH WEST NORTH EAST')
+        except ValueError as exc:
+            app.logger.error('[TILES] TILE_SEED_BBOX игнорируется: %s', exc)
+            bbox = DEFAULT_BBOX
+    else:
+        bbox = DEFAULT_BBOX
+
+    if style not in TILE_SOURCES or not 0 <= min_zoom <= max_zoom <= MAX_ZOOM:
+        app.logger.error('[TILES] Некорректные параметры прогрева, пропуск')
+        return
+
+    with app.app_context():
+        cache_root = _cache_root()
+    signature = _seed_signature(bbox, style, min_zoom, max_zoom)
+    done_marker = os.path.join(cache_root, '.seed-done')
+    lock_path = os.path.join(cache_root, '.seed-lock')
+
+    # Тот же участок уже прогрет — при каждом рестарте заново не ходим.
+    if os.path.exists(done_marker):
+        try:
+            with open(done_marker) as fh:
+                if fh.read().strip() == signature:
+                    return
+        except OSError:
+            pass
+
+    if not _try_acquire_lock(lock_path):
+        return  # прогревом занят другой воркер
+
+    def run():
+        time.sleep(float(os.getenv('TILE_SEED_START_DELAY', '20')))
+        started = time.time()
+        app.logger.info('[TILES] Прогрев кэша: %s', signature)
+        try:
+            def progress(i, stats):
+                app.logger.info('[TILES] %s/%s скачано=%s из кэша=%s ошибок=%s',
+                                i, stats['total'], stats['ok'],
+                                stats['cached'], stats['fail'])
+            stats = seed_tiles(cache_root, bbox, style, min_zoom, max_zoom,
+                               workers, delay, progress)
+            app.logger.info(
+                '[TILES] Прогрев завершён за %.0f c: скачано=%s из кэша=%s ошибок=%s',
+                time.time() - started, stats['ok'], stats['cached'], stats['fail'])
+            # Маркер ставим, только если район покрыт полностью, иначе при
+            # следующем старте попробуем снова.
+            if stats['fail'] == 0:
+                with open(done_marker, 'w') as fh:
+                    fh.write(signature)
+        except Exception as exc:
+            app.logger.error('[TILES] Прогрев прерван: %s', exc)
+        finally:
+            try:
+                os.unlink(lock_path)
+            except OSError:
+                pass
+
+    threading.Thread(target=run, daemon=True, name='tile-seed').start()
+
+
 @tiles_bp.cli.command('seed')
 @click.option('--bbox', nargs=4, type=float, default=DEFAULT_BBOX,
               metavar='SOUTH WEST NORTH EAST',
@@ -204,52 +351,30 @@ DEFAULT_BBOX = (41.16, 69.05, 41.45, 69.45)
               help='Пауза после каждого тайла, секунды.')
 def seed_command(**kwargs):
     """Заранее скачать тайлы для района, чтобы карта не ждала источник."""
-    from concurrent.futures import ThreadPoolExecutor
-
     bbox = kwargs['bbox']
     style = kwargs['style']
     min_zoom, max_zoom = kwargs['min_zoom'], kwargs['max_zoom']
-    workers = kwargs['workers']
 
     if max_zoom > MAX_ZOOM:
         raise click.BadParameter(f'максимум {MAX_ZOOM}', param_hint='--max-zoom')
 
-    targets = list(iter_tiles(bbox, min_zoom, max_zoom))
-    click.echo(f'Тайлов к обработке: {len(targets):,} '
-               f'(~{len(targets) * 18 / 1024:,.0f} МБ) стиль={style}')
+    total = sum(1 for _ in iter_tiles(bbox, min_zoom, max_zoom))
+    click.echo(f'Тайлов к обработке: {total:,} стиль={style}')
 
     # Путь считаем здесь, пока контекст приложения есть: в потоки пула он
     # не передаётся, и current_app внутри work() был бы недоступен.
     cache_root = _cache_root()
-    done = {'ok': 0, 'cached': 0, 'fail': 0}
-    lock = threading.Lock()
 
-    def work(item):
-        z, x, y = item
-        path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
-        if os.path.exists(path):
-            with lock:
-                done['cached'] += 1
-            return
-        try:
-            content = _fetch_tile(style, z, x, y)
-            _store_tile(path, content)
-            with lock:
-                done['ok'] += 1
-        except Exception as exc:
-            with lock:
-                done['fail'] += 1
-            logger.debug('seed %s/%s/%s/%s: %s', style, z, x, y, exc)
-        # Пауза сознательно: OSM Tile Usage Policy не разрешает выкачивать
-        # тайлы на полной скорости, и агрессивный seed приводит к бану.
-        time.sleep(kwargs['delay'])
+    def progress(i, stats):
+        click.echo(f'  {i:,}/{stats["total"]:,}  скачано={stats["ok"]:,} '
+                   f'из кэша={stats["cached"]:,} ошибок={stats["fail"]:,}')
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for i, _ in enumerate(pool.map(work, targets), 1):
-            if i % 500 == 0:
-                click.echo(f'  {i:,}/{len(targets):,}  '
-                           f'скачано={done["ok"]:,} из кэша={done["cached"]:,} '
-                           f'ошибок={done["fail"]:,}')
+    stats = seed_tiles(cache_root, bbox, style, min_zoom, max_zoom,
+                       kwargs['workers'], kwargs['delay'], progress)
+    click.echo(f'Готово: скачано={stats["ok"]:,} было в кэше={stats["cached"]:,} '
+               f'ошибок={stats["fail"]:,}')
 
-    click.echo(f'Готово: скачано={done["ok"]:,} было в кэше={done["cached"]:,} '
-               f'ошибок={done["fail"]:,}')
+    # Ручной прогон тоже засчитываем, чтобы автопрогрев не начинал заново.
+    if stats['fail'] == 0:
+        with open(os.path.join(cache_root, '.seed-done'), 'w') as fh:
+            fh.write(_seed_signature(bbox, style, min_zoom, max_zoom))

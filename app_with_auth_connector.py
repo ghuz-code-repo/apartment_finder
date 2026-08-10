@@ -91,3 +91,12 @@ try:
         incremental_update_from_mysql()
 except Exception as e:
     print(f"[STARTUP] Warning: MySQL update failed: {e}")
+
+# Warm the map tile cache in the background when TILE_SEED_ON_STARTUP is set.
+# Runs in a daemon thread and takes an inter-process lock, so only one gunicorn
+# worker does the work and the startup itself is not delayed.
+try:
+    from app.web.tiles_routes import start_background_seed
+    start_background_seed(app)
+except Exception as e:
+    print(f"[STARTUP] Warning: tile seed not started: {e}")
