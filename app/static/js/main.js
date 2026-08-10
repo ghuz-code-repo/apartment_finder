@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- PARTICLES.JS CONFIGURATION ---
-    if (document.getElementById('particles-js')) {
+    if (document.getElementById('particles-js') && typeof particlesJS === 'function') {
         particlesJS('particles-js', {
             "particles": { "number": { "value": 50, "density": { "enable": true, "value_area": 800 } }, "color": { "value": "#c4a668" }, "shape": { "type": "polygon", "stroke": { "width": 1, "color": "#c4a668" }, "polygon": { "nb_sides": 6 } }, "opacity": { "value": 0.2, "random": true, "anim": { "enable": true, "speed": 0.5, "opacity_min": 0.05, "sync": false } }, "size": { "value": 4, "random": true }, "line_linked": { "enable": true, "distance": 180, "color": "#c4a668", "opacity": 0.15, "width": 1 }, "move": { "enable": true, "speed": 0.8, "direction": "none", "random": true, "straight": false, "out_mode": "out" } },
             "interactivity": { "detect_on": "canvas", "events": { "onhover": { "enable": true, "mode": "bubble" } }, "modes": { "bubble": { "distance": 200, "size": 6, "duration": 2, "opacity": 0.6 } } },

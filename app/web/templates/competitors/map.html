@@ -74,6 +74,11 @@
         <hr>
         <h5>{{ _('Сравнение') }}</h5>
         <label class="form-label small text-golden fw-bold">{{ _('Ваш проект (база)') }}</label>
+        {% if not projects %}
+        <div class="alert alert-warning small py-2 mb-3">
+            {{ _('Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами недоступно.') }}
+        </div>
+        {% endif %}
         <select id="ourProject" class="form-select form-select-sm mb-3">
             {% for p in projects %}
             <option value="{{ p }}">{{ p }}</option>
@@ -95,21 +100,9 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <script>
-    // 1. Безопасная инициализация данных (используем |tojson)
-    const competitors = [
-        {% for c in competitors %}
-        {
-            id: {{ c.id }},
-            name: {{ c.name|tojson }},
-            lat: {{ c.lat or 0 }},
-            lng: {{ c.lng or 0 }},
-            class: {{ (c.property_class or '')|tojson }},
-            type: {{ (c.property_type or '')|tojson }},
-            isInternal: {{ 'true' if c.is_internal else 'false' }},
-            directComp: {{ (c.direct_competitor_name or '')|tojson }}
-        },
-        {% endfor %}
-    ];
+    // 1. Данные готовятся на сервере (build_map_markers) и отдаются одним JSON:
+    // некорректная координата в одной записи больше не ломает весь скрипт.
+    const competitors = {{ markers|tojson }};
 
     // 2. Иконки разных цветов
     const goldIcon = new L.Icon({

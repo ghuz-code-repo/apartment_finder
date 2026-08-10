@@ -25,8 +25,8 @@
             <tbody>
                 <tr class="bg-light shadow-sm">
                     <td class="fw-bold text-danger">Цена ДНА ($/м²)</td>
-                    <td class="text-center fw-bold text-danger">{{ "{:,.0f}".format(data.our_project.avg_bottom_price) }}</td>
-                    <td class="text-center fw-bold">{{ "{:,.0f}".format(data.competitor.avg_bottom_price or 0) }}</td>
+                    <td class="text-center fw-bold text-danger">{{ "{:,.0f}".format(data.our_project.avg_bottom_price|float(0)) }}</td>
+                    <td class="text-center fw-bold">{{ "{:,.0f}".format(data.competitor.avg_bottom_price|float(0)) }}</td>
                 </tr>
                 <tr>
                     <td class="text-muted">Продано, шт</td>
@@ -40,8 +40,8 @@
                 </tr>
                 <tr>
                     <td class="text-muted">Средняя площадь</td>
-                    <td class="text-center">{{ data.our_project.avg_area|round(1) }}</td>
-                    <td class="text-center">{{ data.competitor.avg_area|round(1) }}</td>
+                    <td class="text-center">{{ data.our_project.avg_area|float(0)|round(1) }}</td>
+                    <td class="text-center">{{ data.competitor.avg_area|float(0)|round(1) }}</td>
                 </tr>
                 <tr>
                     <td class="text-muted">Класс</td>

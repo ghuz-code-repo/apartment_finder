@@ -13,7 +13,12 @@ competitor_bp = Blueprint('competitor', __name__)
 def map_view():
     projects = data_service.get_all_complex_names()
     competitors = Competitor.query.all()
-    return render_template('competitors/map.html', competitors=competitors, projects=projects)
+    return render_template(
+        'competitors/map.html',
+        competitors=competitors,
+        markers=competitor_service.build_map_markers(competitors),
+        projects=projects
+    )
 
 @competitor_bp.route('/competitors/import-view')
 @login_required

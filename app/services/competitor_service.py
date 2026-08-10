@@ -18,6 +18,58 @@ from app.models.planning_models import (
 from . import data_service, currency_service
 
 
+def _to_float(value):
+    """Приводит значение из Excel/БД к числу: '41,33' -> 41.33, мусор -> None."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return None if isinstance(value, float) and np.isnan(value) else float(value)
+    text = str(value).strip().replace('\xa0', '').replace(' ', '').replace(',', '.')
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _to_int(value):
+    num = _to_float(value)
+    return int(num) if num is not None else None
+
+
+def _to_str(value):
+    """Текстовые поля: числа из Excel не должны попадать в БД как float."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def build_map_markers(competitors):
+    """Готовит безопасные данные для карты.
+
+    Координаты приводятся к числам: одна испорченная запись (например, '41,33'
+    из Excel) не должна ломать весь JS-блок на странице карты.
+    """
+    markers = []
+    for c in competitors:
+        lat, lng = _to_float(c.lat), _to_float(c.lng)
+        if lat is None or lng is None:
+            continue
+        markers.append({
+            'id': c.id,
+            'name': c.name or '',
+            'lat': lat,
+            'lng': lng,
+            'class': c.property_class or '',
+            'type': c.property_type or '',
+            'isInternal': bool(c.is_internal),
+            'directComp': c.direct_competitor_name or '',
+        })
+    return markers
+
+
 def get_media_by_id(media_id):
     return CompetitorMedia.query.get(media_id)
 
@@ -130,9 +182,11 @@ def import_our_projects(file):
             is_internal=True)
         comp.name, comp.property_type = name, p_type
         # Ручные поля из Excel
-        comp.lat, comp.lng = row.get('Широта'), row.get('Долгота')
-        comp.property_class, comp.ceiling_height = row.get('Класс'), row.get('Высота потолков')
-        comp.amenities, comp.construction_stage = row.get('Благоустройство'), row.get('Стадия строительства')
+        comp.lat, comp.lng = _to_float(row.get('Широта')), _to_float(row.get('Долгота'))
+        comp.property_class = _to_str(row.get('Класс'))
+        comp.ceiling_height = _to_float(row.get('Высота потолков'))
+        comp.amenities, comp.construction_stage = _to_str(row.get('Благоустройство')), _to_str(
+            row.get('Стадия строительства'))
         comp.initial_cadastre_date = pd.to_datetime(row.get('Первоначальная дата кадастра')).date() if row.get(
             'Первоначальная дата кадастра') else None
         # Системные поля (всегда перезаписываются из MySQL)
@@ -174,14 +228,16 @@ def import_competitors(file):
         comp = Competitor.query.filter_by(name=name, property_type=p_type, is_internal=False).first() or Competitor(
             is_internal=False)
         comp.name, comp.property_type = name, p_type
-        comp.lat, comp.lng = row.get('Широта'), row.get('Долгота')
-        comp.property_class, comp.ceiling_height = row.get('Класс'), row.get('Высота потолков')
-        comp.amenities, comp.construction_stage = row.get('Благоустройство'), row.get('Стадия строительства')
-        comp.units_count, comp.sold_count = row.get('Кол-во объектов'), row.get('Продано шт')
-        comp.avg_area, comp.avg_price_sqm = row.get('Средняя площадь'), row.get(
-            'Средняя цена за квадратный метр остатка')
-        comp.avg_bottom_price = row.get('Средняя стоимость дна остатков')
-        comp.direct_competitor_name = row.get('Прямой конкурент для')
+        comp.lat, comp.lng = _to_float(row.get('Широта')), _to_float(row.get('Долгота'))
+        comp.property_class = _to_str(row.get('Класс'))
+        comp.ceiling_height = _to_float(row.get('Высота потолков'))
+        comp.amenities, comp.construction_stage = _to_str(row.get('Благоустройство')), _to_str(
+            row.get('Стадия строительства'))
+        comp.units_count, comp.sold_count = _to_int(row.get('Кол-во объектов')), _to_int(row.get('Продано шт'))
+        comp.avg_area, comp.avg_price_sqm = _to_float(row.get('Средняя площадь')), _to_float(
+            row.get('Средняя цена за квадратный метр остатка'))
+        comp.avg_bottom_price = _to_float(row.get('Средняя стоимость дна остатков'))
+        comp.direct_competitor_name = _to_str(row.get('Прямой конкурент для'))
         for d_col, attr in [('Плановая Дата кадастр', 'planned_cadastre_date'),
                             ('Первоначальная дата кадастра', 'initial_cadastre_date')]:
             val = row.get(d_col)
