@@ -1,5 +1,9 @@
 {% extends "layouts/base.html" %}
 
+{# Карта и фоновая анимация делят один главный поток — на этой странице
+   particles не рисуем, иначе зум подтормаживает. #}
+{% block background_effects %}{% endblock %}
+
 {% block styles %}
 <style>
     /* Интеграция с темой оформления */

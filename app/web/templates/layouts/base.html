@@ -31,7 +31,10 @@
     {% block styles %}{% endblock %}
 </head>
 <body class="d-flex flex-column h-100">
-    <div id="particles-js"></div>
+    {# Фоновая анимация. Страницы с тяжёлой графикой (карта) гасят этот блок:
+       particles рисует связи между частицами каждый кадр и занимает тот же
+       главный поток, в котором Leaflet пересчитывает карту при зуме. #}
+    {% block background_effects %}<div id="particles-js"></div>{% endblock %}
     <header class="header sticky-top border-bottom">
         <nav class="navbar navbar-expand-lg">
             <div class="container">
