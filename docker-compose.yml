@@ -1,6 +1,6 @@
 services:
   # Веб-приложение Flask
-  web:
+  finder:
     build:
       context: ..
       dockerfile: apartment_finder/Dockerfile
