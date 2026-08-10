@@ -159,7 +159,12 @@
         disableClusteringAtZoom: {{ config.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', 16) }},
         chunkedLoading: true,       // добавляем пачками, не блокируя поток
         showCoverageOnHover: false, // лишняя перерисовка полигона на каждом hover
-        maxClusterRadius: 60
+        maxClusterRadius: 60,
+        // Разлёт и сборку кластеров не анимируем: на смене зума это CSS-переход
+        // сразу для сотен отметок, и подвисание длится ровно столько же,
+        // сколько анимация. Плавность самой карты (zoomAnimation) сохраняется.
+        animate: false,
+        animateAddingMarkers: false
     });
     map.addLayer(clusterGroup);
 

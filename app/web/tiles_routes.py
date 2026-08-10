@@ -240,7 +240,14 @@ def _seed_signature(bbox, style, min_zoom, max_zoom):
     return f'{style}|{coords}|{min_zoom}-{max_zoom}'
 
 
-def _try_acquire_lock(lock_path, stale_after=6 * 3600):
+# Владелец лока обновляет его метку времени, пока работает. Лок лежит в
+# смонтированной директории и переживает контейнер, поэтому «свежесть»
+# определяется этими обновлениями, а не фактом существования файла.
+LOCK_HEARTBEAT = 30
+LOCK_STALE_AFTER = 120
+
+
+def _try_acquire_lock(lock_path, stale_after=LOCK_STALE_AFTER):
     """Отдаёт лок ровно одному процессу. gunicorn импортирует модуль в
     каждом воркере, и без этого они полезли бы качать одно и то же."""
     try:
@@ -250,13 +257,26 @@ def _try_acquire_lock(lock_path, stale_after=6 * 3600):
         return True
     except FileExistsError:
         try:
-            # Контейнер могли убить с зависшим локом — перезахватываем.
-            if time.time() - os.path.getmtime(lock_path) > stale_after:
+            age = time.time() - os.path.getmtime(lock_path)
+            # Прошлый контейнер могли убить на середине: daemon-поток умирает
+            # мгновенно, лок остаётся, и без этой проверки прогрев больше
+            # никогда бы не запустился.
+            if age > stale_after:
+                logger.info('[TILES] Снимаю зависший лок (возраст %.0f c)', age)
                 os.unlink(lock_path)
                 return _try_acquire_lock(lock_path, stale_after)
         except OSError:
             pass
         return False
+
+
+def _touch_lock(lock_path, stop_event):
+    """Держит лок живым, пока идёт прогрев."""
+    while not stop_event.wait(LOCK_HEARTBEAT):
+        try:
+            os.utime(lock_path, None)
+        except OSError:
+            return
 
 
 def start_background_seed(app):
@@ -266,7 +286,9 @@ def start_background_seed(app):
     занимает десятки минут, и держать на нём старт gunicorn нельзя —
     healthcheck не дождётся.
     """
-    if os.getenv('TILE_SEED_ON_STARTUP', '0').lower() not in ('1', 'true', 'yes'):
+    raw_flag = os.getenv('TILE_SEED_ON_STARTUP', '0')
+    if raw_flag.strip().lower() not in ('1', 'true', 'yes'):
+        app.logger.info('[TILES] Прогрев выключен (TILE_SEED_ON_STARTUP=%r)', raw_flag)
         return
 
     style = os.getenv('TILE_SEED_STYLE', 'light')
@@ -301,17 +323,24 @@ def start_background_seed(app):
         try:
             with open(done_marker) as fh:
                 if fh.read().strip() == signature:
+                    app.logger.info('[TILES] Район уже прогрет: %s', signature)
                     return
         except OSError:
             pass
 
     if not _try_acquire_lock(lock_path):
-        return  # прогревом занят другой воркер
+        app.logger.info('[TILES] Прогрев уже идёт в другом воркере, пропуск')
+        return
 
     def run():
         time.sleep(float(os.getenv('TILE_SEED_START_DELAY', '20')))
         started = time.time()
         app.logger.info('[TILES] Прогрев кэша: %s', signature)
+        # Пока идёт закачка, обновляем метку лока: если контейнер убьют,
+        # обновления прекратятся и следующий старт заберёт лок себе.
+        stop_heartbeat = threading.Event()
+        threading.Thread(target=_touch_lock, args=(lock_path, stop_heartbeat),
+                         daemon=True, name='tile-seed-lock').start()
         try:
             def progress(i, stats):
                 app.logger.info('[TILES] %s/%s скачано=%s из кэша=%s ошибок=%s',
@@ -330,6 +359,7 @@ def start_background_seed(app):
         except Exception as exc:
             app.logger.error('[TILES] Прогрев прерван: %s', exc)
         finally:
+            stop_heartbeat.set()
             try:
                 os.unlink(lock_path)
             except OSError:
