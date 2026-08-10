@@ -6,11 +6,15 @@
 закрыт выход наружу, а контейнеру достаточно доступа к одному хосту.
 """
 import logging
+import math
 import os
+import threading
 import time
 
+import click
 import requests
 from flask import Blueprint, Response, abort, current_app, send_file
+from requests.adapters import HTTPAdapter
 
 from ..core.decorators import login_required
 
@@ -32,9 +36,12 @@ TILE_SOURCES = {
 }
 
 MAX_ZOOM = 19
-CACHE_TTL = 30 * 24 * 3600      # тайлы меняются редко
+CACHE_TTL = 180 * 24 * 3600     # базовая картография меняется медленно
 MAX_TILE_BYTES = 1024 * 1024    # реальный тайл ~10-50 КБ
-REQUEST_TIMEOUT = (5, 15)       # connect, read
+# Короткий таймаут намеренно: тайл держит поток, и лучше быстро отдать
+# заглушку, чем занимать воркер на секунды из-за одной подвисшей плитки.
+REQUEST_TIMEOUT = (2, 6)        # connect, read
+NEGATIVE_TTL = 300              # столько не долбим источник после неудачи
 
 # Требование OSM Tile Usage Policy: приложение обязано себя назвать.
 USER_AGENT = 'ApartmentFinder/1.0 (self-hosted analytics; +https://analytics.gh.uz)'
@@ -46,6 +53,29 @@ BLANK_PNG = bytes.fromhex(
     '01f15c4890000000a49444154789c6300010000050001'
     '0d0a2db40000000049454e44ae426082'
 )
+
+# Один пул соединений на процесс: без него каждый холодный тайл платил
+# за новый TCP+TLS handshake, а их при зуме десятки.
+_session = None
+_session_lock = threading.Lock()
+# Недавние неудачи: {(style, z, x, y): время}. Ограничивает шторм запросов
+# к лежащему источнику.
+_failures = {}
+
+
+def _get_session():
+    global _session
+    if _session is None:
+        with _session_lock:
+            if _session is None:
+                s = requests.Session()
+                s.headers.update({'User-Agent': USER_AGENT,
+                                  'Accept': 'image/png,image/*'})
+                adapter = HTTPAdapter(pool_connections=8, pool_maxsize=32,
+                                      max_retries=0)
+                s.mount('https://', adapter)
+                _session = s
+    return _session
 
 
 def _cache_root():
@@ -67,12 +97,7 @@ def _pick_subdomain(source, x, y):
 def _fetch_tile(style, z, x, y):
     source = TILE_SOURCES[style]
     url = source['url'].format(s=_pick_subdomain(source, x, y), z=z, x=x, y=y)
-    resp = requests.get(
-        url,
-        headers={'User-Agent': USER_AGENT, 'Accept': 'image/png,image/*'},
-        timeout=REQUEST_TIMEOUT,
-        stream=True,
-    )
+    resp = _get_session().get(url, timeout=REQUEST_TIMEOUT, stream=True)
     resp.raise_for_status()
 
     content = resp.raw.read(MAX_TILE_BYTES + 1, decode_content=True)
@@ -81,6 +106,21 @@ def _fetch_tile(style, z, x, y):
     if not content.startswith(b'\x89PNG'):
         raise ValueError(f'ответ не PNG: {url}')
     return content
+
+
+def _store_tile(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
+    with open(tmp, 'wb') as fh:
+        fh.write(content)
+    os.replace(tmp, path)  # атомарно: пишут несколько воркеров и потоков
+
+
+def _serve_cached(path):
+    # conditional=True добавляет ETag/Last-Modified: повторный заход отдаёт
+    # 304 без тела, а send_file делегирует отдачу файла WSGI-серверу.
+    return send_file(path, mimetype='image/png', max_age=CACHE_TTL,
+                     conditional=True)
 
 
 @tiles_bp.route('/tiles/<style>/<int:z>/<int:x>/<int:y>.png')
@@ -96,23 +136,120 @@ def tile(style, z, x, y):
 
     path = _cache_path(style, z, x, y)
     if os.path.exists(path) and time.time() - os.path.getmtime(path) < CACHE_TTL:
-        return send_file(path, mimetype='image/png', max_age=CACHE_TTL)
+        return _serve_cached(path)
+
+    key = (style, z, x, y)
+    failed_at = _failures.get(key)
+    if failed_at and time.time() - failed_at < NEGATIVE_TTL:
+        if os.path.exists(path):
+            return _serve_cached(path)
+        return Response(BLANK_PNG, mimetype='image/png',
+                        headers={'Cache-Control': 'no-store'})
 
     try:
         content = _fetch_tile(style, z, x, y)
     except Exception as exc:
         logger.warning('Тайл %s/%s/%s/%s не получен: %s', style, z, x, y, exc)
+        _failures[key] = time.time()
+        if len(_failures) > 10000:
+            _failures.clear()
         if os.path.exists(path):
             # Протухший кэш лучше пустого места.
-            return send_file(path, mimetype='image/png', max_age=CACHE_TTL)
+            return _serve_cached(path)
         return Response(BLANK_PNG, mimetype='image/png',
                         headers={'Cache-Control': 'no-store'})
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = f'{path}.{os.getpid()}.tmp'
-    with open(tmp, 'wb') as fh:
-        fh.write(content)
-    os.replace(tmp, path)  # атомарно: под gunicorn пишут несколько воркеров
-
+    _failures.pop(key, None)
+    _store_tile(path, content)
     return Response(content, mimetype='image/png',
                     headers={'Cache-Control': f'public, max-age={CACHE_TTL}'})
+
+
+# --------------------------------------------------------------------------
+# Предзагрузка кэша
+# --------------------------------------------------------------------------
+
+def _deg2tile(lat, lon, z):
+    n = 1 << z
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n)
+    return max(0, min(n - 1, x)), max(0, min(n - 1, y))
+
+
+def iter_tiles(bbox, min_zoom, max_zoom):
+    """Перечисляет тайлы, покрывающие bbox = (south, west, north, east)."""
+    south, west, north, east = bbox
+    for z in range(min_zoom, max_zoom + 1):
+        x1, y1 = _deg2tile(north, west, z)
+        x2, y2 = _deg2tile(south, east, z)
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                yield z, x, y
+
+
+# Ташкент с запасом: от Чирчика до Зангиаты.
+DEFAULT_BBOX = (41.16, 69.05, 41.45, 69.45)
+
+
+@tiles_bp.cli.command('seed')
+@click.option('--bbox', nargs=4, type=float, default=DEFAULT_BBOX,
+              metavar='SOUTH WEST NORTH EAST',
+              help='Границы района. По умолчанию Ташкент.')
+@click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default='light')
+@click.option('--min-zoom', type=int, default=10, show_default=True)
+@click.option('--max-zoom', type=int, default=17, show_default=True,
+              help='Выше 17 объём растёт вчетверо на каждый уровень.')
+@click.option('--workers', type=int, default=4, show_default=True)
+@click.option('--delay', type=float, default=0.05, show_default=True,
+              help='Пауза после каждого тайла, секунды.')
+def seed_command(**kwargs):
+    """Заранее скачать тайлы для района, чтобы карта не ждала источник."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    bbox = kwargs['bbox']
+    style = kwargs['style']
+    min_zoom, max_zoom = kwargs['min_zoom'], kwargs['max_zoom']
+    workers = kwargs['workers']
+
+    if max_zoom > MAX_ZOOM:
+        raise click.BadParameter(f'максимум {MAX_ZOOM}', param_hint='--max-zoom')
+
+    targets = list(iter_tiles(bbox, min_zoom, max_zoom))
+    click.echo(f'Тайлов к обработке: {len(targets):,} '
+               f'(~{len(targets) * 18 / 1024:,.0f} МБ) стиль={style}')
+
+    # Путь считаем здесь, пока контекст приложения есть: в потоки пула он
+    # не передаётся, и current_app внутри work() был бы недоступен.
+    cache_root = _cache_root()
+    done = {'ok': 0, 'cached': 0, 'fail': 0}
+    lock = threading.Lock()
+
+    def work(item):
+        z, x, y = item
+        path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
+        if os.path.exists(path):
+            with lock:
+                done['cached'] += 1
+            return
+        try:
+            content = _fetch_tile(style, z, x, y)
+            _store_tile(path, content)
+            with lock:
+                done['ok'] += 1
+        except Exception as exc:
+            with lock:
+                done['fail'] += 1
+            logger.debug('seed %s/%s/%s/%s: %s', style, z, x, y, exc)
+        # Пауза сознательно: OSM Tile Usage Policy не разрешает выкачивать
+        # тайлы на полной скорости, и агрессивный seed приводит к бану.
+        time.sleep(kwargs['delay'])
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for i, _ in enumerate(pool.map(work, targets), 1):
+            if i % 500 == 0:
+                click.echo(f'  {i:,}/{len(targets):,}  '
+                           f'скачано={done["ok"]:,} из кэша={done["cached"]:,} '
+                           f'ошибок={done["fail"]:,}')
+
+    click.echo(f'Готово: скачано={done["ok"]:,} было в кэше={done["cached"]:,} '
+               f'ошибок={done["fail"]:,}')

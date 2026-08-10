@@ -39,5 +39,10 @@ ENV PYTHONPATH=/app
 # Открываем порт
 EXPOSE 80
 
-# Команда запуска через gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "--workers", "2", "--timeout", "120", "app_with_auth_connector:app"]
+# Команда запуска через gunicorn.
+# gthread вместо sync: с двумя sync-воркерами приложение обрабатывало
+# ровно два запроса разом, и пачка тайлов при зуме блокировала всё
+# остальное. Раздача тайлов упирается в I/O, потоки её и разгружают.
+CMD ["gunicorn", "--bind", "0.0.0.0:80", \
+     "--worker-class", "gthread", "--workers", "2", "--threads", "8", \
+     "--timeout", "120", "app_with_auth_connector:app"]

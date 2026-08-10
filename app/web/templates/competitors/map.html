@@ -132,7 +132,16 @@
         .replace('__STYLE__', isDark ? 'dark' : 'light');
 
     const tiles = L.tileLayer(tileUrl, {
+        // Дальше maxNativeZoom тайлы не запрашиваются: Leaflet растягивает
+        // последний доступный уровень. Экономит основную массу запросов,
+        // потому что каждый следующий зум учетверяет их число.
         maxZoom: 19,
+        maxNativeZoom: {{ config.get('TILE_MAX_NATIVE_ZOOM', 17) }},
+        // Не дёргать сервер на промежуточных кадрах анимации зума —
+        // именно это делало зум неотзывчивым.
+        updateWhenZooming: false,
+        updateWhenIdle: true,
+        keepBuffer: 4,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
 
