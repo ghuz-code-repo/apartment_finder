@@ -1,0 +1,19 @@
+# Normalize every text file to LF in the repository and in the working tree.
+# Keeps line endings identical on every machine regardless of core.autocrlf,
+# so archives passed between Windows and Linux no longer produce phantom diffs.
+* text=auto eol=lf
+
+# Binary assets: never touch their bytes.
+*.pkl  binary
+*.xlsx binary
+*.xls  binary
+*.mo   binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
