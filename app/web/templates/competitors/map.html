@@ -103,6 +103,9 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<script src="{{ url_for('static', filename='vendor/markercluster/leaflet.markercluster.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.Default.css') }}" />
 <script>
     // 1. Данные готовятся на сервере (build_map_markers) и отдаются одним JSON:
     // некорректная координата в одной записи больше не ломает весь скрипт.
@@ -149,7 +152,16 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
 
-    let markers = [];
+    // Все отметки живут в кластерной группе: 343 отдельных элемента в DOM
+    // Leaflet пересчитывал на каждом кадре зума, и карта подвисала.
+    // На ближних зумах кластеризация отключается, и вид остаётся прежним.
+    const clusterGroup = L.markerClusterGroup({
+        disableClusteringAtZoom: {{ config.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', 16) }},
+        chunkedLoading: true,       // добавляем пачками, не блокируя поток
+        showCoverageOnHover: false, // лишняя перерисовка полигона на каждом hover
+        maxClusterRadius: 60
+    });
+    map.addLayer(clusterGroup);
 
     // 4. Основная логика отрисовки меток
     function updateMarkers() {
@@ -159,8 +171,8 @@
         const selectedNorm = selectedOurProject.trim().toLowerCase();
 
         // Очистка старых маркеров
-        markers.forEach(m => map.removeLayer(m));
-        markers = [];
+        clusterGroup.clearLayers();
+        const batch = [];
 
         competitors.forEach(c => {
             if (c.lat === 0 || c.lng === 0) return;
@@ -192,12 +204,15 @@
                             </div>
                         </div>
                     `)
-                    .on('click', () => loadComparison(c.id, selectedOurProject))
-                    .addTo(map);
+                    .on('click', () => loadComparison(c.id, selectedOurProject));
 
-                markers.push(marker);
+                batch.push(marker);
             }
         });
+
+        // Пакетное добавление: markercluster строит индекс один раз,
+        // а не пересчитывает группы на каждой отметке.
+        clusterGroup.addLayers(batch);
     }
 
     function loadComparison(compId, projectName) {

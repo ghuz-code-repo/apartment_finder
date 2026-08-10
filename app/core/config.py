@@ -34,6 +34,11 @@ class Config:
     # учетверяет число тайлов, а на глаз разница уже невелика.
     TILE_MAX_NATIVE_ZOOM = int(os.environ.get('TILE_MAX_NATIVE_ZOOM', '17'))
 
+    # С какого зума отметки перестают группироваться в кластеры. Ниже этого
+    # уровня на карте лежат сотни DOM-элементов, и зум начинает подвисать.
+    MAP_DISABLE_CLUSTERING_AT_ZOOM = int(
+        os.environ.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', '16'))
+
 
 # --- ИЗМЕНЕНИЯ НУЖНО ВНЕСТИ ЗДЕСЬ ---
 class DevelopmentConfig(Config):
