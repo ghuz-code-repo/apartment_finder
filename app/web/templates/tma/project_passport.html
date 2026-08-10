@@ -20,7 +20,7 @@
     </div>
 </div>
 
-<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/plotly/plotly-2.24.1.min.js') }}"></script>
 <script>
     const chartData = {{ charts_json | safe }};
 

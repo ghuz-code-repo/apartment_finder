@@ -54,6 +54,8 @@ Thumbs.db
 # Local data directories
 data/
 logs/
+# локальные БД и кэш тайлов — монтируются томом, в образе не нужны
+instance/
 
 # Documentation
 README.md

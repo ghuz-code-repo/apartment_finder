@@ -97,8 +97,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
 <script>
     // 1. Данные готовятся на сервере (build_map_markers) и отдаются одним JSON:
     // некорректная координата в одной записи больше не ломает весь скрипт.
@@ -106,30 +106,35 @@
 
     // 2. Иконки разных цветов
     const goldIcon = new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-gold.png') }}',
+        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
         iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
     });
 
     const blueIcon = new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-blue.png') }}',
+        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
         iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
     });
 
     const redIcon = new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-red.png') }}',
+        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
         iconSize: [30, 48], iconAnchor: [15, 48], popupAnchor: [1, -34], shadowSize: [41, 41]
     });
 
     // 3. Инициализация карты
     const map = L.map('competitorMap').setView([41.31, 69.24], 12);
-    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Тайлы идут через наш прокси с дисковым кэшем: браузеру не нужен
+    // выход во внешнюю сеть, наружу ходит только приложение.
+    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    const tileUrl = "{{ url_for('tiles.tile', style='__STYLE__', z=0, x=0, y=0)|replace('/0/0/0.png', '/{z}/{x}/{y}.png') }}"
+        .replace('__STYLE__', isDark ? 'dark' : 'light');
 
-    if (document.documentElement.getAttribute('data-bs-theme') === 'dark') {
-        tiles.setUrl('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
-    }
+    const tiles = L.tileLayer(tileUrl, {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
 
     let markers = [];
 
