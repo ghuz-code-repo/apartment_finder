@@ -897,67 +897,83 @@
         ui.bar.classList.remove('bg-success');
         ui.bar.classList.add('bg-warning');
         progress(0);
-        say(T.bundleStart || 'Загрузка одним пакетом...');
 
         try {
-            // Пакет содержит все стили сразу — стиль записан внутри имён.
-            const res = await fetch(
-                CFG.prefix + '/tiles/region/' + region.id + '/bundle',
-                { credentials: 'same-origin' });
-            if (!res.ok || !res.body) throw new Error('bundle unavailable');
-
             const cache = await caches.open(CACHE_NAME);
-            const stored = await unpackBundle(res, cache, (n, bytes) => {
-                progress(Math.min(100, Math.round(n / region.tiles * 100)));
-                say(n.toLocaleString() + ' / ' + region.tiles.toLocaleString() +
-                    ' · ' + fmtBytes(bytes));
-            });
+            const all = regionUrls(region);
 
-            // В пакет попадает только то, что уже лежит в кэше сервера.
-            // Остальное дотягиваем поштучно — так регион полон в любом случае.
+            // Сначала выясняем, чего не хватает, и только потом выбираем
+            // способ. Пакет — это весь регион одним куском: тянуть его ради
+            // нескольких процентов недостающих плиток означало бы качать
+            // гигабайт заново, что и выглядело как перескачивание.
             say(T.checkingCache || 'Проверяем, чего не хватает...');
-            const missing = await filterMissing(cache, regionUrls(region),
+            let missing = force ? all : await filterMissing(cache, all,
                 (done, total) => progress(Math.round(done / total * 100)));
+
+            if (!missing.length) {
+                say(T.regionUpToDate || 'Загружено, обновлений нет');
+                return;
+            }
+
+            // Пакет окупается, только когда не хватает заметной части. Иначе
+            // поштучная догрузка меньше и по трафику, и по времени.
+            const BUNDLE_WORTH_IT = 0.5;
+            const useBundle = force || missing.length / all.length >= BUNDLE_WORTH_IT;
+            let stored = 0;
+
+            if (useBundle) {
+                say(T.bundleStart || 'Загрузка одним пакетом...');
+                progress(0);
+                try {
+                    // Пакет содержит все стили сразу — стиль записан в именах.
+                    const res = await fetch(
+                        CFG.prefix + '/tiles/region/' + region.id + '/bundle',
+                        { credentials: 'same-origin' });
+                    if (!res.ok || !res.body) throw new Error('bundle unavailable');
+                    stored = await unpackBundle(res, cache, (n, bytes) => {
+                        progress(Math.min(100, Math.round(n / all.length * 100)));
+                        say(n.toLocaleString() + ' / ' + all.length.toLocaleString() +
+                            ' · ' + fmtBytes(bytes));
+                    });
+                    // После пакета пересчитываем: сервер отдаёт лишь то, что
+                    // прогрето у него, остальное придётся тянуть отдельно.
+                    say(T.checkingCache || 'Проверяем, чего не хватает...');
+                    missing = await filterMissing(cache, all,
+                        (done, total) => progress(Math.round(done / total * 100)));
+                } catch (bundleError) {
+                    say((T.bundleFallback || 'Пакет недоступен, загружаем поштучно') +
+                        (bundleError && bundleError.message
+                            ? ' (' + bundleError.message + ')' : ''));
+                }
+            }
+
             if (missing.length) {
                 // Этого нет в кэше сервера, значит каждая плитка идёт во
                 // внешний источник с паузами — фаза заметно медленнее пакета.
                 say((T.fetchingRest || 'Догружаем остаток') + ': ' +
                     missing.length.toLocaleString() + ' — ' +
                     (T.slowPhase || 'сервер их ещё не прогрел, идёт медленно'));
+                progress(0);
                 const rest = await prefetchOnPage(missing, settings.maxBytes, s => {
                     progress(Math.round(s.done / s.total * 100));
                     say((T.fetchingRest || 'Догружаем остаток') + ': ' +
-                        s.done.toLocaleString() + ' / ' + s.total.toLocaleString());
+                        s.done.toLocaleString() + ' / ' + s.total.toLocaleString() +
+                        (s.failed ? ' · ' + (T.failedCount || 'ошибок') + ': ' +
+                                    s.failed.toLocaleString() : ''));
                 });
                 if (rest.limitReached) {
                     say(T.limitReached || 'Достигнут лимит объёма — загрузка остановлена');
                     return;
                 }
+                stored += rest.stored;
             }
-            say((T.saveDone || 'Готово') + ': ' +
-                (stored + missing.length).toLocaleString());
+            say((T.saveDone || 'Готово') + ': ' + stored.toLocaleString());
         } catch (e) {
-            // Пакетная отдача не сложилась — тянем поштучно. Причину
-            // показываем: молчаливый откат выглядел как сброс загрузки.
-            say((T.bundleFallback || 'Пакет недоступен, загружаем поштучно') +
-                (e && e.message ? ' (' + e.message + ')' : ''));
-            try {
-                const all = regionUrls(region);
-                const result = await prefetchOnPage(all, settings.maxBytes, s => {
-                    progress(Math.round(s.done / s.total * 100));
-                    say(s.done.toLocaleString() + ' / ' + s.total.toLocaleString() +
-                        (s.failed ? ' · ' + (T.failedCount || 'ошибок') + ': ' +
-                                    s.failed.toLocaleString() : ''));
-                });
-                say(result.limitReached
-                    ? (T.limitReached || 'Достигнут лимит объёма — загрузка остановлена')
-                    : (T.saveDone || 'Готово') + ': ' + result.stored.toLocaleString() +
-                      (result.failed ? ' · ' + (T.failedCount || 'ошибок') + ': ' +
-                                       result.failed.toLocaleString() : ''));
-            } catch (err) {
-                say((T.downloadFailed || 'Загрузка прервана') +
-                    (err && err.message ? ': ' + err.message : ''));
-            }
+            // Отказ пакета обрабатывается выше и переходит в поштучную
+            // догрузку. Сюда попадают только настоящие сбои — их показываем,
+            // но регион заново не тянем.
+            say((T.downloadFailed || 'Загрузка прервана') +
+                (e && e.message ? ': ' + e.message : ''));
         } finally {
             ui.download.disabled = false;
             ui.refresh.disabled = false;
