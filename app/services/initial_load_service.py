@@ -137,7 +137,7 @@ def incremental_update_from_mysql():
         _sync_sells(mysql_session)
 
         _sync_table(mysql_session, 'estate_buys', EstateBuy,
-                    {'date_added': 'date_added', 'created_at': 'created_at', 'status_name': 'status_name',
+                    {'created_at': 'created_at', 'status_name': 'status_name',
                      'custom_status_name': 'custom_status_name'})
         _sync_table(mysql_session, 'estate_buys_statuses_log', EstateBuysStatusLog,
                     {'log_date': 'log_date', 'estate_buy_id': 'estate_buy_id', 'status_to_name': 'status_to_name',

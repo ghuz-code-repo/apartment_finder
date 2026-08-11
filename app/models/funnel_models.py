@@ -6,7 +6,8 @@ class EstateBuy(db.Model):
     __tablename__ = 'estate_buys'
 
     id = db.Column(db.Integer, primary_key=True)
-    date_added = db.Column(db.Date)
+    # Дата создания заявки. Раньше в источнике было поле date_added (DATE),
+    # сейчас его нет — единственная дата создания это created_at (DATETIME).
     created_at = db.Column(db.DateTime)
     status_name = db.Column(db.String(32))
     custom_status_name = db.Column(db.String(255))

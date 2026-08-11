@@ -2,11 +2,30 @@
 
 from collections import Counter
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy import func
 from ..core.db_utils import get_mysql_session
 from ..models.funnel_models import EstateBuy, EstateBuysStatusLog
 
+
+def _filter_cohort_by_created_at(cohort_query, start_date_str: str, end_date_str: str):
+    """
+    Ограничивает когорту по дате создания заявки.
+    created_at - это DATETIME, поэтому верхняя граница берется как начало
+    следующего дня, иначе заявки последнего дня периода теряются.
+    Некорректные/пустые даты просто игнорируются.
+    """
+    try:
+        start_date = date.fromisoformat(start_date_str)
+        cohort_query = cohort_query.filter(EstateBuy.created_at >= start_date)
+    except (ValueError, TypeError):
+        pass
+    try:
+        end_date = date.fromisoformat(end_date_str)
+        cohort_query = cohort_query.filter(EstateBuy.created_at < end_date + timedelta(days=1))
+    except (ValueError, TypeError):
+        pass
+    return cohort_query
 
 
 def _format_status(status, custom_status):
@@ -23,17 +42,9 @@ def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
     (С УТОЧНЕНИЕМ: Сделка = 'Сделка в работе' + 'Сделка проведена')
     """
     # === Шаги 1-2: Сбор когорты и логов (без изменений) ===
-    cohort_query = mysql_session.query(EstateBuy.id)
-    try:
-        start_date = date.fromisoformat(start_date_str)
-        cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
-    except (ValueError, TypeError):
-        pass
-    try:
-        end_date = date.fromisoformat(end_date_str)
-        cohort_query = cohort_query.filter(EstateBuy.date_added <= end_date)
-    except (ValueError, TypeError):
-        pass
+    cohort_query = _filter_cohort_by_created_at(
+        mysql_session.query(EstateBuy.id), start_date_str, end_date_str
+    )
 
     # --- ИЗМЕНЕНИЕ: Используем подзапрос ---
     total_leads_count = cohort_query.count()
@@ -184,19 +195,9 @@ def get_funnel_data(start_date_str: str, end_date_str: str):
     Строит полное дерево путей заявок, ВКЛЮЧАЯ ID ЗАЯВОК в каждом узле.
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = mysql_session.query(EstateBuy.id)
-    if start_date_str:
-        try:
-            start_date = date.fromisoformat(start_date_str)
-            cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
-        except (ValueError, TypeError):
-            pass
-    if end_date_str:
-        try:
-            end_date = date.fromisoformat(end_date_str)
-            cohort_query = cohort_query.filter(EstateBuy.date_added <= end_date)
-        except (ValueError, TypeError):
-            pass
+    cohort_query = _filter_cohort_by_created_at(
+        mysql_session.query(EstateBuy.id), start_date_str, end_date_str
+    )
 
     # --- ИЗМЕНЕНИЕ: Не загружаем ID в память, оставляем как объект запроса ---
     total_leads = cohort_query.count()
@@ -245,15 +246,9 @@ def get_dead_end_summary(start_date_str: str, end_date_str: str):
     (Эта функция остается без изменений)
     """
     # === Шаг 1: Когорта по ДАТЕ СОЗДАНИЯ заявки ===
-    cohort_query = mysql_session.query(EstateBuy.id)
-    try:
-        start_date = date.fromisoformat(start_date_str)
-        cohort_query = cohort_query.filter(EstateBuy.date_added >= start_date)
-    except (ValueError, TypeError): pass
-    try:
-        end_date = date.fromisoformat(end_date_str)
-        cohort_query = cohort_query.filter(EstateBuy.date_added <= end_date)
-    except (ValueError, TypeError): pass
+    cohort_query = _filter_cohort_by_created_at(
+        mysql_session.query(EstateBuy.id), start_date_str, end_date_str
+    )
 
     cohort_subquery = cohort_query.subquery()
     trunk_count = mysql_session.query(func.count(cohort_subquery.c.id)).scalar() or 0
@@ -308,8 +303,14 @@ def get_leads_details_by_ids(lead_ids_str: str):
 
     leads = mysql_session.query(  # <--- ИЗМЕНЕНО
         EstateBuy.id,
-        EstateBuy.date_added
+        EstateBuy.created_at
     ).filter(
         EstateBuy.id.in_(lead_ids)
     ).order_by(EstateBuy.id).all()
-    return [{'id': lead.id, 'date_added': lead.date_added.strftime('%d.%m.%Y')} for lead in leads]
+    return [
+        {
+            'id': lead.id,
+            'date_added': lead.created_at.strftime('%d.%m.%Y') if lead.created_at else '-'
+        }
+        for lead in leads
+    ]
