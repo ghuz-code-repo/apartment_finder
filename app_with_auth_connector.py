@@ -6,7 +6,6 @@ import threading
 import time
 from app import create_app
 from app.core.config import DevelopmentConfig
-from app.services.initial_load_service import incremental_update_from_mysql
 from app.core.extensions import db
 from werkzeug.middleware.proxy_fix import ProxyFix
 from prefix_middleware import PrefixMiddleware
@@ -21,6 +20,10 @@ except ImportError:
     AuthClient = None
     init_service_discovery_flask = None
     permissions_registry = None
+
+# Служебные команды (`flask plans check` и подобные) импортируют этот же модуль.
+# Флаг ставит сам flask-cli до импорта приложения.
+RUNNING_FROM_CLI = os.environ.get('FLASK_RUN_FROM_CLI') == 'true'
 
 # Create Flask app
 app = create_app(DevelopmentConfig)
@@ -38,40 +41,56 @@ if AuthMiddleware:
     else:
         print("[AUTH] WARNING: JWT_SECRET not set, auth middleware disabled")
 
-# Sync permissions with gateway (delayed to allow gunicorn to start serving first)
-if AuthClient and permissions_registry:
-    auth_service_url = os.getenv('AUTH_SERVICE_URL', 'http://auth-service:80')
-    internal_api_key = os.getenv('INTERNAL_API_KEY', '')
-    if internal_api_key:
-        def _sync_permissions_delayed():
-            """Wait for gunicorn to be ready, then trigger permission sync."""
-            time.sleep(5)
-            auth_client = AuthClient(auth_service_url, service_key="finder", api_key=internal_api_key)
-            with app.app_context():
-                try:
-                    permissions_data = permissions_registry.to_dict()['permissions']
-                    auth_client.sync_permissions(permissions_data)
-                    print(f"[AUTH] Synced {len(permissions_data)} permissions with gateway")
-                except Exception as e:
-                    print(f"[AUTH] Warning: Could not sync permissions: {e}")
 
-        _sync_thread = threading.Thread(target=_sync_permissions_delayed, daemon=True)
-        _sync_thread.start()
+def start_background_jobs():
+    """Фоновые задачи рабочего процесса: права, service discovery, прогрев тайлов.
 
-# Service discovery registration
-if init_service_discovery_flask:
-    try:
+    Отдельно от импорта модуля, потому что служебной команде всё это не нужно:
+    она регистрировала в реестре второй экземпляр 'finder' и завершалась,
+    оставляя там запись от уже умершего процесса.
+    """
+    # Sync permissions with gateway (delayed to allow gunicorn to start serving first)
+    if AuthClient and permissions_registry:
         auth_service_url = os.getenv('AUTH_SERVICE_URL', 'http://auth-service:80')
-        service_discovery_client = init_service_discovery_flask(
-            app,
-            service_key="finder",
-            internal_url="http://apartment-finder-app:80",
-            registry_url=auth_service_url + '/api/registry',
-            heartbeat_interval=30
-        )
-        print("[AUTH] Service discovery initialized")
+        internal_api_key = os.getenv('INTERNAL_API_KEY', '')
+        if internal_api_key:
+            def _sync_permissions_delayed():
+                """Wait for gunicorn to be ready, then trigger permission sync."""
+                time.sleep(5)
+                auth_client = AuthClient(auth_service_url, service_key="finder", api_key=internal_api_key)
+                with app.app_context():
+                    try:
+                        permissions_data = permissions_registry.to_dict()['permissions']
+                        auth_client.sync_permissions(permissions_data)
+                        print(f"[AUTH] Synced {len(permissions_data)} permissions with gateway")
+                    except Exception as e:
+                        print(f"[AUTH] Warning: Could not sync permissions: {e}")
+
+            _sync_thread = threading.Thread(target=_sync_permissions_delayed, daemon=True)
+            _sync_thread.start()
+
+    # Service discovery registration
+    if init_service_discovery_flask:
+        try:
+            init_service_discovery_flask(
+                app,
+                service_key="finder",
+                internal_url="http://apartment-finder-app:80",
+                registry_url=os.getenv('AUTH_SERVICE_URL', 'http://auth-service:80') + '/api/registry',
+                heartbeat_interval=30
+            )
+            print("[AUTH] Service discovery initialized")
+        except Exception as e:
+            print(f"[AUTH] Warning: Service discovery initialization failed: {e}")
+
+    # Warm the map tile cache in the background when TILE_SEED_ON_STARTUP is set.
+    # Runs in a daemon thread and takes an inter-process lock, so only one gunicorn
+    # worker does the work and the startup itself is not delayed.
+    try:
+        from app.web.tiles_routes import start_background_seed
+        start_background_seed(app)
     except Exception as e:
-        print(f"[AUTH] Warning: Service discovery initialization failed: {e}")
+        print(f"[STARTUP] Warning: tile seed not started: {e}")
 
 
 def setup_database():
@@ -84,19 +103,12 @@ def setup_database():
         print("[SETUP] Database tables created")
 
 
-# Run setup and data update on startup
+# Данные из MySQL здесь больше не «обновляются»: модели estate_*/finance_*
+# читают источник напрямую через bind 'mysql_source', зеркалить их некуда.
+# incremental_update_from_mysql() остался от прежней схемы с локальной копией и
+# падал на первой же таблице ('EstateHouse' has no attribute 'data_hash'),
+# впустую дёргая MySQL на каждом старте.
 setup_database()
-try:
-    with app.app_context():
-        incremental_update_from_mysql()
-except Exception as e:
-    print(f"[STARTUP] Warning: MySQL update failed: {e}")
 
-# Warm the map tile cache in the background when TILE_SEED_ON_STARTUP is set.
-# Runs in a daemon thread and takes an inter-process lock, so only one gunicorn
-# worker does the work and the startup itself is not delayed.
-try:
-    from app.web.tiles_routes import start_background_seed
-    start_background_seed(app)
-except Exception as e:
-    print(f"[STARTUP] Warning: tile seed not started: {e}")
+if not RUNNING_FROM_CLI:
+    start_background_jobs()
