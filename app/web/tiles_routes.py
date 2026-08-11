@@ -13,7 +13,8 @@ import time
 
 import click
 import requests
-from flask import Blueprint, Response, abort, current_app, send_file, url_for
+from flask import (Blueprint, Response, abort, current_app, jsonify, request,
+                   send_file, url_for)
 from requests.adapters import HTTPAdapter
 
 from ..core.decorators import login_required
@@ -209,6 +210,85 @@ def iter_tiles(bbox, min_zoom, max_zoom):
 # Ташкент с запасом: от Чирчика до Зангиаты.
 DEFAULT_BBOX = (41.16, 69.05, 41.45, 69.45)
 
+# Готовые к загрузке регионы. Детализация падает по мере удаления от центра:
+# область целиком на всех зумах — это 618 тысяч плиток и почти 15 ГБ, тогда
+# как ступенчатая нарезка даёт те же 40 тысяч и меньше гигабайта. Так же
+# устроены офлайн-карты: периферию незачем держать в максимальной детализации.
+REGIONS = {
+    'tashkent': {
+        'title': 'Ташкент и область',
+        'layers': [
+            {'bbox': (40.50, 68.20, 41.75, 70.30), 'min_zoom': 8,  'max_zoom': 13},
+            {'bbox': (40.95, 68.75, 41.65, 69.90), 'min_zoom': 14, 'max_zoom': 15},
+            {'bbox': (41.16, 69.05, 41.45, 69.45), 'min_zoom': 16, 'max_zoom': 17},
+        ],
+    },
+}
+
+
+def region_tile_count(region):
+    return sum(sum(1 for _ in iter_tiles(layer['bbox'],
+                                         layer['min_zoom'], layer['max_zoom']))
+               for layer in region['layers'])
+
+
+def _sample_tile_bytes(cache_root, style, limit=200):
+    """Средний вес плитки по выборке из кэша.
+
+    Обходить десятки тысяч файлов ради точной суммы дороже, чем сама выгрузка,
+    поэтому берём выборку. Пустой кэш — возвращаем None, и вес считается по
+    оценочной константе.
+    """
+    root = os.path.join(cache_root, style)
+    if not os.path.isdir(root):
+        return None
+    sizes = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for name in filenames:
+            if not name.endswith('.png'):
+                continue
+            try:
+                sizes.append(os.path.getsize(os.path.join(dirpath, name)))
+            except OSError:
+                continue
+            if len(sizes) >= limit:
+                return sum(sizes) / len(sizes)
+    return sum(sizes) / len(sizes) if sizes else None
+
+
+@tiles_bp.route('/tiles/regions')
+@login_required
+def regions():
+    """Описание регионов и ожидаемый вес — чтобы кнопка загрузки называла
+    честную цифру, а не константу из головы."""
+    style = request.args.get('style', 'light')
+    if style not in TILE_SOURCES:
+        style = 'light'
+
+    avg = _sample_tile_bytes(_cache_root(), style)
+    measured = avg is not None
+    if avg is None:
+        avg = 25 * 1024
+
+    payload = []
+    for region_id, region in REGIONS.items():
+        tiles = region_tile_count(region)
+        payload.append({
+            'id': region_id,
+            'title': region['title'],
+            'tiles': tiles,
+            'bytes': int(tiles * avg),
+            'avgTileBytes': int(avg),
+            'measured': measured,
+            'layers': [
+                {'bbox': list(layer['bbox']),
+                 'minZoom': layer['min_zoom'],
+                 'maxZoom': layer['max_zoom']}
+                for layer in region['layers']
+            ],
+        })
+    return jsonify({'regions': payload, 'style': style})
+
 
 def seed_tiles(cache_root, bbox, style='light', min_zoom=10, max_zoom=17,
                workers=4, delay=0.05, progress=None):
@@ -385,6 +465,39 @@ def start_background_seed(app):
                 pass
 
     threading.Thread(target=run, daemon=True, name='tile-seed').start()
+
+
+@tiles_bp.cli.command('seed-region')
+@click.option('--region', type=click.Choice(sorted(REGIONS)), default='tashkent',
+              show_default=True)
+@click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default='light')
+@click.option('--workers', type=int, default=4, show_default=True)
+@click.option('--delay', type=float, default=0.05, show_default=True)
+def seed_region_command(region, style, workers, delay):
+    """Прогреть кэш под готовый регион с его ступенчатой детализацией.
+
+    Клиенты забирают плитки с нашего прокси, поэтому внешний источник
+    отрабатывает это один раз, а не на каждого пользователя.
+    """
+    definition = REGIONS[region]
+    cache_root = _cache_root()
+    total = region_tile_count(definition)
+    click.echo(f'Регион «{definition["title"]}»: {total:,} плиток, стиль={style}')
+
+    grand = {'ok': 0, 'cached': 0, 'fail': 0}
+    for layer in definition['layers']:
+        z0, z1 = layer['min_zoom'], layer['max_zoom']
+        click.echo(f'  слой z{z0}-{z1}...')
+        stats = seed_tiles(cache_root, layer['bbox'], style, z0, z1,
+                           workers, delay,
+                           lambda i, s: click.echo(
+                               f'    {i:,}/{s["total"]:,} скачано={s["ok"]:,} '
+                               f'из кэша={s["cached"]:,} ошибок={s["fail"]:,}'))
+        for key in grand:
+            grand[key] += stats[key]
+
+    click.echo(f'Готово: скачано={grand["ok"]:,} было в кэше={grand["cached"]:,} '
+               f'ошибок={grand["fail"]:,}')
 
 
 @tiles_bp.cli.command('seed')
