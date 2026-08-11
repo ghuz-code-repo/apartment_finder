@@ -16,7 +16,8 @@ import requests
 from flask import Blueprint, Response, abort, current_app, send_file
 from requests.adapters import HTTPAdapter
 
-from ..core.decorators import login_required, permission_required
+from ..core.decorators import (PERMISSION_MAP, _get_current_user, _is_gateway_user,
+                               login_required)
 from ..services import flat_plan_service
 
 logger = logging.getLogger(__name__)
@@ -106,11 +107,36 @@ def _read_content_type(cache_path):
         return None
 
 
+# Планировку показывают две страницы, и права на них разные: карточку смотрит
+# один менеджер, КП может открывать другой. Хватает любого из двух прав, иначе
+# в КП вместо планировки была бы дыра.
+PLAN_PERMISSIONS = ('selection_details_view', 'selection_commercial_offer_view')
+
+
+def _can_view_plans():
+    user = _get_current_user()
+    if not user or not _is_gateway_user(user):
+        return False
+
+    if isinstance(user, dict):
+        permissions = user.get('permissions', [])
+        is_admin = bool(user.get('is_admin')) or user.get('role') == 'admin'
+    else:
+        permissions = user.permissions
+        is_admin = user.is_admin or 'admin' in user.roles
+
+    if is_admin:
+        return True
+    return any(PERMISSION_MAP.get(name, name) in permissions for name in PLAN_PERMISSIONS)
+
+
 @plans_bp.route('/plans/<int:sell_id>/<int:index>')
 @login_required
-@permission_required('selection_details_view')
 def plan_image(sell_id, index):
     """Отдаёт файл планировки по его номеру в кэшированном ответе Macro."""
+    if not _can_view_plans():
+        abort(403)
+
     url = flat_plan_service.get_file_url(sell_id, index)
     if not url:
         abort(404)
@@ -150,30 +176,64 @@ def plan_image(sell_id, index):
 
 @plans_bp.cli.command('check')
 @click.argument('sell_id', type=int)
-@click.option('--refresh', is_flag=True, help='Игнорировать кэш и сходить в Macro.')
-def check_command(sell_id, refresh):
-    """Проверить получение планировки по ID объекта: flask plans check 9000001"""
+def check_command(sell_id):
+    """Диагностика планировки по ID объекта: flask plans check 5622160
+
+    Показывает настройки, сырой ответ Macro и доступность каждого файла.
+    Кэш не используется — запрос уходит на сервер Macro каждый раз.
+    """
+    import json
+
     from ..services import macro_api_service
+    from ..services.macro_api_service import MacroApiError
+
+    config = current_app.config
+    click.echo('--- Настройки ---')
+    click.echo(f'  MACRO_API_URL         = {config.get("MACRO_API_URL") or "(пусто)"}')
+    # Сам токен не печатаем: вывод команды часто уходит в переписку.
+    token = config.get('MACRO_API_TOKEN') or ''
+    click.echo(f'  MACRO_API_TOKEN       = {"задан, " + str(len(token)) + " символов" if token else "(пусто)"}')
+    click.echo(f'  MACRO_FILES_BASE_URL  = {config.get("MACRO_FILES_BASE_URL") or "(пусто)"}')
 
     if not macro_api_service.is_configured():
-        click.echo('Macro API не настроен: заполните MACRO_API_URL и MACRO_API_TOKEN')
+        click.echo('\nMacro API не настроен: заполните MACRO_API_URL и MACRO_API_TOKEN в .env')
         return
 
-    click.echo(f'Запрос планировки для estateId={sell_id}...')
-    result = flat_plan_service.get_flat_plans(sell_id, force_refresh=refresh)
-
-    if result['error']:
-        click.echo(f'Ошибка: {result["error"]}')
+    click.echo(f'\n--- Запрос estateSell/getFlatPlans {{"estateId": {sell_id}}} ---')
+    try:
+        data = macro_api_service.get_flat_plans(sell_id)
+    except MacroApiError as exc:
+        click.echo(f'  ОШИБКА: {exc}')
+        click.echo('\n  Если это HTTP 404 или "нет поля data" — проверьте, что MACRO_API_URL')
+        click.echo('  заканчивается версией (.../v2) и что ID существует в Macro.')
         return
 
-    click.echo(f'Название планировки: {result["plan_name"] or "(не указано)"}')
-    if not result['files']:
-        click.echo('Файлов нет — у этой квартиры планировка в Macro не заполнена.')
+    click.echo('  Ответ (поле data):')
+    click.echo(json.dumps(data, ensure_ascii=False, indent=2))
+
+    files = flat_plan_service._normalize_files(data.get('files'))
+    click.echo(f'\n--- Разбор: файлов {len(files)} ---')
+    if not files:
+        click.echo('  Планировка у этой квартиры в Macro не заполнена либо поле files пустое.')
         return
 
-    for index, item in enumerate(result['files']):
+    session = _get_session()
+    for index, item in enumerate(files):
         absolute = flat_plan_service.absolutize(item['url'])
-        allowed = 'ok' if absolute and _is_host_allowed(absolute) else 'ХОСТ НЕ РАЗРЕШЁН'
         click.echo(f'  [{index}] {item["title"]}')
-        click.echo(f'       {item["url"]}')
-        click.echo(f'       -> {absolute}  ({allowed})')
+        click.echo(f'       путь из Macro: {item["url"]}')
+        click.echo(f'       полный адрес:  {absolute or "НЕ СОБРАН — задайте MACRO_FILES_BASE_URL"}')
+        if not absolute:
+            continue
+        if not _is_host_allowed(absolute):
+            click.echo('       ХОСТ НЕ РАЗРЕШЁН — добавьте его в MACRO_FILES_BASE_URL '
+                       'или MACRO_FILES_ALLOWED_HOSTS')
+            continue
+        try:
+            response = session.get(absolute, timeout=REQUEST_TIMEOUT, stream=True)
+            content_type = (response.headers.get('Content-Type') or '').split(';')[0].strip()
+            verdict = 'ok' if content_type in ALLOWED_CONTENT_TYPES else 'ТИП НЕ ПОДДЕРЖИВАЕТСЯ'
+            click.echo(f'       загрузка: HTTP {response.status_code}, {content_type or "без типа"} ({verdict})')
+            response.close()
+        except Exception as exc:
+            click.echo(f'       загрузка: НЕ УДАЛАСЬ — {exc}')
