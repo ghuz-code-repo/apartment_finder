@@ -163,17 +163,31 @@
             color: transparent;
         }
         .summary-value.blue { color: #0d6efd; }
-        /* Планировка в КП: ограничиваем высоту, чтобы документ остался на листе. */
-        .flat-plan {
-            text-align: center;
-            margin-top: 0.75rem;
+        /* Планировки уезжают на отдельный лист: на первой странице им остаётся
+           полоска в 70мм, где чертёж нечитаем, а вариантов планировки обычно
+           несколько (основная, с мебелью, обмерная). */
+        .plans-page { margin-top: 8mm; }
+        .plan-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 6mm;
         }
-        .flat-plan img {
+        .plan-item {
+            margin: 0;
+            flex: 1 1 100%;
+            text-align: center;
+        }
+        .plan-item img {
             max-width: 100%;
-            max-height: 70mm;
+            max-height: 225mm;
             object-fit: contain;
         }
-        .flat-plan-caption {
+        /* Две колонки со второй картинки: три чертежа так укладываются в лист. */
+        .plan-grid-multi .plan-item { flex: 1 1 calc(50% - 6mm); }
+        .plan-grid-multi .plan-item img { max-height: 105mm; }
+        .plan-item figcaption {
             font-size: 8pt;
             color: #777;
             margin-top: 0.2rem;
@@ -191,6 +205,9 @@
             .no-print { display: none !important; }
             .page-container { min-height: 0; box-shadow: none; border: none; }
             .hide-for-print { display: none !important; }
+            .plans-page { margin-top: 0; break-before: page; page-break-before: always; }
+            /* Чертёж не должен разрываться между листами. */
+            .plan-item { break-inside: avoid; page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -221,16 +238,6 @@
             <div class="info-item"><span class="info-label">{{ _('Цена за м² (Прайс):') }}</span><span class="info-value price-uzs" data-price="{{ data.apartment.estate_price_m2 }}">{{ "{:,.0f}".format(data.apartment.estate_price_m2) }} UZS</span></div>
             <div class="info-item"><span class="info-label">{{ _('Прайс:') }}</span><span class="info-value price-uzs" data-price="{{ data.apartment.estate_price }}">{{ "{:,.0f}".format(data.apartment.estate_price) }} UZS</span></div>
         </div>
-
-        {% if flat_plans and flat_plans.files %}
-        <div class="flat-plan">
-            <img src="{{ url_for('plans.plan_image', sell_id=data.apartment.id, index=0) }}"
-                 alt="{{ _('Планировка') }}">
-            {% if flat_plans.plan_name %}
-            <div class="flat-plan-caption">{{ _('Планировка') }}: {{ flat_plans.plan_name }}</div>
-            {% endif %}
-        </div>
-        {% endif %}
 
         <div class="section-title">2. {{ _('Предлагаемые варианты оплаты') }}</div>
         {% if data.pricing %}
@@ -293,6 +300,41 @@
             <p>{% trans %}Это коммерческое предложение не является публичной офертой. Актуальность цен и условий уточняйте у менеджеров Golden House.{% endtrans %}</p>
         </div>
     </div>
+
+    {# Отдельный лист с планировками. Файлы идут через наш прокси /plans/<id>/<index>,
+       порядок и нумерация — как в ответе Macro. #}
+    {% if flat_plans and flat_plans.files %}
+    <div class="page-container plans-page shadow-lg">
+        <div class="header">
+            <img src="{{ url_for('static', filename='logo_light.svg') }}" alt="{{ _('Логотип') }}" class="header-logo">
+            <h1>{{ _('Планировка') }}</h1>
+            <p><strong>Golden House | {{ _('Объект') }} ID: {{ data.apartment.id }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
+        </div>
+
+        <div class="section-title">
+            3. {{ _('Планировка') }}{% if flat_plans.plan_name %} — {{ flat_plans.plan_name }}{% endif %}
+        </div>
+
+        {% set multiple = flat_plans.files | length > 1 %}
+        <div class="plan-grid {% if multiple %}plan-grid-multi{% endif %}">
+            {% for file in flat_plans.files %}
+            <figure class="plan-item">
+                <img src="{{ url_for('plans.plan_image', sell_id=data.apartment.id, index=loop.index0) }}"
+                     alt="{{ file.title }}">
+                {# Подписи от Macro приходят по-английски ("Main image"), в документе
+                   для клиента их не показываем — только порядковый номер. #}
+                {% if multiple %}
+                <figcaption>{{ _('Вариант') }} {{ loop.index }}</figcaption>
+                {% endif %}
+            </figure>
+            {% endfor %}
+        </div>
+
+        <div class="footer">
+            <p>{% trans %}Планировка приведена для ознакомления. Точные размеры уточняйте у менеджеров Golden House.{% endtrans %}</p>
+        </div>
+    </div>
+    {% endif %}
 
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script>

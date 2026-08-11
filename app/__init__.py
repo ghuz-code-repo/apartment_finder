@@ -109,7 +109,9 @@ def create_app(config_class=DevelopmentConfig):
     app.config.from_object(config_class)
 
     app.config['BABEL_DEFAULT_LOCALE'] = 'ru'
-    app.config['LANGUAGES'] = {'en': 'English', 'ru': 'Русский'}
+    # 'ru' — язык самих msgid, каталог ему не нужен. Узбекский на латинице:
+    # официальная графика, её и ждут в документах для клиентов.
+    app.config['LANGUAGES'] = {'en': 'English', 'ru': 'Русский', 'uz': "O'zbekcha"}
 
     CORS(app)
     db.init_app(app)

@@ -1,6 +1,8 @@
 # app/web/main_routes.py
 
 from datetime import datetime
+from urllib.parse import urlparse
+
 from flask import session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
 from flask import abort
@@ -24,8 +26,17 @@ main_bp = Blueprint('main', __name__, template_folder='templates')
 
 @main_bp.route('/language/<lang>')
 def set_language(lang=None):
+    # Языков стало три, и значение приходит из URL: незнакомый код молча
+    # переводил интерфейс в фолбэк, а referrer с чужого хоста превратил бы
+    # переключатель в открытый редирект.
+    if lang not in current_app.config['LANGUAGES']:
+        abort(404)
     session['language'] = lang
-    return redirect(request.referrer)
+
+    target = request.referrer or ''
+    if urlparse(target).netloc not in ('', urlparse(request.host_url).netloc):
+        target = ''
+    return redirect(target or url_for('main.index'))
 
 @main_bp.route('/show-all-routes')
 @login_required

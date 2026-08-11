@@ -179,13 +179,21 @@
                                 </ul>
                             </li>
                             {% endif %}
-                            <div class="d-flex align-items-center ms-3">
-                                {% if g.lang == 'ru' %}
-                                    <a href="{{ url_for('main.set_language', lang='en') }}" class="nav-link">English</a>
-                                {% else %}
-                                    <a href="{{ url_for('main.set_language', lang='ru') }}" class="nav-link">{{ _('Русский') }}</a>
-                                {% endif %}
-                            </div>
+                            {# Языков больше двух, поэтому список строится из
+                               config.LANGUAGES: новый язык подхватится сам. #}
+                            <li class="nav-item dropdown ms-3">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    {{ config.LANGUAGES.get(g.lang, g.lang) }}
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    {% for code, title in config.LANGUAGES.items() %}
+                                    <li>
+                                        <a class="dropdown-item {% if code == g.lang %}active{% endif %}"
+                                           href="{{ url_for('main.set_language', lang=code) }}">{{ title }}</a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </li>
                         {% endif %}
                     </ul>
                     <div class="d-flex align-items-center ms-lg-auto">
