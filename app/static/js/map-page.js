@@ -68,7 +68,19 @@
     });
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    L.tileLayer(tileUrl, {
+    // Декодирование PNG по умолчанию происходит в главном потоке и на пачке
+    // плиток даёт заметные паузы. decoding="async" отдаёт его браузеру,
+    // который делает это параллельно и отрисовывает готовое.
+    const FastTileLayer = L.TileLayer.extend({
+        createTile: function (coords, done) {
+            const tile = L.TileLayer.prototype.createTile.call(this, coords, done);
+            tile.decoding = 'async';
+            tile.fetchPriority = 'high';   // плитки важнее прочей мелочи
+            return tile;
+        }
+    });
+
+    new FastTileLayer(tileUrl, {
         maxZoom: 19,
         maxNativeZoom: CFG.maxNativeZoom,
         updateWhenZooming: false,
@@ -246,17 +258,15 @@
         return [Math.max(0, Math.min(n - 1, x)), Math.max(0, Math.min(n - 1, y))];
     }
 
-    // Берём видимую область плюс поля с каждой стороны: при сдвиге карты
-    // соседние плитки уже лежат в кэше, и обновление успевает за жестом.
-    function collectUrls() {
-        const bounds = map.getBounds();
-        const buffer = settings.bufferTiles;
-        const minZoom = Math.max(0, Math.round(map.getZoom()));
+    // Плитки прямоугольника с полями по краям: при сдвиге карты соседние
+    // уже лежат в кэше, и обновление успевает за жестом.
+    function tilesForBox(bbox, z0, z1, buffer) {
+        const [south, west, north, east] = bbox;
         const urls = [];
-        for (let z = minZoom; z <= CFG.maxNativeZoom; z++) {
+        for (let z = z0; z <= z1; z++) {
             const n = Math.pow(2, z);
-            const [x1, y1] = lonLatToTile(bounds.getNorth(), bounds.getWest(), z);
-            const [x2, y2] = lonLatToTile(bounds.getSouth(), bounds.getEast(), z);
+            const [x1, y1] = lonLatToTile(north, west, z);
+            const [x2, y2] = lonLatToTile(south, east, z);
             const xa = Math.max(0, Math.min(x1, x2) - buffer);
             const xb = Math.min(n - 1, Math.max(x1, x2) + buffer);
             const ya = Math.max(0, Math.min(y1, y2) - buffer);
@@ -267,6 +277,24 @@
                 }
             }
         }
+        return urls;
+    }
+
+    function collectUrls() {
+        const b = map.getBounds();
+        return tilesForBox([b.getSouth(), b.getWest(), b.getNorth(), b.getEast()],
+                           Math.max(0, Math.round(map.getZoom())),
+                           CFG.maxNativeZoom, settings.bufferTiles);
+    }
+
+    // У региона своя нарезка: чем дальше от центра, тем грубее уровень.
+    // Поля по краям здесь не нужны — границы уже с запасом.
+    function regionUrls(region) {
+        const urls = [];
+        region.layers.forEach(layer => {
+            urls.push.apply(urls, tilesForBox(layer.bbox, layer.minZoom,
+                                              layer.maxZoom, 0));
+        });
         return urls;
     }
 
@@ -393,6 +421,10 @@
         const saveBtn = $('offlineSaveBtn');
         if (saveBtn) saveBtn.addEventListener('click', onSave);
 
+        const regionBtn = $('regionDownloadBtn');
+        if (regionBtn) regionBtn.addEventListener('click', onRegionDownload);
+        loadRegions().catch(() => { /* регион просто не покажем */ });
+
         const clearBtn = $('offlineClearBtn');
         if (clearBtn) {
             clearBtn.addEventListener('click', async () => {
@@ -403,18 +435,11 @@
         }
     }
 
-    async function onSave() {
-        const saveBtn = $('offlineSaveBtn');
-        const urls = collectUrls();
-        const mb = Math.round(urls.length * 25 / 1024);
-        const ok = confirm(
-            (T.confirmSave || 'Сохранить видимый участок карты?') + '\n\n' +
-            (T.tiles || 'Плиток') + ': ' + urls.length.toLocaleString() + '\n' +
-            (T.approxSize || 'Примерный объём') + ': ~' + mb + ' МБ'
-        );
-        if (!ok) return;
+    async function download(urls, confirmText) {
+        if (!confirm(confirmText)) return;
 
-        saveBtn.disabled = true;
+        const buttons = [$('offlineSaveBtn'), $('regionDownloadBtn')].filter(Boolean);
+        buttons.forEach(b => { b.disabled = true; });
         const box = $('offlineProgress');
         const bar = box.querySelector('.progress-bar');
         box.classList.remove('d-none');
@@ -435,10 +460,58 @@
             $('offlineStatus').textContent = (T.workerInactive ||
                 'Воркер ещё не активен, обновите страницу');
         } finally {
-            saveBtn.disabled = false;
+            buttons.forEach(b => { b.disabled = false; });
             box.classList.add('d-none');
             refreshStats();
         }
+    }
+
+    function onSave() {
+        const urls = collectUrls();
+        return download(urls,
+            (T.confirmSave || 'Сохранить видимый участок карты?') + '\n\n' +
+            (T.tiles || 'Плиток') + ': ' + urls.length.toLocaleString() + '\n' +
+            (T.approxSize || 'Примерный объём') + ': ~' +
+            Math.round(urls.length * 25 / 1024) + ' МБ');
+    }
+
+    // ================================================================
+    // Готовые регионы
+    // ================================================================
+    let currentRegion = null;
+
+    async function loadRegions() {
+        const style = isDark ? 'dark' : 'light';
+        const res = await fetch(CFG.prefix + '/tiles/regions?style=' + style,
+                                { credentials: 'same-origin' });
+        const data = await res.json();
+        currentRegion = (data.regions || [])[0] || null;
+        renderRegion();
+    }
+
+    function renderRegion() {
+        const box = $('regionBox');
+        if (!box || !currentRegion) return;
+        box.classList.remove('d-none');
+        $('regionTitle').textContent = currentRegion.title;
+        $('regionSize').textContent = fmtBytes(currentRegion.bytes) + ' · ' +
+            currentRegion.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток');
+        const note = $('regionNote');
+        if (note) {
+            note.textContent = currentRegion.measured
+                ? (T.regionMeasured || 'Вес посчитан по фактическому размеру плиток')
+                : (T.regionEstimated || 'Вес оценочный: сервер ещё не прогрет');
+        }
+    }
+
+    function onRegionDownload() {
+        if (!currentRegion) return;
+        const urls = regionUrls(currentRegion);
+        return download(urls,
+            (T.confirmRegion || 'Загрузить регион целиком?') + '\n\n' +
+            currentRegion.title + '\n' +
+            (T.tiles || 'Плиток') + ': ' + urls.length.toLocaleString() + '\n' +
+            (T.approxSize || 'Примерный объём') + ': ' + fmtBytes(currentRegion.bytes));
     }
 
     if (offline.supported) {

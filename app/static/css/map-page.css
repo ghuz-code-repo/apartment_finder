@@ -29,6 +29,22 @@ body.map-fullscreen {
     background: var(--bs-body-bg);
 }
 
+/* Слой плиток двигается целиком при панораме и зуме. Отдельный слой
+   композитора позволяет браузеру сдвигать готовую текстуру на видеокарте,
+   не перерисовывая содержимое на процессоре. */
+.leaflet-tile-container,
+.leaflet-zoom-animated {
+    will-change: transform;
+    transform: translateZ(0);
+}
+
+/* Плитки не перехватывают события и не участвуют в подборе шрифтов —
+   исключаем их из лишней работы браузера. */
+.leaflet-tile {
+    pointer-events: none;
+    image-rendering: auto;
+}
+
 /* --- Панель действий поверх карты --- */
 .map-toolbar {
     position: absolute;

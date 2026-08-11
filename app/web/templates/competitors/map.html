@@ -181,9 +181,23 @@
                                 {{ _('Сколько плиток за пределами экрана скачивать заранее, чтобы карта успевала за прокруткой.') }}
                             </div>
 
+                            <div id="regionBox" class="card border-dashed p-2 mb-3 d-none">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-bold small" id="regionTitle">—</div>
+                                        <div class="small text-muted" id="regionSize">—</div>
+                                    </div>
+                                    <i class="bi bi-map fs-5 text-golden"></i>
+                                </div>
+                                <button id="regionDownloadBtn" class="btn btn-sm btn-golden mt-2" type="button">
+                                    <i class="bi bi-cloud-arrow-down"></i> {{ _('Загрузить регион') }}
+                                </button>
+                                <div class="small text-muted mt-1" id="regionNote"></div>
+                            </div>
+
                             <div class="d-grid gap-2">
-                                <button id="offlineSaveBtn" class="btn btn-sm btn-golden" type="button">
-                                    <i class="bi bi-download"></i> {{ _('Сохранить видимый участок') }}
+                                <button id="offlineSaveBtn" class="btn btn-sm btn-outline-secondary" type="button">
+                                    <i class="bi bi-download"></i> {{ _('Только видимый участок') }}
                                 </button>
                                 <button id="offlineClearBtn" class="btn btn-sm btn-outline-secondary" type="button">
                                     <i class="bi bi-trash"></i> {{ _('Очистить кэш') }}
@@ -226,6 +240,9 @@
         'copied': _('Скопировано'),
         'copyManually': _('Скопируйте путь вручную:'),
         'confirmSave': _('Сохранить видимый участок карты?'),
+        'confirmRegion': _('Загрузить регион целиком?'),
+        'regionMeasured': _('Вес посчитан по фактическому размеру плиток'),
+        'regionEstimated': _('Вес оценочный: сервер ещё не прогрет'),
         'confirmClear': _('Удалить сохранённые плитки карты?'),
         'approxSize': _('Примерный объём'),
         'saveDone': _('Готово'),
