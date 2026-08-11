@@ -155,29 +155,35 @@ def _bundle_root():
     return path
 
 
-def _bundle_path(region_id, style):
-    return os.path.join(_bundle_root(), f'{region_id}-{style}.tar')
+def _bundle_path(region_id):
+    return os.path.join(_bundle_root(), f'{region_id}.tar')
 
 
-def _iter_region_tar(cache_root, region, style):
-    """Куски tar для региона. Отдаёт только то, что уже лежит в кэше."""
-    for layer in region['layers']:
-        for z, x, y in iter_tiles(layer['bbox'], layer['min_zoom'],
-                                  layer['max_zoom']):
-            path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
-            try:
-                size = os.path.getsize(path)
-                with open(path, 'rb') as fh:
-                    data = fh.read()
-            except OSError:
-                continue        # нет в кэше — клиент возьмёт через прокси
-            if len(data) != size:
-                continue
-            yield _tar_header(f'{style}/{z}/{x}/{y}.png', size)
-            yield data
-            padding = -size % 512
-            if padding:
-                yield b'\0' * padding
+def _iter_region_tar(cache_root, region, styles=None):
+    """Куски tar для региона. Отдаёт только то, что уже лежит в кэше.
+
+    Архив содержит все стили сразу: тему на карте переключают на ходу, и
+    сохранённый регион должен работать в обеих. Стиль записан в имени файла
+    внутри архива, поэтому распаковщику отдельный признак не нужен.
+    """
+    for style in (styles or sorted(TILE_SOURCES)):
+        for layer in region['layers']:
+            for z, x, y in iter_tiles(layer['bbox'], layer['min_zoom'],
+                                      layer['max_zoom']):
+                path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
+                try:
+                    size = os.path.getsize(path)
+                    with open(path, 'rb') as fh:
+                        data = fh.read()
+                except OSError:
+                    continue    # нет в кэше — клиент возьмёт через прокси
+                if len(data) != size:
+                    continue
+                yield _tar_header(f'{style}/{z}/{x}/{y}.png', size)
+                yield data
+                padding = -size % 512
+                if padding:
+                    yield b'\0' * padding
     yield b'\0' * 1024          # признак конца архива
 
 
@@ -194,12 +200,9 @@ def region_bundle(region_id):
     region = REGIONS.get(region_id)
     if not region:
         abort(404)
-    style = request.args.get('style', 'light')
-    if style not in TILE_SOURCES:
-        style = 'light'
 
-    filename = f'{region_id}-{style}.tar'
-    packed = _bundle_path(region_id, style)
+    filename = f'{region_id}.tar'
+    packed = _bundle_path(region_id)
 
     # Готовый файл отдаётся на порядок быстрее, чем собранный на лету: ядро
     # переливает его в сокет само, без чтения тысяч файлов и без прохода
@@ -220,7 +223,7 @@ def region_bundle(region_id):
 
     # Пакет не собран — отдаём потоком, чтобы кнопка работала в любом случае.
     response = Response(
-        stream_with_context(_iter_region_tar(_cache_root(), region, style)),
+        stream_with_context(_iter_region_tar(_cache_root(), region)),
         mimetype='application/x-tar')
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     response.headers['Cache-Control'] = 'no-store'
@@ -375,24 +378,30 @@ def _sample_tile_bytes(cache_root, style, limit=200):
 @login_required
 def regions():
     """Описание регионов и ожидаемый вес — чтобы кнопка загрузки называла
-    честную цифру, а не константу из головы."""
-    style = request.args.get('style', 'light')
-    if style not in TILE_SOURCES:
-        style = 'light'
+    честную цифру, а не константу из головы.
 
-    avg = _sample_tile_bytes(_cache_root(), style)
-    measured = avg is not None
-    if avg is None:
-        avg = 25 * 1024
+    Считаем сразу по всем стилям: тему переключают на ходу, и сохранённый
+    регион обязан работать в обеих, иначе в тёмной карта окажется пустой.
+    """
+    styles = sorted(TILE_SOURCES)
+    cache_root = _cache_root()
+
+    samples = [s for s in (_sample_tile_bytes(cache_root, style)
+                           for style in styles) if s is not None]
+    measured = bool(samples)
+    avg = sum(samples) / len(samples) if samples else 25 * 1024
 
     payload = []
     for region_id, region in REGIONS.items():
-        tiles = region_tile_count(region)
+        per_style = region_tile_count(region)
+        tiles = per_style * len(styles)
         payload.append({
             'id': region_id,
             'title': region['title'],
             'center': list(region['center']),
             'zoom': region['zoom'],
+            'styles': styles,
+            'tilesPerStyle': per_style,
             'tiles': tiles,
             'bytes': int(tiles * avg),
             'avgTileBytes': int(avg),
@@ -404,7 +413,7 @@ def regions():
                 for layer in region['layers']
             ],
         })
-    return jsonify({'regions': payload, 'style': style})
+    return jsonify({'regions': payload, 'styles': styles})
 
 
 def seed_tiles(cache_root, bbox, style='light', min_zoom=10, max_zoom=17,
@@ -587,28 +596,28 @@ def start_background_seed(app):
 @tiles_bp.cli.command('pack-region')
 @click.option('--region', type=click.Choice(sorted(REGIONS)), default='tashkent',
               show_default=True)
-@click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default='light')
-def pack_region_command(region, style):
+def pack_region_command(region):
     """Собрать регион в один файл, чтобы отдавать его без участия Python.
 
-    Запускать после seed-region и при обновлении плиток: пакет статичен и
-    сам себя не обновляет.
+    В пакет попадают все стили сразу: карта переключает тему на ходу, и
+    сохранённый регион должен работать в обеих. Запускать после seed-region
+    и при обновлении плиток — пакет статичен и сам себя не обновляет.
     """
     definition = REGIONS[region]
     cache_root = _cache_root()
-    target = _bundle_path(region, style)
+    target = _bundle_path(region)
     tmp = target + '.tmp'
 
     written = 0
     with open(tmp, 'wb') as fh:
-        for chunk in _iter_region_tar(cache_root, definition, style):
+        for chunk in _iter_region_tar(cache_root, definition):
             fh.write(chunk)
             written += len(chunk)
     os.replace(tmp, target)
 
-    tiles = max(0, written // 512)   # грубая оценка для строки отчёта
     click.echo(f'Пакет собран: {target}')
-    click.echo(f'  размер: {written / 1048576:.0f} МБ, блоков: {tiles:,}')
+    click.echo(f'  размер: {written / 1048576:.0f} МБ, '
+               f'стили: {", ".join(sorted(TILE_SOURCES))}')
     click.echo('  Отдаётся как статический файл; если задан TILES_XACCEL_PREFIX, '
                'выгрузку берёт на себя nginx.')
 
@@ -616,31 +625,37 @@ def pack_region_command(region, style):
 @tiles_bp.cli.command('seed-region')
 @click.option('--region', type=click.Choice(sorted(REGIONS)), default='tashkent',
               show_default=True)
-@click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default='light')
+@click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default=None,
+              help='По умолчанию прогреваются все стили.')
 @click.option('--workers', type=int, default=4, show_default=True)
 @click.option('--delay', type=float, default=0.05, show_default=True)
 def seed_region_command(region, style, workers, delay):
     """Прогреть кэш под готовый регион с его ступенчатой детализацией.
 
     Клиенты забирают плитки с нашего прокси, поэтому внешний источник
-    отрабатывает это один раз, а не на каждого пользователя.
+    отрабатывает это один раз, а не на каждого пользователя. Прогреваются
+    оба стиля: тему на карте переключают на ходу, и в тёмной регион должен
+    работать так же, как в светлой.
     """
     definition = REGIONS[region]
     cache_root = _cache_root()
-    total = region_tile_count(definition)
-    click.echo(f'Регион «{definition["title"]}»: {total:,} плиток, стиль={style}')
+    styles = [style] if style else sorted(TILE_SOURCES)
+    per_style = region_tile_count(definition)
+    click.echo(f'Регион «{definition["title"]}»: {per_style:,} плиток на стиль, '
+               f'стили: {", ".join(styles)} — всего {per_style * len(styles):,}')
 
     grand = {'ok': 0, 'cached': 0, 'fail': 0}
-    for layer in definition['layers']:
-        z0, z1 = layer['min_zoom'], layer['max_zoom']
-        click.echo(f'  слой z{z0}-{z1}...')
-        stats = seed_tiles(cache_root, layer['bbox'], style, z0, z1,
-                           workers, delay,
-                           lambda i, s: click.echo(
-                               f'    {i:,}/{s["total"]:,} скачано={s["ok"]:,} '
-                               f'из кэша={s["cached"]:,} ошибок={s["fail"]:,}'))
-        for key in grand:
-            grand[key] += stats[key]
+    for current_style in styles:
+        for layer in definition['layers']:
+            z0, z1 = layer['min_zoom'], layer['max_zoom']
+            click.echo(f'  {current_style}, слой z{z0}-{z1}...')
+            stats = seed_tiles(cache_root, layer['bbox'], current_style, z0, z1,
+                               workers, delay,
+                               lambda i, s: click.echo(
+                                   f'    {i:,}/{s["total"]:,} скачано={s["ok"]:,} '
+                                   f'из кэша={s["cached"]:,} ошибок={s["fail"]:,}'))
+            for key in grand:
+                grand[key] += stats[key]
 
     click.echo(f'Готово: скачано={grand["ok"]:,} было в кэше={grand["cached"]:,} '
                f'ошибок={grand["fail"]:,}')

@@ -287,7 +287,11 @@
             }
         }
 
-        await Promise.all(Array.from({ length: 6 }, worker));
+        // Запросы идут на наш прокси, а не напрямую в источник, и он держит
+        // 16 потоков. По HTTP/2 браузер не ограничен шестью соединениями,
+        // так что упираемся в сервер, а не в клиента.
+        const CONCURRENCY = 12;
+        await Promise.all(Array.from({ length: CONCURRENCY }, worker));
         if (onProgress) onProgress(stats);
         return stats;
     }
@@ -312,7 +316,8 @@
 
     // Плитки прямоугольника с полями по краям: при сдвиге карты соседние
     // уже лежат в кэше, и обновление успевает за жестом.
-    function tilesForBox(bbox, z0, z1, buffer) {
+    function tilesForBox(bbox, z0, z1, buffer, template) {
+        const pattern = template || tileUrl;
         const [south, west, north, east] = bbox;
         const urls = [];
         for (let z = z0; z <= z1; z++) {
@@ -325,7 +330,7 @@
             const yb = Math.min(n - 1, Math.max(y1, y2) + buffer);
             for (let x = xa; x <= xb; x++) {
                 for (let y = ya; y <= yb; y++) {
-                    urls.push(tileUrl.replace('{z}', z).replace('{x}', x).replace('{y}', y));
+                    urls.push(pattern.replace('{z}', z).replace('{x}', x).replace('{y}', y));
                 }
             }
         }
@@ -341,11 +346,18 @@
 
     // У региона своя нарезка: чем дальше от центра, тем грубее уровень.
     // Поля по краям здесь не нужны — границы уже с запасом.
+    //
+    // Собираем сразу все стили: тему переключают на ходу, и регион, скачанный
+    // в светлой теме, в тёмной оказался бы пустым.
     function regionUrls(region) {
+        const styles = region.styles || [isDark ? 'dark' : 'light'];
         const urls = [];
-        region.layers.forEach(layer => {
-            urls.push.apply(urls, tilesForBox(layer.bbox, layer.minZoom,
-                                              layer.maxZoom, 0));
+        styles.forEach(style => {
+            const template = CFG.tileUrlTemplate.replace('__STYLE__', style);
+            region.layers.forEach(layer => {
+                tilesForBox(layer.bbox, layer.minZoom, layer.maxZoom, 0, template)
+                    .forEach(url => urls.push(url));
+            });
         });
         return urls;
     }
@@ -576,8 +588,8 @@
     const cards = new Map();        // id региона -> его элементы
 
     async function loadRegions() {
-        const style = isDark ? 'dark' : 'light';
-        const res = await fetch(CFG.prefix + '/tiles/regions?style=' + style,
+        // Описание не зависит от текущей темы: регион считается по всем стилям.
+        const res = await fetch(CFG.prefix + '/tiles/regions',
                                 { credentials: 'same-origin' });
         const data = await res.json();
         regions = data.regions || [];
@@ -681,23 +693,58 @@
         });
     }
 
+    // Последнее известное состояние переживает перезагрузку: пересчёт по кэшу
+    // занимает секунды, и без этого карточка всё это время показывала прочерк.
+    const LS_REGION_STATE = 'mapCache.regionState';
+
+    function rememberedState(regionId) {
+        try {
+            const all = JSON.parse(localStorage.getItem(LS_REGION_STATE) || '{}');
+            return all[regionId] || null;
+        } catch (e) { return null; }
+    }
+
+    function rememberState(regionId, state) {
+        try {
+            const all = JSON.parse(localStorage.getItem(LS_REGION_STATE) || '{}');
+            all[regionId] = { have: state.have, total: state.total, bytes: state.bytes };
+            localStorage.setItem(LS_REGION_STATE, JSON.stringify(all));
+        } catch (e) { /* приватный режим — обойдёмся без памяти */ }
+    }
+
     async function refreshRegionCard(region) {
         const ui = cards.get(region.id);
         if (!ui) return;
 
+        // Сразу показываем, что было в прошлый раз, и помечаем, что идёт сверка.
+        const remembered = rememberedState(region.id);
+        if (remembered) {
+            paintRegionCard(region, remembered, true);
+        } else {
+            ui.size.textContent = T.checkingCache || 'Проверяем, чего не хватает...';
+        }
+
         let state = { have: 0, total: region.tiles, bytes: 0 };
         try { state = await regionState(region); } catch (e) { /* кэша ещё нет */ }
+        rememberState(region.id, state);
+        paintRegionCard(region, state, false);
+    }
+
+    function paintRegionCard(region, state, provisional) {
+        const ui = cards.get(region.id);
+        if (!ui) return;
 
         const pct = state.total ? Math.round(state.have / state.total * 100) : 0;
         const complete = state.have >= state.total && state.total > 0;
 
-        ui.size.textContent = complete
+        const suffix = provisional ? ' · ' + (T.verifying || 'сверяем') : '';
+        ui.size.textContent = (complete
             ? (T.regionReady || 'Загружен') + ' · ' + fmtBytes(state.bytes)
             : (state.have
                 ? (T.regionPartial || 'Загружен частично') + ': ' + pct + '% · ' +
                   fmtBytes(state.bytes)
                 : fmtBytes(region.bytes) + ' · ' +
-                  region.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток'));
+                  region.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток'))) + suffix;
 
         ui.bar.style.width = pct + '%';
         ui.bar.classList.toggle('bg-success', complete);
@@ -852,10 +899,10 @@
         progress(0);
         say(T.bundleStart || 'Загрузка одним пакетом...');
 
-        const style = isDark ? 'dark' : 'light';
         try {
+            // Пакет содержит все стили сразу — стиль записан внутри имён.
             const res = await fetch(
-                CFG.prefix + '/tiles/region/' + region.id + '/bundle?style=' + style,
+                CFG.prefix + '/tiles/region/' + region.id + '/bundle',
                 { credentials: 'same-origin' });
             if (!res.ok || !res.body) throw new Error('bundle unavailable');
 
