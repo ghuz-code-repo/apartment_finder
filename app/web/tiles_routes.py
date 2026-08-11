@@ -13,7 +13,7 @@ import time
 
 import click
 import requests
-from flask import Blueprint, Response, abort, current_app, send_file
+from flask import Blueprint, Response, abort, current_app, send_file, url_for
 from requests.adapters import HTTPAdapter
 
 from ..core.decorators import login_required
@@ -121,6 +121,25 @@ def _serve_cached(path):
     # 304 без тела, а send_file делегирует отдачу файла WSGI-серверу.
     return send_file(path, mimetype='image/png', max_age=CACHE_TTL,
                      conditional=True)
+
+
+@tiles_bp.route('/tiles-sw.js')
+def tiles_service_worker():
+    """Отдаёт воркер тайлов из корня приложения.
+
+    Service Worker управляет только теми путями, что лежат ниже адреса, с
+    которого он отдан. Из /static/js/ он бы не увидел /tiles/, поэтому файл
+    выдаётся отсюда и с заголовком Service-Worker-Allowed.
+
+    Без авторизации намеренно: это статический скрипт без данных, а браузер
+    запрашивает его вне сессии страницы.
+    """
+    path = os.path.join(current_app.static_folder, 'js', 'tiles-sw.js')
+    response = send_file(path, mimetype='application/javascript',
+                         max_age=0, conditional=True)
+    # Разрешаем воркеру обслуживать всё приложение, а не только свою папку.
+    response.headers['Service-Worker-Allowed'] = url_for('main.index')
+    return response
 
 
 @tiles_bp.route('/tiles/<style>/<int:z>/<int:x>/<int:y>.png')

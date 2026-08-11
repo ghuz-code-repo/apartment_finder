@@ -5,47 +5,59 @@
 {% block background_effects %}{% endblock %}
 
 {% block styles %}
-<style>
-    /* Интеграция с темой оформления */
-    .leaflet-container {
-        background: var(--bs-body-bg);
-    }
-    .filter-panel {
-        background-color: var(--gh-element-bg);
-        color: var(--bs-body-color);
-        border-right: 1px solid var(--bs-border-color);
-        z-index: 1001;
-    }
-    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-        background-color: var(--gh-element-bg);
-        color: var(--bs-body-color);
-        box-shadow: 0 3px 14px var(--gh-card-shadow);
-    }
-    .action-buttons .btn {
-        width: 100%;
-        margin-bottom: 0.5rem;
-        text-align: left;
-        display: flex;
-        align-items: center;
-    }
-    .action-buttons .bi {
-        margin-right: 10px;
-    }
-    #competitorMap {
-        width: 100%;
-        height: 100%;
-        min-height: 500px; /* Гарантируем видимость */
-    }
-    .text-golden { color: #d4af37; }
-    .border-dashed { border: 1px dashed var(--bs-border-color); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.Default.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map-page.css') }}" />
 {% endblock %}
 
 {% block content %}
-<div class="row g-0" style="height: calc(100vh - 120px); margin-top: -3rem;">
-    <div class="col-md-3 filter-panel p-3 overflow-auto">
-        <div class="action-buttons mb-4">
-            <h6 class="text-muted text-uppercase small fw-bold mb-3">{{ _('Управление данными') }}</h6>
+<div class="map-page">
+    <div id="competitorMap"></div>
+
+    <div class="map-toolbar">
+        <button class="btn btn-sm" data-open-panel="filtersPanel" type="button">
+            <i class="bi bi-funnel"></i><span class="label">{{ _('Фильтры') }}</span>
+        </button>
+        <button class="btn btn-sm" data-open-panel="comparisonPanel" type="button">
+            <i class="bi bi-bar-chart"></i><span class="label">{{ _('Сравнение') }}</span>
+        </button>
+        <button class="btn btn-sm" data-open-panel="settingsPanel" type="button">
+            <i class="bi bi-gear"></i><span class="label">{{ _('Настройки') }}</span>
+        </button>
+    </div>
+</div>
+
+{# --- Фильтры --- #}
+<div class="offcanvas offcanvas-start map-offcanvas" tabindex="-1" id="filtersPanel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">{{ _('Фильтры') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{{ _('Закрыть') }}"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="mb-3">
+            <label class="form-label small" for="searchName">{{ _('Поиск по названию') }}</label>
+            <input type="text" id="searchName" class="form-control form-control-sm"
+                   placeholder="{{ _('Введите название...') }}">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small" for="filterClass">{{ _('Класс') }}</label>
+            <select id="filterClass" class="form-select form-select-sm">
+                <option value="">{{ _('Все классы') }}</option>
+                {% for class in competitors|map(attribute='property_class')|unique|reject('none') %}
+                <option value="{{ class }}">{{ class }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <p class="small text-muted">
+            {{ _('Показано отметок') }}: <strong id="visibleCount">0</strong>
+        </p>
+
+        <hr>
+        <h6 class="text-muted text-uppercase small fw-bold mb-3">{{ _('Управление данными') }}</h6>
+        <div class="d-grid gap-2">
             {% if current_user.can('competitors_import_view') %}
             <a href="{{ url_for('competitor.import_view') }}" class="btn btn-golden-outline btn-sm">
                 <i class="bi bi-upload"></i> {{ _('Импорт из Excel') }}
@@ -57,27 +69,17 @@
             </a>
             {% endif %}
         </div>
-        <hr>
+    </div>
+</div>
 
-        <h5 class="mb-3">{{ _('Фильтры') }}</h5>
-        <div class="mb-3">
-            <label class="form-label small">{{ _('Поиск по названию') }}</label>
-            <input type="text" id="searchName" class="form-control form-control-sm" placeholder="Введите название...">
-        </div>
-
-        <div class="mb-3">
-            <label class="form-label small">{{ _('Класс') }}</label>
-            <select id="filterClass" class="form-select form-select-sm">
-                <option value="">{{ _('Все классы') }}</option>
-                {% for class in competitors|map(attribute='property_class')|unique|reject('none') %}
-                <option value="{{ class }}">{{ class }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <hr>
-        <h5>{{ _('Сравнение') }}</h5>
-        <label class="form-label small text-golden fw-bold">{{ _('Ваш проект (база)') }}</label>
+{# --- Сравнение --- #}
+<div class="offcanvas offcanvas-end map-offcanvas" tabindex="-1" id="comparisonPanel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">{{ _('Сравнение') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{{ _('Закрыть') }}"></button>
+    </div>
+    <div class="offcanvas-body">
+        <label class="form-label small text-golden fw-bold" for="ourProject">{{ _('Ваш проект (база)') }}</label>
         {% if not projects %}
         <div class="alert alert-warning small py-2 mb-3">
             {{ _('Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами недоступно.') }}
@@ -90,153 +92,153 @@
         </select>
 
         <div id="comparisonDetails" class="card p-2 border-dashed">
-            <p class="text-muted small mb-0">{{ _('Выберите маркер на карте для сравнения') }}</p>
+            <p class="text-muted small mb-0">{{ _('Выберите отметку на карте для сравнения') }}</p>
         </div>
     </div>
+</div>
 
-    <div class="col-md-9" style="position: relative;">
-        <div id="competitorMap"></div>
+{# --- Настройки карты --- #}
+<div class="offcanvas offcanvas-end map-offcanvas" tabindex="-1" id="settingsPanel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">{{ _('Настройки карты') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{{ _('Закрыть') }}"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div id="offlineUnsupported" class="alert alert-warning small py-2 d-none">
+            {{ _('Офлайн-режим недоступен в этом браузере') }}
+        </div>
+
+        <div id="offlineControls">
+            <div class="accordion" id="mapSettingsAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#cacheSettings">
+                            <i class="bi bi-hdd me-2"></i> {{ _('Кэш карты') }}
+                        </button>
+                    </h2>
+                    <div id="cacheSettings" class="accordion-collapse collapse"
+                         data-bs-parent="#mapSettingsAccordion">
+                        <div class="accordion-body">
+                            <p class="text-muted small">
+                                {{ _('Плитки карты хранятся в этом браузере. Что уже сохранено, открывается с вашего диска, без обращения к серверу.') }}
+                            </p>
+
+                            <label class="form-label small fw-bold">{{ _('Хранение') }}</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cacheMode"
+                                       id="cacheModeSession" value="session">
+                                <label class="form-check-label small" for="cacheModeSession">
+                                    {{ _('Только на время вкладки') }}
+                                    <span class="d-block text-muted">{{ _('При закрытии вкладки скачанное удаляется') }}</span>
+                                </label>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="cacheMode"
+                                       id="cacheModePersist" value="persist">
+                                <label class="form-check-label small" for="cacheModePersist">
+                                    {{ _('Сохранить навсегда') }}
+                                    <span class="d-block text-muted">{{ _('Карта остаётся после закрытия браузера') }}</span>
+                                </label>
+                            </div>
+
+                            <div id="persistDetails" class="d-none mb-3">
+                                <div class="d-flex justify-content-between small">
+                                    <span class="text-muted">{{ _('Занято') }}</span>
+                                    <span id="cacheUsage">—</span>
+                                </div>
+                                <div class="cache-meter my-1">
+                                    <div id="cacheUsageBar" class="bg-success h-100" style="width: 0%"></div>
+                                </div>
+                                <div id="persistState" class="small text-muted"></div>
+                                <button id="copyPathBtn" class="btn btn-sm btn-outline-secondary mt-2" type="button">
+                                    <i class="bi bi-clipboard"></i> {{ _('Скопировать путь') }}
+                                </button>
+                                <div class="cache-path mt-1">
+                                    {{ _('Путь типовой для вашей системы: браузер не сообщает странице настоящее расположение.') }}
+                                </div>
+                            </div>
+
+                            <label class="form-label small fw-bold" for="cacheLimit">{{ _('Максимальный объём') }}</label>
+                            <select id="cacheLimit" class="form-select form-select-sm mb-3">
+                                <option value="268435456">256 МБ</option>
+                                <option value="536870912">512 МБ</option>
+                                <option value="1073741824">1 ГБ</option>
+                                <option value="2147483648">2 ГБ</option>
+                                <option value="5368709120">5 ГБ</option>
+                                <option value="10737418240">10 ГБ</option>
+                            </select>
+
+                            <label class="form-label small fw-bold" for="cacheBuffer">{{ _('Запас по краям') }}</label>
+                            <select id="cacheBuffer" class="form-select form-select-sm mb-1">
+                                <option value="0">{{ _('Без запаса') }}</option>
+                                <option value="1">1 {{ _('плитка') }}</option>
+                                <option value="2">2 {{ _('плитки') }}</option>
+                                <option value="4">4 {{ _('плитки') }}</option>
+                                <option value="6">6 {{ _('плиток') }}</option>
+                            </select>
+                            <div class="small text-muted mb-3">
+                                {{ _('Сколько плиток за пределами экрана скачивать заранее, чтобы карта успевала за прокруткой.') }}
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button id="offlineSaveBtn" class="btn btn-sm btn-golden" type="button">
+                                    <i class="bi bi-download"></i> {{ _('Сохранить видимый участок') }}
+                                </button>
+                                <button id="offlineClearBtn" class="btn btn-sm btn-outline-secondary" type="button">
+                                    <i class="bi bi-trash"></i> {{ _('Очистить кэш') }}
+                                </button>
+                            </div>
+                            <div id="offlineProgress" class="progress mt-2 d-none" style="height: 6px;">
+                                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div id="offlineStatus" class="small text-muted mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
 <script src="{{ url_for('static', filename='vendor/markercluster/leaflet.markercluster.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/markercluster/MarkerCluster.Default.css') }}" />
-<script>
-    // 1. Данные готовятся на сервере (build_map_markers) и отдаются одним JSON:
-    // некорректная координата в одной записи больше не ломает весь скрипт.
-    const competitors = {{ markers|tojson }};
-
-    // 2. Иконки разных цветов
-    const goldIcon = new L.Icon({
-        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-gold.png') }}',
-        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
-        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-    });
-
-    const blueIcon = new L.Icon({
-        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-blue.png') }}',
-        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
-        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-    });
-
-    const redIcon = new L.Icon({
-        iconUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-icon-2x-red.png') }}',
-        shadowUrl: '{{ url_for('static', filename='vendor/leaflet/images/marker-shadow.png') }}',
-        iconSize: [30, 48], iconAnchor: [15, 48], popupAnchor: [1, -34], shadowSize: [41, 41]
-    });
-
-    // 3. Инициализация карты
-    const map = L.map('competitorMap').setView([41.31, 69.24], 12);
-    // Тайлы идут через наш прокси с дисковым кэшем: браузеру не нужен
-    // выход во внешнюю сеть, наружу ходит только приложение.
-    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
-    const tileUrl = "{{ url_for('tiles.tile', style='__STYLE__', z=0, x=0, y=0)|replace('/0/0/0.png', '/{z}/{x}/{y}.png') }}"
-        .replace('__STYLE__', isDark ? 'dark' : 'light');
-
-    const tiles = L.tileLayer(tileUrl, {
-        // Дальше maxNativeZoom тайлы не запрашиваются: Leaflet растягивает
-        // последний доступный уровень. Экономит основную массу запросов,
-        // потому что каждый следующий зум учетверяет их число.
-        maxZoom: 19,
-        maxNativeZoom: {{ config.get('TILE_MAX_NATIVE_ZOOM', 17) }},
-        // Не дёргать сервер на промежуточных кадрах анимации зума —
-        // именно это делало зум неотзывчивым.
-        updateWhenZooming: false,
-        updateWhenIdle: true,
-        keepBuffer: 4,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(map);
-
-    // Все отметки живут в кластерной группе: 343 отдельных элемента в DOM
-    // Leaflet пересчитывал на каждом кадре зума, и карта подвисала.
-    // На ближних зумах кластеризация отключается, и вид остаётся прежним.
-    const clusterGroup = L.markerClusterGroup({
-        disableClusteringAtZoom: {{ config.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', 16) }},
-        chunkedLoading: true,       // добавляем пачками, не блокируя поток
-        showCoverageOnHover: false, // лишняя перерисовка полигона на каждом hover
-        maxClusterRadius: 60,
-        // Разлёт и сборку кластеров не анимируем: на смене зума это CSS-переход
-        // сразу для сотен отметок, и подвисание длится ровно столько же,
-        // сколько анимация. Плавность самой карты (zoomAnimation) сохраняется.
-        animate: false,
-        animateAddingMarkers: false
-    });
-    map.addLayer(clusterGroup);
-
-    // 4. Основная логика отрисовки меток
-    function updateMarkers() {
-        const searchTerm = document.getElementById('searchName').value.trim().toLowerCase();
-        const classFilter = document.getElementById('filterClass').value;
-        const selectedOurProject = document.getElementById('ourProject').value;
-        const selectedNorm = selectedOurProject.trim().toLowerCase();
-
-        // Очистка старых маркеров
-        clusterGroup.clearLayers();
-        const batch = [];
-
-        competitors.forEach(c => {
-            if (c.lat === 0 || c.lng === 0) return;
-
-            const nameNorm = c.name.trim().toLowerCase();
-            const dCompNorm = c.directComp.trim().toLowerCase();
-
-            const matchesSearch = nameNorm.includes(searchTerm);
-            const matchesClass = !classFilter || c.class === classFilter;
-
-            if (matchesSearch && matchesClass) {
-                // Выбор иконки
-                let icon = c.isInternal ? goldIcon : blueIcon;
-
-                // Красная подсветка для выбранного проекта и его прямых конкурентов
-                if (nameNorm === selectedNorm || dCompNorm === selectedNorm) {
-                    icon = redIcon;
-                }
-
-                const marker = L.marker([c.lat, c.lng], { icon: icon })
-                    .bindPopup(`
-                        <div class="p-1">
-                            <h6 class="mb-1 fw-bold">${c.name}</h6>
-                            <div class="small mb-2 text-muted">${c.class}</div>
-                            <div class="d-grid">
-                                <a href="${window.APP_PREFIX}/competitors/${c.id}" class="btn btn-xs btn-golden">
-                                    <i class="bi bi-info-circle"></i> Подробнее
-                                </a>
-                            </div>
-                        </div>
-                    `)
-                    .on('click', () => loadComparison(c.id, selectedOurProject));
-
-                batch.push(marker);
-            }
-        });
-
-        // Пакетное добавление: markercluster строит индекс один раз,
-        // а не пересчитывает группы на каждой отметке.
-        clusterGroup.addLayers(batch);
+<script id="mapConfig" type="application/json">
+{{ {
+    'competitors': markers,
+    'center': [41.31, 69.24],
+    'zoom': 12,
+    'maxNativeZoom': config.get('TILE_MAX_NATIVE_ZOOM', 17),
+    'disableClusteringAtZoom': config.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', 16),
+    'prefix': request.script_root,
+    'iconBase': url_for('static', filename='vendor/leaflet/images/'),
+    'swUrl': url_for('tiles.tiles_service_worker'),
+    'swScope': url_for('main.index'),
+    'tileUrlTemplate': url_for('tiles.tile', style='__STYLE__', z=0, x=0, y=0)
+                       |replace('/0/0/0.png', '/{z}/{x}/{y}.png'),
+    'i18n': {
+        'zoom': _('Масштаб'),
+        'tiles': _('плиток'),
+        'details': _('Подробнее'),
+        'copyPath': _('Скопировать путь'),
+        'copied': _('Скопировано'),
+        'copyManually': _('Скопируйте путь вручную:'),
+        'confirmSave': _('Сохранить видимый участок карты?'),
+        'confirmClear': _('Удалить сохранённые плитки карты?'),
+        'approxSize': _('Примерный объём'),
+        'saveDone': _('Готово'),
+        'limitReached': _('Достигнут лимит объёма — загрузка остановлена'),
+        'workerInactive': _('Воркер ещё не активен, обновите страницу'),
+        'offlineUnavailable': _('Офлайн-режим недоступен'),
+        'persistGranted': _('Браузер сохранит данные'),
+        'persistDenied': _('Браузер может очистить при нехватке места')
     }
-
-    function loadComparison(compId, projectName) {
-        const detailsBox = document.getElementById('comparisonDetails');
-        detailsBox.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-golden"></div></div>';
-
-        fetch(`${window.APP_PREFIX}/competitors/compare/${compId}?our_project=` + encodeURIComponent(projectName))
-            .then(r => r.text())
-            .then(html => {
-                detailsBox.innerHTML = html;
-            });
-    }
-
-    // Слушатели событий
-    document.getElementById('searchName').addEventListener('input', updateMarkers);
-    document.getElementById('filterClass').addEventListener('change', updateMarkers);
-    document.getElementById('ourProject').addEventListener('change', updateMarkers);
-
-    // Первый запуск
-    updateMarkers();
+}|tojson }}
 </script>
+<script>
+    window.MAP_CONFIG = JSON.parse(document.getElementById('mapConfig').textContent);
+</script>
+<script src="{{ url_for('static', filename='js/map-page.js') }}"></script>
 {% endblock %}
