@@ -38,6 +38,11 @@ class Config:
     MACRO_FILES_BASE_URL = os.environ.get('MACRO_FILES_BASE_URL', '')
     # Дополнительные хосты хранилища через запятую, если файлы отдаёт CDN.
     MACRO_FILES_ALLOWED_HOSTS = os.environ.get('MACRO_FILES_ALLOWED_HOSTS', '')
+    # Проверка TLS-сертификата Macro: true (по умолчанию) — обычная проверка,
+    # путь — свой CA-бандл, false — проверка отключена. Отключать только для
+    # внутреннего адреса: сервер в изолированной сети не может продлить
+    # Let's Encrypt-сертификат, и он там протухший.
+    MACRO_API_VERIFY_SSL = os.environ.get('MACRO_API_VERIFY_SSL', 'true')
 
     # До какого зума карта запрашивает тайлы у сервера. Глубже Leaflet
     # растягивает последний доступный уровень: каждый следующий зум

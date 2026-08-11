@@ -578,6 +578,16 @@
             status.hidden = true;
             card.appendChild(status);
 
+            // Когда всё на месте, кнопка загрузки уступает место отметке:
+            // нажимать «обновить» на полном регионе незачем, а случайный
+            // клик перекачивал бы его целиком.
+            const ready = el('div', 'region-ready');
+            ready.innerHTML = '<i class="bi bi-check-circle-fill"></i> ';
+            ready.appendChild(document.createTextNode(
+                T.regionUpToDate || 'Загружено, обновлений нет'));
+            ready.hidden = true;
+            card.appendChild(ready);
+
             const actions = el('div', 'd-grid gap-1');
             const download = iconButton('btn btn-sm btn-golden', 'bi-cloud-arrow-down',
                                         T.regionDownload || 'Загрузить регион');
@@ -590,6 +600,15 @@
             actions.appendChild(goto);
             actions.appendChild(remove);
             card.appendChild(actions);
+
+            // Принудительная перезакачка остаётся, но мелкой ссылкой:
+            // она нужна, только если плитки на сервере переснимали.
+            const refresh = el('button', 'btn btn-link btn-sm p-0 mt-1 region-refresh',
+                               T.regionRefresh || 'Обновить принудительно');
+            refresh.type = 'button';
+            refresh.hidden = true;
+            card.appendChild(refresh);
+            refresh.addEventListener('click', () => onRegionDownload(region, true));
 
             card.appendChild(el('div', 'small text-muted mt-1',
                 region.measured
@@ -605,7 +624,7 @@
             });
 
             list.appendChild(card);
-            cards.set(region.id, { card, size, bar, status, download, remove });
+            cards.set(region.id, { card, size, bar, status, download, remove, ready, refresh });
         });
     }
 
@@ -631,12 +650,16 @@
         ui.bar.classList.toggle('bg-success', complete);
         ui.bar.classList.toggle('bg-warning', !complete);
 
-        ui.download.innerHTML = '<i class="bi ' +
-            (complete ? 'bi-arrow-repeat' : 'bi-cloud-arrow-down') + '"></i> ';
-        ui.download.appendChild(document.createTextNode(
-            complete ? (T.regionRefresh || 'Обновить регион')
-                     : (state.have ? (T.regionResume || 'Догрузить регион')
-                                   : (T.regionDownload || 'Загрузить регион'))));
+        // Полный регион показывает отметку, неполный — кнопку с нужным словом.
+        ui.ready.hidden = !complete;
+        ui.refresh.hidden = !complete;
+        ui.download.hidden = complete;
+        if (!complete) {
+            ui.download.innerHTML = '<i class="bi bi-cloud-arrow-down"></i> ';
+            ui.download.appendChild(document.createTextNode(
+                state.have ? (T.regionResume || 'Догрузить регион')
+                           : (T.regionDownload || 'Загрузить регион')));
+        }
         ui.remove.classList.toggle('d-none', state.have === 0);
     }
 
@@ -751,11 +774,12 @@
         return stored;
     }
 
-    async function onRegionDownload(region) {
+    async function onRegionDownload(region, force) {
         const ui = cards.get(region.id);
         if (!ui) return;
         const ok = confirm(
-            (T.confirmRegion || 'Загрузить регион целиком?') + '\n\n' +
+            (force ? (T.confirmRegionRefresh || 'Перекачать регион заново?')
+                   : (T.confirmRegion || 'Загрузить регион целиком?')) + '\n\n' +
             region.title + '\n' +
             (T.tiles || 'Плиток') + ': ' + region.tiles.toLocaleString() + '\n' +
             (T.approxSize || 'Примерный объём') + ': ' + fmtBytes(region.bytes));
@@ -765,6 +789,8 @@
         const progress = pct => { ui.bar.style.width = pct + '%'; };
 
         ui.download.disabled = true;
+        ui.refresh.disabled = true;
+        ui.ready.hidden = true;
         ui.bar.classList.remove('bg-success');
         ui.bar.classList.add('bg-warning');
         progress(0);
@@ -822,6 +848,7 @@
             }
         } finally {
             ui.download.disabled = false;
+            ui.refresh.disabled = false;
             await refreshRegionCard(region);
             refreshStats();
             setTimeout(() => { ui.status.hidden = true; }, 4000);

@@ -18,7 +18,7 @@ from requests.adapters import HTTPAdapter
 
 from ..core.decorators import (PERMISSION_MAP, _get_current_user, _is_gateway_user,
                                login_required)
-from ..services import flat_plan_service
+from ..services import flat_plan_service, macro_api_service
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,8 @@ def plan_image(sell_id, index):
                          conditional=True)
 
     try:
-        response = _get_session().get(url, timeout=REQUEST_TIMEOUT, stream=True)
+        response = _get_session().get(url, timeout=REQUEST_TIMEOUT, stream=True,
+                                      verify=macro_api_service.ssl_verify())
         response.raise_for_status()
 
         content_type = (response.headers.get('Content-Type') or '').split(';')[0].strip().lower()
@@ -183,8 +184,9 @@ def check_command(sell_id):
     Кэш не используется — запрос уходит на сервер Macro каждый раз.
     """
     import json
+    import socket
+    from urllib.parse import urlparse
 
-    from ..services import macro_api_service
     from ..services.macro_api_service import MacroApiError
 
     config = current_app.config
@@ -194,6 +196,16 @@ def check_command(sell_id):
     token = config.get('MACRO_API_TOKEN') or ''
     click.echo(f'  MACRO_API_TOKEN       = {"задан, " + str(len(token)) + " символов" if token else "(пусто)"}')
     click.echo(f'  MACRO_FILES_BASE_URL  = {config.get("MACRO_FILES_BASE_URL") or "(пусто)"}')
+    click.echo(f'  MACRO_API_VERIFY_SSL  = {config.get("MACRO_API_VERIFY_SSL")}')
+
+    # Куда контейнер реально резолвит имя: расхождение с адресом MySQL-источника
+    # означает, что DNS хоста отдаёт внешний адрес и до него нет маршрута.
+    api_host = urlparse(config.get('MACRO_API_URL') or '').hostname
+    if api_host:
+        try:
+            click.echo(f'  {api_host} -> {socket.gethostbyname(api_host)}')
+        except OSError as exc:
+            click.echo(f'  {api_host} -> ИМЯ НЕ РЕЗОЛВИТСЯ: {exc}')
 
     if not macro_api_service.is_configured():
         click.echo('\nMacro API не настроен: заполните MACRO_API_URL и MACRO_API_TOKEN в .env')
@@ -230,7 +242,8 @@ def check_command(sell_id):
                        'или MACRO_FILES_ALLOWED_HOSTS')
             continue
         try:
-            response = session.get(absolute, timeout=REQUEST_TIMEOUT, stream=True)
+            response = session.get(absolute, timeout=REQUEST_TIMEOUT, stream=True,
+                                   verify=macro_api_service.ssl_verify())
             content_type = (response.headers.get('Content-Type') or '').split(';')[0].strip()
             verdict = 'ok' if content_type in ALLOWED_CONTENT_TYPES else 'ТИП НЕ ПОДДЕРЖИВАЕТСЯ'
             click.echo(f'       загрузка: HTTP {response.status_code}, {content_type or "без типа"} ({verdict})')

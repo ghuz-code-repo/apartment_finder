@@ -34,6 +34,13 @@ services:
     networks:
       - service_network
       - egress_network      # Доступ к внешним ресурсам: MySQL MacroCRM (172.16.0.199)
+    # Macro API живёт на том же узле, что и MySQL-источник, но обращаемся к нему
+    # по имени. Имя macrocrm.gh.uz публичное: если резолвер хоста не внутренний,
+    # контейнер получает WAN-адрес, до которого из egress_network маршрута нет —
+    # ровно тот connect timeout, что виден в логах flat_plan_service.
+    # Пин убирает зависимость от DNS хоста.
+    extra_hosts:
+      - "api.macrocrm.gh.uz:${MACRO_API_HOST_IP:-172.16.0.199}"
 
 volumes:
   mysql_data:

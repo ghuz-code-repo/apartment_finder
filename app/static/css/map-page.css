@@ -185,3 +185,34 @@ body.map-fullscreen {
     word-break: break-all;
     color: var(--bs-secondary-color);
 }
+
+/* Отметка полностью загруженного региона: занимает место кнопки, чтобы
+   карточка не прыгала при смене состояния. */
+.region-ready {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .375rem .5rem;
+    border-radius: .375rem;
+    font-size: .875rem;
+    color: var(--bs-success-text-emphasis, #75b798);
+    background: var(--bs-success-bg-subtle, rgba(25, 135, 84, .15));
+    border: 1px solid var(--bs-success-border-subtle, rgba(25, 135, 84, .35));
+}
+
+.region-ready .bi {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.region-refresh {
+    color: var(--bs-secondary-color);
+    text-decoration: none;
+    font-size: .8rem;
+    align-self: center;
+}
+
+.region-refresh:hover {
+    color: var(--bs-body-color);
+    text-decoration: underline;
+}

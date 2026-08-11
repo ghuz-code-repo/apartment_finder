@@ -57,6 +57,35 @@ def is_configured():
     return bool(config.get('MACRO_API_URL') and config.get('MACRO_API_TOKEN'))
 
 
+_verify_warned = False
+
+_VERIFY_OFF = {'0', 'false', 'no', 'off'}
+_VERIFY_ON = {'1', 'true', 'yes', 'on'}
+
+
+def ssl_verify():
+    """Значение `verify` для requests: True, False или путь к CA-бандлу.
+
+    Общее для API и прокси картинок: ходят на один и тот же хост Macro.
+    """
+    global _verify_warned
+    raw = str(current_app.config.get('MACRO_API_VERIFY_SSL', 'true')).strip()
+    lowered = raw.lower()
+    if lowered in _VERIFY_ON or not raw:
+        return True
+    if lowered in _VERIFY_OFF:
+        if not _verify_warned:
+            _verify_warned = True
+            logger.warning('[MACRO] Проверка TLS-сертификата отключена '
+                           '(MACRO_API_VERIFY_SSL=%s) — трафик к Macro не защищён '
+                           'от подмены, допустимо только внутри доверенной сети', raw)
+            # Иначе urllib3 печатает InsecureRequestWarning на каждый запрос.
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        return False
+    return raw  # путь к CA-бандлу
+
+
 def call(action, payload):
     """Вызывает метод Macro API v2 и возвращает содержимое поля `data`.
 
@@ -72,7 +101,7 @@ def call(action, payload):
 
     try:
         response = _get_session().post(url, json=payload, headers=headers,
-                                       timeout=REQUEST_TIMEOUT)
+                                       timeout=REQUEST_TIMEOUT, verify=ssl_verify())
     except requests.RequestException as exc:
         raise MacroApiError(f'{action}: сеть недоступна ({exc})') from exc
 
