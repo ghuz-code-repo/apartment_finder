@@ -247,8 +247,7 @@
     // открыта вкладка.
     async function prefetchOnPage(urls, maxBytes, onProgress) {
         const cache = await caches.open(CACHE_NAME);
-        const existing = await cachedUrlSet(cache);
-        const queue = urls.filter(url => !existing.has(absolute(url)));
+        const queue = await filterMissing(cache, urls);
 
         const stats = { done: 0, stored: 0, cached: urls.length - queue.length,
                         failed: 0, total: urls.length, limitReached: false };
@@ -375,6 +374,8 @@
         try { stats = (await send('GET_STATS')).stats; } catch (e) { return; }
         const usage = $('cacheUsage');
         if (usage) {
+            // tiles приходит null, когда записей столько, что их не пересчитать;
+            // объём при этом известен.
             usage.textContent = fmtBytes(stats.bytes) +
                 (stats.tiles ? ' · ' + stats.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток') : '');
         }
@@ -543,24 +544,31 @@
 
     const absolute = url => new URL(url, location.origin).href;
 
-    // Один запрос ключей вместо проверки каждой плитки по отдельности:
-    // на сорока тысячах адресов последовательные cache.match складываются
-    // в минуты ожидания и выглядят как зависание.
-    async function cachedUrlSet(cache) {
-        const keys = await cache.keys();
-        return new Set(keys.map(request => request.url));
+    // Что уже лежит в кэше, выясняем пачками параллельных match.
+    //
+    // Крайности здесь одинаково плохи: cache.keys() отдаёт все записи одним
+    // ответом и на десятках тысяч плиток падает с «Operation too large», а
+    // поштучный await складывается в минуты ожидания. Пачка проверяется за
+    // один тик и работает при любом размере кэша.
+    const MATCH_BATCH = 200;
+
+    async function filterMissing(cache, urls, onProgress) {
+        const missing = [];
+        for (let i = 0; i < urls.length; i += MATCH_BATCH) {
+            const slice = urls.slice(i, i + MATCH_BATCH);
+            const hits = await Promise.all(slice.map(url => cache.match(url)));
+            hits.forEach((hit, j) => { if (!hit) missing.push(slice[j]); });
+            if (onProgress) onProgress(Math.min(i + MATCH_BATCH, urls.length), urls.length);
+        }
+        return missing;
     }
 
-    function missingFrom(urls, existing) {
-        return urls.filter(url => !existing.has(absolute(url)));
-    }
-
-    async function regionState(region) {
+    async function regionState(region, onProgress) {
         const cache = await caches.open(CACHE_NAME);
-        const existing = await cachedUrlSet(cache);
         const urls = regionUrls(region);
-        const have = urls.length - missingFrom(urls, existing).length;
-        return { have: have, total: urls.length,
+        const missing = await filterMissing(cache, urls, onProgress);
+        const have = urls.length - missing.length;
+        return { have: have, total: urls.length, missing: missing,
                  bytes: Math.round(have * (region.avgTileBytes || 25600)) };
     }
 
@@ -711,9 +719,12 @@
     async function onRegionDelete(region) {
         if (!confirm(T.confirmRegionDelete || 'Удалить сохранённый регион?')) return;
         const cache = await caches.open(CACHE_NAME);
-        const existing = await cachedUrlSet(cache);
-        for (const url of regionUrls(region)) {
-            if (existing.has(absolute(url))) await cache.delete(url);
+        const urls = regionUrls(region);
+        // Удаляем пачками по той же причине, что и проверяем: поштучный
+        // обход сорока тысяч адресов занимает минуты.
+        for (let i = 0; i < urls.length; i += MATCH_BATCH) {
+            await Promise.all(urls.slice(i, i + MATCH_BATCH)
+                                  .map(url => cache.delete(url)));
         }
         await refreshRegionCard(region);
         refreshStats();
@@ -857,8 +868,9 @@
 
             // В пакет попадает только то, что уже лежит в кэше сервера.
             // Остальное дотягиваем поштучно — так регион полон в любом случае.
-            const existing = await cachedUrlSet(cache);
-            const missing = missingFrom(regionUrls(region), existing);
+            say(T.checkingCache || 'Проверяем, чего не хватает...');
+            const missing = await filterMissing(cache, regionUrls(region),
+                (done, total) => progress(Math.round(done / total * 100)));
             if (missing.length) {
                 // Этого нет в кэше сервера, значит каждая плитка идёт во
                 // внешний источник с паузами — фаза заметно медленнее пакета.

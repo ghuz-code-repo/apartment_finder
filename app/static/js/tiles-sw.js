@@ -79,9 +79,16 @@ async function enforceLimit(force) {
     if (used === null || used <= config.maxBytes) return;
 
     // cache.keys() отдаёт записи в порядке добавления, так что удаление
-    // с начала выбрасывает самые давние плитки.
+    // с начала выбрасывает самые давние плитки. На больших кэшах вызов
+    // падает с «Operation too large» — тогда вытеснять нечем, и мы просто
+    // перестаём принимать новое, а разбор оставляем странице.
     const cache = await caches.open(CACHE_NAME);
-    const keys = await cache.keys();
+    let keys;
+    try {
+        keys = await cache.keys();
+    } catch (e) {
+        return;
+    }
     const overshoot = used - config.maxBytes;
     // Оценка по среднему весу плитки: точный размер каждой записи пришлось бы
     // читать телом, а это дороже самой очистки.
@@ -115,10 +122,17 @@ self.addEventListener('fetch', event => {
 
 async function collectStats() {
     const cache = await caches.open(CACHE_NAME);
-    const keys = await cache.keys();
     const config = await readConfig();
+    // Число записей узнаём через keys(), но на большом кэше он падает с
+    // «Operation too large». Объём при этом известен из estimate(), так что
+    // отдаём его, а количество помечаем как неизвестное.
+    let tiles = null;
+    try {
+        const keys = await cache.keys();
+        tiles = keys.filter(k => k.url !== CONFIG_KEY).length;
+    } catch (e) { /* слишком много записей — обойдёмся без счётчика */ }
     return {
-        tiles: keys.filter(k => k.url !== CONFIG_KEY).length,
+        tiles: tiles,
         bytes: await usedBytes(),
         maxBytes: config.maxBytes
     };
@@ -132,11 +146,16 @@ async function prefetch(msg, port) {
     const config = await readConfig();
     let done = 0, stored = 0, cached = 0, failed = 0, stopped = false;
 
-    // Что уже лежит в кэше, узнаём одним запросом ключей. Отдельный
-    // cache.match на каждый адрес превращался в десятки тысяч обращений
-    // к хранилищу и съедал больше времени, чем сама загрузка.
-    const existing = new Set((await cache.keys()).map(request => request.url));
-    const has = url => existing.has(new URL(url, self.location.origin).href);
+    // Проверяем наличие пачками параллельных match: cache.keys() на большом
+    // кэше падает с «Operation too large», а поштучный обход слишком долгий.
+    const seen = new Set();
+    async function has(url) {
+        const key = new URL(url, self.location.origin).href;
+        if (seen.has(key)) return true;
+        const hit = await cache.match(url);
+        if (hit) seen.add(key);
+        return !!hit;
+    }
 
     // navigator.storage.estimate() обходит хранилище и дорожает по мере его
     // роста. Раньше он вызывался перед каждой плиткой и к середине большого
@@ -163,7 +182,7 @@ async function prefetch(msg, port) {
             const url = urls.shift();
             if (url === undefined) return;
             try {
-                if (has(url)) {
+                if (await has(url)) {
                     cached++;
                 } else {
                     if (await overLimit()) {
@@ -173,7 +192,7 @@ async function prefetch(msg, port) {
                     const res = await fetch(url, { credentials: 'same-origin' });
                     if (isCacheable(res)) {
                         await cache.put(url, res.clone());
-                        existing.add(new URL(url, self.location.origin).href);
+                        seen.add(new URL(url, self.location.origin).href);
                         stored++;
                     } else {
                         failed++;
