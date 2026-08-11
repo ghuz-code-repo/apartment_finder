@@ -29,6 +29,17 @@ class Config:
     )
     USD_TO_UZS_RATE = 13050.0
 
+    # --- Macro API v2 (планировки квартир) ---
+    # Базовый адрес заканчивается версией: https://<ваш-сервер>/v2
+    MACRO_API_URL = os.environ.get('MACRO_API_URL', '')
+    MACRO_API_TOKEN = os.environ.get('MACRO_API_TOKEN', '')
+    MACRO_APP_ID = os.environ.get('MACRO_APP_ID', '')
+    # Файлы планировок приходят относительными путями (/upload/estate/plan_1.jpg),
+    # здесь — хост, к которому их достраивать.
+    MACRO_FILES_BASE_URL = os.environ.get('MACRO_FILES_BASE_URL', '')
+    # Дополнительные хосты хранилища через запятую, если файлы отдаёт CDN.
+    MACRO_FILES_ALLOWED_HOSTS = os.environ.get('MACRO_FILES_ALLOWED_HOSTS', '')
+
     # До какого зума карта запрашивает тайлы у сервера. Глубже Leaflet
     # растягивает последний доступный уровень: каждый следующий зум
     # учетверяет число тайлов, а на глаз разница уже невелика.

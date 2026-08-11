@@ -3,7 +3,7 @@
 from flask import current_app, abort
 from sqlalchemy.orm import joinedload
 
-from . import currency_service
+from . import currency_service, pricing_service
 from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import json
 from datetime import date
@@ -18,13 +18,15 @@ from ..models.planning_models import map_russian_to_mysql_key, map_mysql_key_to_
 
 
 VALID_STATUSES = ["Маркетинговый резерв", "Подбор"]
-DEDUCTION_AMOUNT = 3_000_000
 
-# --- ИЗМЕНЕНИЕ: Добавляем константы для разных типов ипотеки ---
-# Стандартная ипотека
-MAX_MORTGAGE_STANDARD = 420_000_000
-MIN_INITIAL_PAYMENT_PERCENT_STANDARD = 0.15
-# Расширенная ипотека
+# Общие для карточки и поиска условия берём из pricing_service, чтобы цифры
+# не разъезжались при правке в одном месте.
+DEDUCTION_AMOUNT = pricing_service.DEDUCTION_AMOUNT
+MAX_MORTGAGE_STANDARD = pricing_service.MAX_MORTGAGE_STANDARD
+MIN_INITIAL_PAYMENT_PERCENT_STANDARD = pricing_service.MIN_INITIAL_PAYMENT_PERCENT_STANDARD
+
+# Расширенная ипотека осталась только в подборе по бюджету: в карточке объекта
+# и в КП показывается одна стандартная схема.
 MAX_MORTGAGE_EXTENDED = 840_000_000
 MIN_INITIAL_PAYMENT_PERCENT_EXTENDED = 0.25
 
@@ -200,103 +202,22 @@ def get_apartment_card_data(sell_id: int):
         'estate_area': sell.estate_area, 'house': serialized_house
     }
 
-    discounts_map = {
-        (d['complex_name'], planning_models.PaymentMethod(d['payment_method'])): d
+    # Скидки уже отфильтрованы по ЖК запросом выше — хватает ключа по способу оплаты.
+    discount_by_method = {
+        planning_models.PaymentMethod(d['payment_method']): d
         for d in serialized_discounts
     }
 
-    pricing_options = []
-    base_price = serialized_apartment['estate_price']
-    price_after_deduction = base_price - DEDUCTION_AMOUNT
-
-    # --- ИЗМЕНЕНИЕ: Проверяем по русскому значению ---
-    if russian_category_value == planning_models.PropertyType.FLAT.value:
-        pm_full_payment = planning_models.PaymentMethod.FULL_PAYMENT
-        discount_data_100 = discounts_map.get((serialized_house['complex_name'], pm_full_payment))
-        if discount_data_100:
-            mpp_val, rop_val = discount_data_100.get('mpp', 0.0), discount_data_100.get('rop', 0.0)
-            rate_easy_start_100 = mpp_val + rop_val
-            price_easy_start_100 = price_after_deduction * (1 - rate_easy_start_100)
-            pricing_options.append({
-                "payment_method": "Легкий старт (100% оплата)", "type_key": "easy_start_100",
-                "base_price": base_price, "deduction": DEDUCTION_AMOUNT, "price_after_deduction": price_after_deduction,
-                "final_price": price_easy_start_100, "initial_payment": None, "mortgage_body": None,
-                "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]
-            })
-
-        pm_mortgage = planning_models.PaymentMethod.MORTGAGE
-        discount_data_mortgage = discounts_map.get((serialized_house['complex_name'], pm_mortgage))
-        if discount_data_mortgage and (
-                discount_data_mortgage.get('mpp', 0.0) > 0 or discount_data_mortgage.get('rop', 0.0) > 0):
-            mpp_val, rop_val = discount_data_mortgage.get('mpp', 0.0), discount_data_mortgage.get('rop', 0.0)
-            rate_easy_start_mortgage = mpp_val + rop_val
-            price_for_easy_mortgage = price_after_deduction * (1 - rate_easy_start_mortgage)
-            # Стандартный
-            initial_payment_easy_std = max(0, price_for_easy_mortgage - MAX_MORTGAGE_STANDARD)
-            min_req_easy_std = price_for_easy_mortgage * MIN_INITIAL_PAYMENT_PERCENT_STANDARD
-            if initial_payment_easy_std < min_req_easy_std: initial_payment_easy_std = min_req_easy_std
-            final_price_easy_std = initial_payment_easy_std + MAX_MORTGAGE_STANDARD
-            pricing_options.append({
-                "payment_method": "Легкий старт (стандартная ипотека)", "type_key": "easy_start_mortgage_standard",
-                "base_price": base_price, "deduction": DEDUCTION_AMOUNT, "price_after_deduction": price_after_deduction,
-                "final_price": final_price_easy_std, "initial_payment": initial_payment_easy_std,
-                "mortgage_body": MAX_MORTGAGE_STANDARD,
-                "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]
-            })
-            # Расширенный
-            initial_payment_easy_ext = max(0, price_for_easy_mortgage - MAX_MORTGAGE_EXTENDED)
-            min_req_easy_ext = price_for_easy_mortgage * MIN_INITIAL_PAYMENT_PERCENT_EXTENDED
-            if initial_payment_easy_ext < min_req_easy_ext: initial_payment_easy_ext = min_req_easy_ext
-            final_price_easy_ext = initial_payment_easy_ext + MAX_MORTGAGE_EXTENDED
-            pricing_options.append({
-                "payment_method": "Легкий старт (расширенная ипотека)", "type_key": "easy_start_mortgage_extended",
-                "base_price": base_price, "deduction": DEDUCTION_AMOUNT, "price_after_deduction": price_after_deduction,
-                "final_price": final_price_easy_ext, "initial_payment": initial_payment_easy_ext,
-                "mortgage_body": MAX_MORTGAGE_EXTENDED,
-                "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]
-            })
-
-
-    for payment_method_enum in planning_models.PaymentMethod:
-        discount_data_for_method = discounts_map.get((serialized_house['complex_name'], payment_method_enum))
-        mpp_val = discount_data_for_method.get('mpp', 0.0) if discount_data_for_method else 0.0
-        rop_val = discount_data_for_method.get('rop', 0.0) if discount_data_for_method else 0.0
-
-        if payment_method_enum == planning_models.PaymentMethod.FULL_PAYMENT:
-            final_price = price_after_deduction * (1 - (mpp_val + rop_val))
-            pricing_options.append({"payment_method": payment_method_enum.value, "type_key": "full_payment",
-                          "base_price": base_price, "deduction": DEDUCTION_AMOUNT,
-                          "price_after_deduction": price_after_deduction, "final_price": final_price, "initial_payment": None,
-                          "mortgage_body": None, "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]})
-
-        elif payment_method_enum == planning_models.PaymentMethod.MORTGAGE:
-            if discount_data_for_method and (mpp_val > 0 or rop_val > 0):
-                final_price_base = price_after_deduction * (1 - (mpp_val + rop_val))
-                # Стандартная
-                initial_payment_std = max(0, final_price_base - MAX_MORTGAGE_STANDARD)
-                min_req_std = final_price_base * MIN_INITIAL_PAYMENT_PERCENT_STANDARD
-                if initial_payment_std < min_req_std: initial_payment_std = min_req_std
-                final_price_std = initial_payment_std + MAX_MORTGAGE_STANDARD
-                pricing_options.append({"payment_method": "Ипотека (стандарт)", "type_key": "mortgage_standard",
-                                       "base_price": base_price, "deduction": DEDUCTION_AMOUNT,
-                                       "price_after_deduction": price_after_deduction,
-                                       "final_price": final_price_std, "initial_payment": initial_payment_std,
-                                       "mortgage_body": MAX_MORTGAGE_STANDARD,
-                                       "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]})
-                # Расширенная
-                initial_payment_ext = max(0, final_price_base - MAX_MORTGAGE_EXTENDED)
-                min_req_ext = final_price_base * MIN_INITIAL_PAYMENT_PERCENT_EXTENDED
-                if initial_payment_ext < min_req_ext: initial_payment_ext = min_req_ext
-                final_price_ext = initial_payment_ext + MAX_MORTGAGE_EXTENDED
-                pricing_options.append({"payment_method": "Ипотека (расширенная)", "type_key": "mortgage_extended",
-                                       "base_price": base_price, "deduction": DEDUCTION_AMOUNT,
-                                       "price_after_deduction": price_after_deduction,
-                                       "final_price": final_price_ext, "initial_payment": initial_payment_ext,
-                                       "mortgage_body": MAX_MORTGAGE_EXTENDED,
-                                       "discounts": [{"name": "МПП", "value": mpp_val}, {"name": "РОП", "value": rop_val}]})
+    pricing_options = pricing_service.build_payment_options(
+        serialized_apartment['estate_price'], discount_by_method
+    )
 
     return {
         'apartment': serialized_apartment,
         'pricing': pricing_options,
-        'all_discounts_for_property_type': serialized_discounts
+        'all_discounts_for_property_type': serialized_discounts,
+        'mortgage_terms': {
+            'body': pricing_service.MAX_MORTGAGE_STANDARD,
+            'min_initial_payment_percent': pricing_service.MIN_INITIAL_PAYMENT_PERCENT_STANDARD,
+        },
     }

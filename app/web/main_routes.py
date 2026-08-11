@@ -1,6 +1,5 @@
 # app/web/main_routes.py
 
-import json
 from datetime import datetime
 from flask import session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
@@ -13,7 +12,7 @@ from ..core.db_utils import get_default_session, get_mysql_session
 from ..models.estate_models import EstateHouse
 from ..models.exclusion_models import ExcludedSell
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-from ..services import currency_service
+from ..services import currency_service, flat_plan_service, pricing_service
 # Импортируем PropertyType и PaymentMethod из их нового местоположения
 from ..models.planning_models import PropertyType, PaymentMethod
 from ..services import settings_service
@@ -175,12 +174,14 @@ def selection():
 @permission_required('selection_details_view')
 def apartment_details(sell_id):
     card_data = get_apartment_card_data(sell_id)
-    all_discounts_data = card_data.pop('all_discounts_for_property_type', [])
+    # Лимиты доп. скидок уже лежат внутри каждого варианта оплаты — отдельный
+    # список матрицы шаблону больше не нужен.
+    card_data.pop('all_discounts_for_property_type', None)
 
     return render_template(
         'main/apartment_details.html',
         data=card_data,
-        all_discounts_for_property_type=all_discounts_data,
+        flat_plans=flat_plan_service.get_flat_plans(sell_id),
         title=f"Детали объекта ID {sell_id}"
     )
 
@@ -193,54 +194,11 @@ def generate_commercial_offer(sell_id):
     if not card_data.get('apartment'):
         return "Apartment not found", 404
 
-    selections_json = request.args.get('selections', '{}')
-    # --- ИЗМЕНЕНИЕ: Получаем тип ипотеки для печати ---
-    mortgage_type_to_print = request.args.get('mortgage_type_to_print')
-
-    try:
-        user_selections = json.loads(selections_json)
-    except json.JSONDecodeError:
-        user_selections = {}
-
-    updated_pricing_for_template = []
-    base_options = card_data.get('pricing', [])
-    all_discounts = card_data.get('all_discounts_for_property_type', [])
-
-    for option in base_options:
-        type_key = option['type_key']
-
-        # Применяем дополнительные скидки, если они были выбраны для этого варианта
-        additional_discount_rate = 0
-        if type_key in user_selections:
-            for disc_name, disc_percent in user_selections[type_key].items():
-                additional_discount_rate += (disc_percent / 100.0)
-
-        # Пересчитываем итоговую цену с учетом доп. скидок
-        base_final_price = option['final_price']
-        base_initial_payment = option.get('initial_payment')
-        price_for_additional_discount = option['price_after_deduction'] * (
-                    1 - sum(d['value'] for d in option.get('discounts', [])))
-        additional_discount_amount = price_for_additional_discount * additional_discount_rate
-
-        final_price_adjusted = base_final_price - additional_discount_amount
-        initial_payment_adjusted = base_initial_payment - additional_discount_amount if base_initial_payment is not None else None
-
-        option['final_price'] = final_price_adjusted
-        if initial_payment_adjusted is not None:
-            option['initial_payment'] = initial_payment_adjusted
-
-        updated_pricing_for_template.append(option)
-
-    # --- ИЗМЕНЕНИЕ: Фильтруем варианты для КП ---
-    final_pricing_options = []
-    if mortgage_type_to_print == 'standard':
-        final_pricing_options = [opt for opt in updated_pricing_for_template if 'extended' not in opt['type_key']]
-    elif mortgage_type_to_print == 'extended':
-        final_pricing_options = [opt for opt in updated_pricing_for_template if 'standard' not in opt['type_key']]
-    else:  # По умолчанию или если 'all'
-        final_pricing_options = updated_pricing_for_template
-
-    card_data['pricing'] = final_pricing_options
+    # Скидки, выставленные менеджером на карточке. Пересчёт идёт той же функцией,
+    # что и на странице объекта, поэтому цифры в КП совпадают с экраном.
+    user_selections = pricing_service.parse_manual_selections(request.args.get('selections'))
+    for option in card_data.get('pricing', []):
+        pricing_service.recalculate(option, user_selections.get(option['type_key'], {}))
 
     current_date = datetime.now().strftime("%d.%m.%Y %H:%M")
     usd_rate_from_cbu = currency_service.get_current_effective_rate()
@@ -250,6 +208,7 @@ def generate_commercial_offer(sell_id):
     return render_template(
         'main/commercial_offer.html',
         data=card_data,
+        flat_plans=flat_plan_service.get_flat_plans(sell_id),
         current_date=current_date,
         usd_to_uzs_rate=actual_usd_rate,
         title=f"КП по объекту ID {sell_id}"

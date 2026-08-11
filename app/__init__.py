@@ -154,6 +154,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.tma_routes import tma_bp
         from .web.sync_routes import sync_bp
         from .web.tiles_routes import tiles_bp
+        from .web.plans_routes import plans_bp
 
         # Регистрация Blueprints
         app.register_blueprint(report_bp, url_prefix='/reports')
@@ -174,6 +175,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(tma_bp, url_prefix='/tma')
         app.register_blueprint(sync_bp, url_prefix='/api/sync')
         app.register_blueprint(tiles_bp)
+        app.register_blueprint(plans_bp)
 
     @app.before_request
     def before_request_tasks():

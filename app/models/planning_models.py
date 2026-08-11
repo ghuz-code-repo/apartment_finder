@@ -165,6 +165,24 @@ class Discount(db.Model):
     )
 
 
+class FlatPlanCache(db.Model):
+    """Ответ Macro API по планировке квартиры.
+
+    Лимит Macro — 100 запросов в минуту на ключ, а карточку объекта менеджеры
+    открывают пачками, поэтому ответ храним у себя и обновляем по TTL.
+    Неудачный запрос тоже сохраняется (files пустой): это не даёт долбить
+    чужой сервер на каждом обновлении страницы.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'flat_plan_cache'
+
+    estate_id = db.Column(db.Integer, primary_key=True)
+    plan_name = db.Column(db.String(255), nullable=True)
+    files_json = db.Column(db.Text, nullable=False, default='[]')
+    error = db.Column(db.String(500), nullable=True)
+    fetched_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+
 class ComplexComment(db.Model):
     __bind_key__ = 'planning_db'
     __tablename__ = 'complex_comments'

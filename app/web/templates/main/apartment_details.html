@@ -8,22 +8,19 @@
 
 
 {% block content %}
-{# --- МАКРОС ДЛЯ РЕНДЕРИНГА КАРТОЧКИ ОПЛАТЫ (ЧТОБЫ НЕ ПОВТОРЯТЬ КОД) --- #}
+{# Карточка способа оплаты. Все суммы пересчитывает apartment_card_java.js по той же
+   формуле, что и pricing_service на сервере, поэтому экран и КП всегда совпадают. #}
 {% macro render_payment_card(option, card_class) %}
 <div class="payment-option-card {{ card_class }}"
-     data-payment-method="{{ option.payment_method }}"
      data-type-key="{{ option.type_key }}"
      data-base-price-deducted="{{ option.price_after_deduction }}"
-     data-apartment-complex-name="{{ data.apartment.house.complex_name if data.apartment and data.apartment.house else '' }}">
+     data-base-discount-percent="{{ option.base_discounts|sum(attribute='percent') }}">
 
     <div class="card-header bg-transparent border-bottom-0 pt-3 px-3">
-        {# --- ИЗМЕНЕНИЕ 1: Перевод названий способов оплаты --- #}
         <h5 class="mb-0 fw-bold">
             {% if '%' in option.payment_method %}
-                {# If there's a '%' in the string, replace it with '%%' before translating #}
                 {{ _(option.payment_method | replace('%', '%%')) }}
             {% else %}
-                {# Otherwise, translate normally #}
                 {{ _(option.payment_method) }}
             {% endif %}
         </h5>
@@ -33,69 +30,61 @@
             <tbody>
                 <tr><td class="discount-label">{{ _('Базовая цена') }}</td><td class="text-end">{{ "{:,.0f}".format(option.base_price) }}</td></tr>
                 <tr class="text-danger"><td class="discount-label">{{ _('Вычет') }}</td><td class="text-end">- {{ "{:,.0f}".format(option.deduction) }}</td></tr>
-                {% for discount in option.discounts if discount.value > 0 %}
+                {% for discount in option.base_discounts if discount.percent > 0 %}
                 <tr class="text-danger">
-                    <td class="discount-label">{{ _('Скидка') }} {{ discount.name }} (<span class="static-discount-percent">{{ "%.1f"|format(discount.value * 100) }}</span>%)</td>
-                    {% set discount_amount = option.price_after_deduction * discount.value %}
-                    <td class="text-end">- <span class="static-discount-amount">{{ "{:,.0f}".format(discount_amount) }}</span></td>
+                    <td class="discount-label">{{ _('Скидка') }} {{ discount.name }} ({{ "%.1f"|format(discount.percent) }}%)</td>
+                    <td class="text-end">- {{ "{:,.0f}".format(discount.amount) }}</td>
                 </tr>
                 {% endfor %}
-                <tr class="additional-discount-row d-none" data-discount-type="kd"><td class="discount-label">{{ _('Доп. скидка КД') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
-                <tr class="additional-discount-row d-none" data-discount-type="opt"><td class="discount-label">{{ _('Доп. скидка ОПТ') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
-                <tr class="additional-discount-row d-none" data-discount-type="gd"><td class="discount-label">{{ _('Доп. скидка ГД') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
-                <tr class="additional-discount-row d-none" data-discount-type="holding"><td class="discount-label">{{ _('Доп. скидка Холдинг') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
-                <tr class="additional-discount-row d-none" data-discount-type="shareholder"><td class="discount-label">{{ _('Доп. скидка Акционер') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
-                <tr class="additional-discount-row d-none" data-discount-type="action"><td class="discount-label">{{ _('Доп. скидка Акция') }} (<span class="applied-discount-percent">0.0</span>%)</td><td class="text-end"><span class="applied-discount-amount">0</span></td></tr>
+                {% for limit in option.manual_discount_limits %}
+                <tr class="manual-discount-row d-none text-danger" data-discount-code="{{ limit.code }}">
+                    <td class="discount-label">{{ _('Скидка') }} {{ _(limit.name) }} (<span class="manual-discount-percent">0.0</span>%)</td>
+                    <td class="text-end">- <span class="manual-discount-amount">0</span></td>
+                </tr>
+                {% endfor %}
+                <tr class="benefit-row fw-bold border-top">
+                    <td class="discount-label">{{ _('Выгода') }} (<span class="benefit-percent">0.0</span>%)</td>
+                    <td class="text-end"><span class="benefit-amount">0</span></td>
+                </tr>
             </tbody>
         </table>
-        <hr class="my-2">
-        {% if option.type_key == 'easy_start_100' %}
-            <div class="text-center">
-                <span class="fs-6 text-muted">{{ _('3 равных платежа в течение 3 месяцев') }}</span>
-                <div class="price-final mt-1" data-original-final-price="{{ option.final_price }}">{{ "{:,.0f}".format(option.final_price / 3) }} UZS / {{ _('мес.') }}</div>
-                <small class="text-muted">{{ _('Общая сумма:') }} <span class="total-sum">{{ "{:,.0f}".format(option.final_price) }}</span> UZS</small>
+
+        {% if option.manual_discount_limits %}
+        <div class="manual-discounts border rounded p-2 mb-2">
+            <div class="small text-muted mb-2"><i class="bi bi-percent me-1"></i>{# '%%' — gettext прогоняет строку через %-форматирование, одиночный '%' роняет шаблон. #}
+            {{ _('Скидка менеджера, %% (в пределах максимума)') }}</div>
+            <div class="row g-2">
+                {% for limit in option.manual_discount_limits %}
+                <div class="col-6">
+                    <label class="form-label small mb-1" for="{{ option.type_key }}-{{ limit.code }}">
+                        {{ _(limit.name) }} <span class="text-muted">{{ _('до') }} {{ "%.1f"|format(limit.max_percent) }}%</span>
+                    </label>
+                    <input type="number" class="form-control form-control-sm manual-discount-input"
+                           id="{{ option.type_key }}-{{ limit.code }}"
+                           data-discount-code="{{ limit.code }}"
+                           min="0" max="{{ limit.max_percent }}" step="0.1" value="0"
+                           placeholder="0">
+                </div>
+                {% endfor %}
             </div>
-        {% elif 'easy_start_mortgage' in option.type_key %}
-            <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="fs-6">{{ _('Первый взнос (3 платежа):') }}</span>
-                <span class="price-initial" data-original-initial-payment="{{ option.initial_payment }}">{{ "{:,.0f}".format(option.initial_payment / 3) }} UZS / {{ _('мес.') }}</span>
-            </div>
-            <div class="d-flex justify-content-between align-items-center">
-                <span class="fw-bold fs-5">{{ _('Итоговая сумма договора:') }}</span>
-                <span class="price-final" data-original-final-price="{{ option.final_price }}">{{ "{:,.0f}".format(option.final_price) }} UZS</span>
-            </div>
-        {% else %}
-            <div class="d-flex justify-content-between align-items-center">
-                <span class="fw-bold fs-5">{{ _('Итого:') }}</span>
-                <span class="price-final" data-original-final-price="{{ option.final_price }}">{{ "{:,.0f}".format(option.final_price) }} UZS</span>
-            </div>
-            {% if option.initial_payment is not none %}<div class="d-flex justify-content-between align-items-center mt-2 text-primary">
-                <span class="fs-6">{{ _('Первый взнос:') }}</span>
-                <span class="price-initial" data-original-initial-payment="{{ option.initial_payment }}">{{ "{:,.0f}".format(option.initial_payment) }} UZS</span>
-            </div>{% endif %}
+        </div>
         {% endif %}
 
-        <div class="dropdown mt-3">
-            <button class="btn btn-outline-info btn-sm dropdown-toggle w-100 btn-additional-discounts-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-percent me-1"></i> {{ _('Применить доп. скидки') }}</button>
-            <ul class="dropdown-menu">
-                {% set complex_name_for_filter = data.apartment.house.complex_name if data.apartment and data.apartment.house else '' %}
-                {% set base_payment_method = '100% оплата' if '100' in option.type_key or 'full_payment' in option.type_key else 'Ипотека' %}
-                {% set current_discount_object = all_discounts_for_property_type | selectattr('complex_name', 'eq', complex_name_for_filter) | selectattr('payment_method', 'eq', base_payment_method) | first %}
-                {% if current_discount_object %}
-                    {# --- ИЗМЕНЕНИЕ 2: Перевод названий скидок (КД, ОПТ и т.д.) --- #}
-                    {% for field_name, display_name in [('kd', 'КД'), ('opt', 'ОПТ'), ('gd', 'ГД'), ('holding', 'Холдинг'), ('shareholder', 'Акционер'), ('action', 'Акция')] %}
-                        {% if not (field_name == 'kd' and 'easy_start' in option.type_key) %}
-                            {% if current_discount_object[field_name] is defined and current_discount_object[field_name] > 0 %}
-                            <li><a class="dropdown-item additional-discount-item" href="#" data-discount-type="{{ field_name }}" data-max-percent="{{ "%.1f"|format(current_discount_object[field_name] * 100) }}">{{ _(display_name) }} ({{ _('макс.') }} {{ "%.1f"|format(current_discount_object[field_name] * 100) }}%)</a></li>
-                            {% endif %}
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                    <li><span class="dropdown-item-text text-muted p-3">{{ _('Доп. скидок не найдено.') }}</span></li>
-                {% endif %}
-            </ul>
+        <hr class="my-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold fs-5">{{ _('Итого:') }}</span>
+            <span class="price-final">{{ "{:,.0f}".format(option.final_price) }} UZS</span>
         </div>
-        <div class="alert alert-danger mt-2 d-none discount-error-alert" role="alert">{{ _('Применить скидку невозможно. Превышен лимит!') }}</div>
+        {% if option.initial_payment is not none %}
+        <div class="d-flex justify-content-between align-items-center mt-2 text-primary">
+            <span class="fs-6">{{ _('Первый взнос:') }}</span>
+            <span class="price-initial">{{ "{:,.0f}".format(option.initial_payment) }} UZS</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center text-muted small">
+            <span>{{ _('Тело кредита:') }}</span>
+            <span>{{ "{:,.0f}".format(option.mortgage_body) }} UZS</span>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endmacro %}
@@ -104,8 +93,8 @@
     <h1 class="gradient-heading">{{ _('Карточка объекта') }} </h1>
     <div class="d-flex gap-2">
         <a href="{{ url_for('main.selection') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> {{ _('Назад к подбору') }}</a>
-        <button id="printKpBtn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#printChoiceModal">
-            <i class="bi bi-printer me-1"></i> {{ _('Распечатать КП') }}
+        <button id="openKpBtn" class="btn btn-primary">
+            <i class="bi bi-file-earmark-text me-1"></i> {{ _('Сформировать КП') }}
         </button>
     </div>
 </div>
@@ -125,6 +114,22 @@
                 <li class="list-group-item-custom d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-tag me-2"></i>{{ _('Базовая цена') }}</span><strong>{{ "{:,.0f}".format(data.apartment.estate_price) if data.apartment and data.apartment.estate_price is not none else 'N/A' }} UZS</strong></li>
             </ul>
 
+            {% if flat_plans and flat_plans.files %}
+            <div class="flat-plan mt-4">
+                <h6 class="text-muted text-uppercase small fw-bold mb-2">
+                    <i class="bi bi-rulers me-1"></i>{{ _('Планировка') }}
+                    {% if flat_plans.plan_name %}<span class="text-body">— {{ flat_plans.plan_name }}</span>{% endif %}
+                </h6>
+                {% for file in flat_plans.files %}
+                <a href="{{ url_for('plans.plan_image', sell_id=data.apartment.id, index=loop.index0) }}"
+                   target="_blank" rel="noopener" title="{{ file.title }}">
+                    <img src="{{ url_for('plans.plan_image', sell_id=data.apartment.id, index=loop.index0) }}"
+                         alt="{{ file.title }}" class="img-fluid rounded border mb-2" loading="lazy">
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <div class="d-grid mt-4">
                 <a href="{{ url_for('complex_calc.show_page', sell_id=data.apartment.id) }}" class="btn btn-outline-warning btn-lg">
                     <i class="bi bi-calculator-fill me-2"></i>
@@ -140,63 +145,15 @@
             {% if data.pricing %}
                 <div id="main-payment-options" class="d-flex flex-column gap-4">
                 {% for option in data.pricing %}
-                    {% if 'easy_start' not in option.type_key %}
-                        {% set card_class = 'full-payment' if option.type_key == 'full_payment' else 'mortgage' %}
-                        {{ render_payment_card(option, card_class) }}
-                    {% endif %}
+                    {% set card_class = 'full-payment' if option.type_key == 'full_payment' else 'mortgage' %}
+                    {{ render_payment_card(option, card_class) }}
                 {% endfor %}
-                </div>
-                <div class="text-center mt-4">
-                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#easyStartModal"><i class="bi bi-calculator-fill me-1"></i> {{ _('Рассчитать «Легкий старт»') }}</button>
                 </div>
             {% else %}
                 <div class="alert alert-warning">{{ _('Не удалось рассчитать варианты оплаты.') }}</div>
             {% endif %}
         </div>
     </div>
-</div>
-
-<div class="modal fade" id="easyStartModal" tabindex="-1" aria-labelledby="easyStartModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title" id="easyStartModalLabel">{{ _('Калькулятор «Легкий старт»') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-      <div class="modal-body">
-        <p class="text-muted">{{ _('Это специальные условия, на которые не распространяется скидка "КД".') }}</p>
-        <div class="row">
-        {% for option in data.pricing %}
-            {% if 'easy_start' in option.type_key %}
-            <div class="col-lg-6">
-                {% set card_class = 'easy-start-100' if option.type_key == 'easy_start_100' else 'easy-start-mortgage' %}
-                {{ render_payment_card(option, card_class) }}
-            </div>
-            {% endif %}
-        {% endfor %}
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="printChoiceModal" tabindex="-1" aria-labelledby="printChoiceModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="printChoiceModalLabel">{{ _('Выберите вариант для коммерческого предложения') }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted">{{ _('Выберите, какой тип ипотеки включить в печатную версию коммерческого предложения.') }}</p>
-        <div class="d-grid gap-2">
-            <button type="button" class="btn btn-primary print-variant-btn" data-mortgage-type="standard">
-                {{ _('100%% оплата + Стандартная ипотека') }}
-            </button>
-            <button type="button" class="btn btn-info print-variant-btn" data-mortgage-type="extended">
-                {{ _('100%% оплата + Расширенная ипотека') }}
-            </button>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}
 
@@ -206,14 +163,9 @@
     {# "Мостик" для передачи данных из Jinja2 в JavaScript #}
     <script>
         const cardData = {
-            // ИСПРАВЛЕНИЕ: Добавьте эту строку, чтобы передать данные об объекте в JS
             apartment: {{ data.apartment|tojson|safe if data and data.apartment else '{}' }},
             pricing: {{ data.pricing|tojson|safe if data and data.pricing else '[]' }},
-            all_discounts_for_property_type: {{ all_discounts_for_property_type|tojson|safe if all_discounts_for_property_type else '[]' }},
-            i18n: {
-                applyDiscounts: "{{ _('Применить доп. скидки') }}",
-                appliedDiscounts: "{{ _('Доп. скидки') }}"
-            }
+            mortgageTerms: {{ data.mortgage_terms|tojson|safe if data and data.mortgage_terms else '{}' }}
         };
     </script>
     <script src="{{ url_for('static', filename='js/apartment_card_java.js') }}" defer></script>
