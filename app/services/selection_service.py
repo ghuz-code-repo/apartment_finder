@@ -113,18 +113,20 @@ def find_apartments_by_budget(budget: float, currency: str, property_type_str: s
             elif payment_method_enum == planning_models.PaymentMethod.MORTGAGE:
                 total_discount_rate = (discount.mpp or 0) + (discount.rop or 0) + (discount.action or 0)
                 price_after_discounts = price_after_deduction * (1 - total_discount_rate)
-                # --- ИЗМЕНЕНИЕ: Проверяем оба типа ипотеки ---
+                # Первый взнос — минимум процент от стоимости сделки, а всё,
+                # что не влезло в лимит банка, добирается взносом. Та же
+                # формула, что в pricing_service для карточки объекта.
                 # Стандартная
-                initial_payment_std = price_after_discounts - MAX_MORTGAGE_STANDARD
-                min_required_std = price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_STANDARD
-                if initial_payment_std >= min_required_std and budget_uzs >= initial_payment_std:
+                initial_payment_std = max(price_after_discounts - MAX_MORTGAGE_STANDARD,
+                                          price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_STANDARD)
+                if budget_uzs >= initial_payment_std:
                     is_match = True
                     apartment_details = {"final_price": price_after_discounts, "initial_payment": initial_payment_std, "mortgage_type": "Стандартная"}
 
                 # Расширенная
-                initial_payment_ext = price_after_discounts - MAX_MORTGAGE_EXTENDED
-                min_required_ext = price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_EXTENDED
-                if initial_payment_ext >= min_required_ext and budget_uzs >= initial_payment_ext:
+                initial_payment_ext = max(price_after_discounts - MAX_MORTGAGE_EXTENDED,
+                                          price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_EXTENDED)
+                if budget_uzs >= initial_payment_ext:
                     is_match = True
                     # Если подходит и стандартная, и расширенная, сохраняем оба варианта
                     if "mortgage_type" in apartment_details:

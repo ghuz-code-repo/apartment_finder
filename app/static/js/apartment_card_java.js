@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const mortgageTerms = cardData.mortgageTerms || {};
-    const MORTGAGE_BODY = mortgageTerms.body || 0;
+    const MAX_MORTGAGE_BODY = mortgageTerms.body || 0;
     const MIN_INITIAL_PAYMENT_PERCENT = mortgageTerms.min_initial_payment_percent || 0;
 
     // {type_key: {код скидки: процент}} — то, что менеджер выставил руками.
@@ -67,18 +67,24 @@ document.addEventListener('DOMContentLoaded', function () {
         card.querySelector('.benefit-amount').textContent = '- ' + formatCurrency(discountAmount);
 
         const initialPaymentEl = card.querySelector('.price-initial');
-        let finalPrice = priceAfterDiscounts;
-
         if (initialPaymentEl) {
+            // Первый взнос — минимум 15% от стоимости сделки; всё сверх лимита
+            // банка тоже ложится на взнос. Остаток и есть тело кредита.
             const initialPayment = Math.max(
-                priceAfterDiscounts - MORTGAGE_BODY,
+                priceAfterDiscounts - MAX_MORTGAGE_BODY,
                 priceAfterDiscounts * MIN_INITIAL_PAYMENT_PERCENT
             );
-            finalPrice = initialPayment + MORTGAGE_BODY;
             initialPaymentEl.textContent = formatCurrency(initialPayment) + ' UZS';
+
+            const mortgageBodyEl = card.querySelector('.mortgage-body');
+            if (mortgageBodyEl) {
+                mortgageBodyEl.textContent =
+                    formatCurrency(priceAfterDiscounts - initialPayment) + ' UZS';
+            }
         }
 
-        card.querySelector('.price-final').textContent = formatCurrency(finalPrice) + ' UZS';
+        card.querySelector('.price-final').textContent =
+            formatCurrency(priceAfterDiscounts) + ' UZS';
     }
 
     const cards = document.querySelectorAll('.payment-option-card');

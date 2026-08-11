@@ -93,7 +93,8 @@ def _new_option(type_key, title, base_price, price_after_deduction, discount_row
             for code, name in MANUAL_DISCOUNT_FIELDS
             if _as_percent(discount_row.get(code)) > 0
         ],
-        'mortgage_body': MAX_MORTGAGE_STANDARD if type_key == MORTGAGE_KEY else None,
+        # Тело кредита зависит от цены после скидок и считается в recalculate.
+        'mortgage_body': None,
     }
     return recalculate(option, {})
 
@@ -131,13 +132,18 @@ def recalculate(option, manual_percents):
     option['price_after_discounts'] = price_after_discounts
 
     if option['type_key'] == MORTGAGE_KEY:
-        # Первый взнос — либо остаток сверх тела кредита, либо минимальные 15%.
+        # Первый взнос — минимум 15% от стоимости сделки, остальное берёт на
+        # себя банк, но не больше MAX_MORTGAGE_STANDARD. Если 85% цены выходят
+        # за лимит, разницу добирает первый взнос.
         initial_payment = max(price_after_discounts - MAX_MORTGAGE_STANDARD,
                               price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_STANDARD)
         option['initial_payment'] = initial_payment
-        option['final_price'] = initial_payment + MAX_MORTGAGE_STANDARD
+        option['mortgage_body'] = price_after_discounts - initial_payment
+        # Сумма договора — это цена сделки: взнос и тело кредита её делят.
+        option['final_price'] = price_after_discounts
     else:
         option['initial_payment'] = None
+        option['mortgage_body'] = None
         option['final_price'] = price_after_discounts
 
     return option
