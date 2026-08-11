@@ -184,25 +184,9 @@
                             </div>
 
                             <label class="form-label small fw-bold">{{ _('Регионы') }}</label>
-                            <div id="regionBox" class="card border-dashed p-2 mb-3 d-none">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <div class="fw-bold small" id="regionTitle">—</div>
-                                        <div class="small text-muted" id="regionSize">—</div>
-                                    </div>
-                                    <i class="bi bi-map fs-5 text-golden"></i>
-                                </div>
-                                <div class="cache-meter my-2">
-                                    <div id="regionBar" class="bg-warning h-100" style="width: 0%"></div>
-                                </div>
-                                <button id="regionDownloadBtn" class="btn btn-sm btn-golden" type="button">
-                                    <i class="bi bi-cloud-arrow-down"></i> {{ _('Загрузить регион') }}
-                                </button>
-                                <button id="regionDeleteBtn" class="btn btn-sm btn-outline-secondary mt-1 d-none" type="button">
-                                    <i class="bi bi-trash"></i> {{ _('Удалить регион') }}
-                                </button>
-                                <div class="small text-muted mt-1" id="regionNote"></div>
-                            </div>
+                            {# Карточки строит скрипт по ответу /tiles/regions:
+                               у каждой свой прогресс и своё состояние. #}
+                            <div id="regionList" class="mb-3"></div>
 
                             <div class="d-grid gap-2">
                                 <button id="offlineSaveBtn" class="btn btn-sm btn-outline-secondary" type="button">
@@ -253,6 +237,7 @@
         'bundleStart': _('Загрузка одним пакетом...'),
         'bundleFallback': _('Пакет недоступен, загружаем поштучно'),
         'fetchingRest': _('Догружаем остаток'),
+        'slowPhase': _('сервер их ещё не прогрел, идёт медленно'),
         'regionMeasured': _('Вес посчитан по фактическому размеру плиток'),
         'regionEstimated': _('Вес оценочный: сервер ещё не прогрет'),
         'regionReady': _('Загружен'),
@@ -261,6 +246,8 @@
         'regionResume': _('Догрузить регион'),
         'regionRefresh': _('Обновить регион'),
         'confirmRegionDelete': _('Удалить сохранённый регион?'),
+        'regionDelete': _('Удалить регион'),
+        'regionGoto': _('Перейти к региону'),
         'confirmClear': _('Удалить сохранённые плитки карты?'),
         'approxSize': _('Примерный объём'),
         'saveDone': _('Готово'),

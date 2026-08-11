@@ -132,22 +132,48 @@ async function prefetch(msg, port) {
     const config = await readConfig();
     let done = 0, stored = 0, cached = 0, failed = 0, stopped = false;
 
+    // Что уже лежит в кэше, узнаём одним запросом ключей. Отдельный
+    // cache.match на каждый адрес превращался в десятки тысяч обращений
+    // к хранилищу и съедал больше времени, чем сама загрузка.
+    const existing = new Set((await cache.keys()).map(request => request.url));
+    const has = url => existing.has(new URL(url, self.location.origin).href);
+
+    // navigator.storage.estimate() обходит хранилище и дорожает по мере его
+    // роста. Раньше он вызывался перед каждой плиткой и к середине большого
+    // региона практически останавливал загрузку. Теперь — раз в сотню штук.
+    const LIMIT_CHECK_EVERY = 100;
+    let sinceLimitCheck = 0;
+    let lastUsed = await usedBytes();
+
+    async function overLimit() {
+        if (lastUsed === null) return false;
+        if (++sinceLimitCheck >= LIMIT_CHECK_EVERY) {
+            sinceLimitCheck = 0;
+            lastUsed = await usedBytes();
+        } else {
+            // Между замерами ведём приблизительный счёт, чтобы не проскочить
+            // лимит далеко за границу.
+            lastUsed += 25 * 1024;
+        }
+        return lastUsed >= config.maxBytes;
+    }
+
     async function worker() {
         while (!stopped) {
             const url = urls.shift();
             if (url === undefined) return;
             try {
-                if (await cache.match(url)) {
+                if (has(url)) {
                     cached++;
                 } else {
-                    const used = await usedBytes();
-                    if (used !== null && used >= config.maxBytes) {
+                    if (await overLimit()) {
                         stopped = true;   // упёрлись в лимит, дальше не тянем
                         return;
                     }
                     const res = await fetch(url, { credentials: 'same-origin' });
                     if (isCacheable(res)) {
                         await cache.put(url, res.clone());
+                        existing.add(new URL(url, self.location.origin).href);
                         stored++;
                     } else {
                         failed++;

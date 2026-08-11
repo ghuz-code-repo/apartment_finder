@@ -320,10 +320,22 @@ DEFAULT_BBOX = (41.16, 69.05, 41.45, 69.45)
 REGIONS = {
     'tashkent': {
         'title': 'Ташкент и область',
+        'center': (41.31, 69.24),
+        'zoom': 11,
         'layers': [
             {'bbox': (40.50, 68.20, 41.75, 70.30), 'min_zoom': 8,  'max_zoom': 13},
             {'bbox': (40.95, 68.75, 41.65, 69.90), 'min_zoom': 14, 'max_zoom': 15},
             {'bbox': (41.16, 69.05, 41.45, 69.45), 'min_zoom': 16, 'max_zoom': 17},
+        ],
+    },
+    'moscow': {
+        'title': 'Москва и область',
+        'center': (55.75, 37.62),
+        'zoom': 10,
+        'layers': [
+            {'bbox': (54.20, 35.10, 56.95, 40.20), 'min_zoom': 8,  'max_zoom': 12},
+            {'bbox': (55.20, 36.60, 56.20, 38.40), 'min_zoom': 13, 'max_zoom': 15},
+            {'bbox': (55.55, 37.35, 55.92, 37.85), 'min_zoom': 16, 'max_zoom': 17},
         ],
     },
 }
@@ -379,6 +391,8 @@ def regions():
         payload.append({
             'id': region_id,
             'title': region['title'],
+            'center': list(region['center']),
+            'zoom': region['zoom'],
             'tiles': tiles,
             'bytes': int(tiles * avg),
             'avgTileBytes': int(avg),

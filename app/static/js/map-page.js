@@ -427,11 +427,6 @@
         const saveBtn = $('offlineSaveBtn');
         if (saveBtn) saveBtn.addEventListener('click', onSave);
 
-        const regionBtn = $('regionDownloadBtn');
-        if (regionBtn) regionBtn.addEventListener('click', onRegionDownload);
-        const regionDel = $('regionDeleteBtn');
-        if (regionDel) regionDel.addEventListener('click', onRegionDelete);
-
         const openFolderBtn = $('openFolderBtn');
         if (openFolderBtn) {
             const path = guessCachePath();
@@ -458,7 +453,8 @@
     async function download(urls, confirmText) {
         if (!confirm(confirmText)) return;
 
-        const buttons = [$('offlineSaveBtn'), $('regionDownloadBtn')].filter(Boolean);
+        // Кнопки регионов живут в своих карточках и блокируются отдельно.
+        const buttons = [$('offlineSaveBtn')].filter(Boolean);
         buttons.forEach(b => { b.disabled = true; });
         const box = $('offlineProgress');
         const bar = box.querySelector('.progress-bar');
@@ -523,70 +519,135 @@
                  bytes: Math.round(have * (region.avgTileBytes || 25600)) };
     }
 
+    let regions = [];
+    const cards = new Map();        // id региона -> его элементы
+
     async function loadRegions() {
         const style = isDark ? 'dark' : 'light';
         const res = await fetch(CFG.prefix + '/tiles/regions?style=' + style,
                                 { credentials: 'same-origin' });
         const data = await res.json();
-        currentRegion = (data.regions || [])[0] || null;
-        renderRegion();
+        regions = data.regions || [];
+        buildRegionCards();
+        for (const region of regions) await refreshRegionCard(region);
     }
 
-    async function renderRegion() {
-        const box = $('regionBox');
-        if (!box || !currentRegion) return;
-        box.classList.remove('d-none');
-        $('regionTitle').textContent = currentRegion.title;
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
 
-        let state = { have: 0, total: currentRegion.tiles, bytes: 0 };
-        try { state = await regionState(currentRegion); } catch (e) { /* кэша ещё нет */ }
+    function iconButton(className, icon, label) {
+        const btn = el('button', className);
+        btn.type = 'button';
+        btn.innerHTML = '<i class="bi ' + icon + '"></i> ';
+        btn.appendChild(document.createTextNode(label));
+        return btn;
+    }
+
+    function buildRegionCards() {
+        const list = $('regionList');
+        if (!list) return;
+        list.innerHTML = '';
+        cards.clear();
+
+        regions.forEach(region => {
+            const card = el('div', 'card border-dashed p-2 mb-2');
+
+            const head = el('div', 'd-flex justify-content-between align-items-start');
+            const titleBox = el('div');
+            // Название приходит с сервера — вставляем текстом, не разметкой.
+            titleBox.appendChild(el('div', 'fw-bold small', region.title));
+            const size = el('div', 'small text-muted', '—');
+            titleBox.appendChild(size);
+            head.appendChild(titleBox);
+            head.appendChild(el('i', 'bi bi-map fs-5 text-golden'));
+            card.appendChild(head);
+
+            const meter = el('div', 'cache-meter my-2');
+            const bar = el('div', 'bg-warning h-100');
+            bar.style.width = '0%';
+            meter.appendChild(bar);
+            card.appendChild(meter);
+
+            // Прогресс показывается здесь же, у своего региона: общий бар внизу
+            // не давал понять, что именно грузится.
+            const status = el('div', 'small text-muted mb-1');
+            status.hidden = true;
+            card.appendChild(status);
+
+            const actions = el('div', 'd-grid gap-1');
+            const download = iconButton('btn btn-sm btn-golden', 'bi-cloud-arrow-down',
+                                        T.regionDownload || 'Загрузить регион');
+            const goto = iconButton('btn btn-sm btn-outline-secondary', 'bi-geo-alt',
+                                    T.regionGoto || 'Перейти к региону');
+            const remove = iconButton('btn btn-sm btn-outline-secondary', 'bi-trash',
+                                      T.regionDelete || 'Удалить регион');
+            remove.classList.add('d-none');
+            actions.appendChild(download);
+            actions.appendChild(goto);
+            actions.appendChild(remove);
+            card.appendChild(actions);
+
+            card.appendChild(el('div', 'small text-muted mt-1',
+                region.measured
+                    ? (T.regionMeasured || 'Вес посчитан по фактическому размеру плиток')
+                    : (T.regionEstimated || 'Вес оценочный: сервер ещё не прогрет')));
+
+            download.addEventListener('click', () => onRegionDownload(region));
+            remove.addEventListener('click', () => onRegionDelete(region));
+            goto.addEventListener('click', () => {
+                map.setView(region.center, region.zoom);
+                bootstrap.Offcanvas.getInstance($('settingsPanel')) &&
+                    bootstrap.Offcanvas.getInstance($('settingsPanel')).hide();
+            });
+
+            list.appendChild(card);
+            cards.set(region.id, { card, size, bar, status, download, remove });
+        });
+    }
+
+    async function refreshRegionCard(region) {
+        const ui = cards.get(region.id);
+        if (!ui) return;
+
+        let state = { have: 0, total: region.tiles, bytes: 0 };
+        try { state = await regionState(region); } catch (e) { /* кэша ещё нет */ }
 
         const pct = state.total ? Math.round(state.have / state.total * 100) : 0;
         const complete = state.have >= state.total && state.total > 0;
 
-        $('regionSize').textContent = complete
+        ui.size.textContent = complete
             ? (T.regionReady || 'Загружен') + ' · ' + fmtBytes(state.bytes)
             : (state.have
                 ? (T.regionPartial || 'Загружен частично') + ': ' + pct + '% · ' +
                   fmtBytes(state.bytes)
-                : fmtBytes(currentRegion.bytes) + ' · ' +
-                  currentRegion.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток'));
+                : fmtBytes(region.bytes) + ' · ' +
+                  region.tiles.toLocaleString() + ' ' + (T.tiles || 'плиток'));
 
-        const bar = $('regionBar');
-        if (bar) {
-            bar.style.width = pct + '%';
-            bar.classList.toggle('bg-success', complete);
-        }
+        ui.bar.style.width = pct + '%';
+        ui.bar.classList.toggle('bg-success', complete);
+        ui.bar.classList.toggle('bg-warning', !complete);
 
-        const btn = $('regionDownloadBtn');
-        if (btn) {
-            btn.innerHTML = complete
-                ? '<i class="bi bi-arrow-repeat"></i> ' + (T.regionRefresh || 'Обновить регион')
-                : (state.have
-                    ? '<i class="bi bi-cloud-arrow-down"></i> ' + (T.regionResume || 'Догрузить регион')
-                    : '<i class="bi bi-cloud-arrow-down"></i> ' + (T.regionDownload || 'Загрузить регион'));
-        }
-        const delBtn = $('regionDeleteBtn');
-        if (delBtn) delBtn.classList.toggle('d-none', state.have === 0);
-
-        const note = $('regionNote');
-        if (note) {
-            note.textContent = currentRegion.measured
-                ? (T.regionMeasured || 'Вес посчитан по фактическому размеру плиток')
-                : (T.regionEstimated || 'Вес оценочный: сервер ещё не прогрет');
-        }
+        ui.download.innerHTML = '<i class="bi ' +
+            (complete ? 'bi-arrow-repeat' : 'bi-cloud-arrow-down') + '"></i> ';
+        ui.download.appendChild(document.createTextNode(
+            complete ? (T.regionRefresh || 'Обновить регион')
+                     : (state.have ? (T.regionResume || 'Догрузить регион')
+                                   : (T.regionDownload || 'Загрузить регион'))));
+        ui.remove.classList.toggle('d-none', state.have === 0);
     }
 
-    async function onRegionDelete() {
-        if (!currentRegion) return;
+    async function onRegionDelete(region) {
         if (!confirm(T.confirmRegionDelete || 'Удалить сохранённый регион?')) return;
         const cache = await caches.open(CACHE_NAME);
-        const urls = regionUrls(currentRegion);
         const existing = await cachedUrlSet(cache);
-        for (const url of urls) {
+        for (const url of regionUrls(region)) {
             if (existing.has(absolute(url))) await cache.delete(url);
         }
-        await renderRegion();
+        await refreshRegionCard(region);
         refreshStats();
     }
 
@@ -639,7 +700,19 @@
     async function unpackBundle(response, cache, onProgress) {
         const stream = byteStream(response.body.getReader());
         const decoder = new TextDecoder();
+        // Запись в кэш пачками: по одной записи за раз хранилище ждёт
+        // подтверждения каждой операции, и на десятках тысяч плиток это
+        // становится основным расходом времени.
+        const BATCH = 64;
+        let batch = [];
         let stored = 0;
+
+        async function flush() {
+            if (!batch.length) return;
+            const current = batch;
+            batch = [];
+            await Promise.all(current.map(item => cache.put(item.url, item.response)));
+        }
 
         for (;;) {
             const header = await stream.read(512);
@@ -659,73 +732,99 @@
             const url = CFG.tileUrlTemplate
                 .replace('__STYLE__', m[1])
                 .replace('{z}', m[2]).replace('{x}', m[3]).replace('{y}', m[4]);
-            await cache.put(url, new Response(body, {
-                headers: {
-                    'Content-Type': 'image/png',
-                    'Cache-Control': 'public, max-age=15552000'
-                }
-            }));
+            batch.push({
+                url: url,
+                response: new Response(body, {
+                    headers: {
+                        'Content-Type': 'image/png',
+                        'Cache-Control': 'public, max-age=15552000'
+                    }
+                })
+            });
             stored++;
-            if (stored % 200 === 0) onProgress(stored, stream.consumed);
+            if (batch.length >= BATCH) {
+                await flush();
+                onProgress(stored, stream.consumed);
+            }
         }
+        await flush();
         return stored;
     }
 
-    async function onRegionDownload() {
-        if (!currentRegion) return;
+    async function onRegionDownload(region) {
+        const ui = cards.get(region.id);
+        if (!ui) return;
         const ok = confirm(
             (T.confirmRegion || 'Загрузить регион целиком?') + '\n\n' +
-            currentRegion.title + '\n' +
-            (T.tiles || 'Плиток') + ': ' + currentRegion.tiles.toLocaleString() + '\n' +
-            (T.approxSize || 'Примерный объём') + ': ' + fmtBytes(currentRegion.bytes));
+            region.title + '\n' +
+            (T.tiles || 'Плиток') + ': ' + region.tiles.toLocaleString() + '\n' +
+            (T.approxSize || 'Примерный объём') + ': ' + fmtBytes(region.bytes));
         if (!ok) return;
 
-        const btn = $('regionDownloadBtn');
-        const box = $('offlineProgress');
-        const bar = box.querySelector('.progress-bar');
-        btn.disabled = true;
-        box.classList.remove('d-none');
-        bar.style.width = '0%';
-        $('offlineStatus').textContent = T.bundleStart || 'Загрузка одним пакетом...';
+        const say = text => { ui.status.hidden = false; ui.status.textContent = text; };
+        const progress = pct => { ui.bar.style.width = pct + '%'; };
+
+        ui.download.disabled = true;
+        ui.bar.classList.remove('bg-success');
+        ui.bar.classList.add('bg-warning');
+        progress(0);
+        say(T.bundleStart || 'Загрузка одним пакетом...');
 
         const style = isDark ? 'dark' : 'light';
         try {
             const res = await fetch(
-                CFG.prefix + '/tiles/region/' + currentRegion.id + '/bundle?style=' + style,
+                CFG.prefix + '/tiles/region/' + region.id + '/bundle?style=' + style,
                 { credentials: 'same-origin' });
             if (!res.ok || !res.body) throw new Error('bundle unavailable');
 
             const cache = await caches.open(CACHE_NAME);
             const stored = await unpackBundle(res, cache, (n, bytes) => {
-                const pct = Math.min(100, Math.round(n / currentRegion.tiles * 100));
-                bar.style.width = pct + '%';
-                $('offlineStatus').textContent = n.toLocaleString() + ' / ' +
-                    currentRegion.tiles.toLocaleString() + ' · ' + fmtBytes(bytes);
+                progress(Math.min(100, Math.round(n / region.tiles * 100)));
+                say(n.toLocaleString() + ' / ' + region.tiles.toLocaleString() +
+                    ' · ' + fmtBytes(bytes));
             });
 
             // В пакет попадает только то, что уже лежит в кэше сервера.
             // Остальное дотягиваем поштучно — так регион полон в любом случае.
             const existing = await cachedUrlSet(cache);
-            const missing = missingFrom(regionUrls(currentRegion), existing);
+            const missing = missingFrom(regionUrls(region), existing);
             if (missing.length) {
-                $('offlineStatus').textContent = (T.fetchingRest || 'Догружаем остаток') +
-                    ': ' + missing.length.toLocaleString();
+                // Этого нет в кэше сервера, значит каждая плитка идёт во
+                // внешний источник с паузами — фаза заметно медленнее пакета.
+                say((T.fetchingRest || 'Догружаем остаток') + ': ' +
+                    missing.length.toLocaleString() + ' — ' +
+                    (T.slowPhase || 'сервер их ещё не прогрел, идёт медленно'));
                 await sendWithProgress('PREFETCH_TILES',
                     { urls: missing, total: missing.length, concurrency: 6 },
-                    d => { bar.style.width = Math.round(d.done / d.total * 100) + '%'; });
+                    d => {
+                        progress(Math.round(d.done / d.total * 100));
+                        say((T.fetchingRest || 'Догружаем остаток') + ': ' +
+                            d.done.toLocaleString() + ' / ' + d.total.toLocaleString());
+                    });
             }
-            $('offlineStatus').textContent = (T.saveDone || 'Готово') +
-                ': ' + (stored + missing.length).toLocaleString();
+            say((T.saveDone || 'Готово') + ': ' +
+                (stored + missing.length).toLocaleString());
         } catch (e) {
             // Пакетная отдача недоступна — возвращаемся к поштучной загрузке.
-            $('offlineStatus').textContent = T.bundleFallback ||
-                'Пакет недоступен, загружаем поштучно';
-            await download(regionUrls(currentRegion), (T.confirmRegion || 'Загрузить регион?'));
+            say(T.bundleFallback || 'Пакет недоступен, загружаем поштучно');
+            const existing = await cachedUrlSet(await caches.open(CACHE_NAME));
+            const missing = missingFrom(regionUrls(region), existing);
+            try {
+                await sendWithProgress('PREFETCH_TILES',
+                    { urls: missing, total: missing.length, concurrency: 6 },
+                    d => {
+                        progress(Math.round(d.done / d.total * 100));
+                        say(d.done.toLocaleString() + ' / ' + d.total.toLocaleString());
+                    });
+                say(T.saveDone || 'Готово');
+            } catch (err) {
+                say(T.workerInactive || 'Воркер ещё не активен, обновите страницу');
+            }
         } finally {
-            btn.disabled = false;
-            box.classList.add('d-none');
-            await renderRegion();
+            ui.download.disabled = false;
+            await refreshRegionCard(region);
             refreshStats();
+            setTimeout(() => { ui.status.hidden = true; }, 4000);
         }
     }
 
