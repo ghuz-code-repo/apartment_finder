@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..core.db_utils import get_planning_session
 from ..models.planning_models import FlatPlanCache
@@ -18,6 +19,8 @@ from . import macro_api_service
 from .macro_api_service import MacroApiError
 
 logger = logging.getLogger(__name__)
+
+EMPTY_RESULT = {'plan_name': None, 'files': [], 'error': None}
 
 # Планировки меняются крайне редко — держим долго.
 CACHE_TTL = timedelta(days=7)
@@ -83,30 +86,44 @@ def get_flat_plans(estate_id, force_refresh=False):
     недоступности чужого сервиса.
     """
     estate_id = int(estate_id)
-    session = get_planning_session()
 
-    entry = session.get(FlatPlanCache, estate_id)
+    if not macro_api_service.is_configured():
+        # Интеграция не настроена — отдаём пустой результат, не трогая БД:
+        # карточка объекта не должна зависеть от таблицы кэша, пока Macro
+        # вообще не подключён.
+        return EMPTY_RESULT
+
+    session = get_planning_session()
+    try:
+        entry = session.get(FlatPlanCache, estate_id)
+    except SQLAlchemyError as exc:
+        # Таблицы кэша ещё нет (например, между обновлением кода и стартом
+        # приложения) — работаем без неё, страница важнее планировки.
+        logger.warning('[PLANS] Кэш планировок недоступен: %s', exc)
+        session.rollback()
+        return EMPTY_RESULT
+
     if entry is not None and not force_refresh and _is_fresh(entry):
         return _as_result(entry)
 
-    if not macro_api_service.is_configured():
-        # Интеграция не настроена — молча отдаём пустой результат, чтобы блок
-        # планировки просто не отрисовался.
-        return {'plan_name': None, 'files': [], 'error': None}
-
     try:
         data = macro_api_service.get_flat_plans(estate_id)
-        files = _normalize_files(data.get('files'))
-        entry = _store(session, estate_id, data.get('planName'), files, None)
+        plan_name, files, error = data.get('planName'), _normalize_files(data.get('files')), None
     except MacroApiError as exc:
         logger.warning('[PLANS] Планировка %s не получена: %s', estate_id, exc)
-        session.rollback()
         if entry is not None and not entry.error:
             # Протухший, но валидный кэш лучше пустоты.
             return _as_result(entry)
-        entry = _store(session, estate_id, None, [], str(exc))
+        plan_name, files, error = None, [], str(exc)
 
-    return _as_result(entry)
+    result = {'plan_name': plan_name, 'files': files, 'error': error}
+    try:
+        _store(session, estate_id, plan_name, files, error)
+    except SQLAlchemyError as exc:
+        # Не смогли закэшировать — отдаём то, что уже получили от Macro.
+        logger.warning('[PLANS] Кэш планировки %s не сохранён: %s', estate_id, exc)
+        session.rollback()
+    return result
 
 
 def get_file_url(estate_id, index):
