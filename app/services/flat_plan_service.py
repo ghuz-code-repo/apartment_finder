@@ -126,17 +126,24 @@ def get_flat_plans(estate_id, force_refresh=False):
     return result
 
 
-def get_file_url(estate_id, index):
-    """Абсолютный URL файла планировки по его номеру в кэше.
+def forget(estate_id):
+    """Убирает запись из кэша, чтобы следующий запрос сходил в Macro заново.
 
-    Обращение идёт по индексу, а не по URL из запроса: так наш прокси не
-    превращается в открытый ретранслятор чужих адресов.
+    Нужна после починки доступа к Macro: неудача кэшируется на NEGATIVE_TTL,
+    и без сброса планировки не появятся ещё час.
     """
-    result = get_flat_plans(estate_id)
-    files = result.get('files') or []
-    if index < 0 or index >= len(files):
-        return None
-    return absolutize(files[index]['url'])
+    session = get_planning_session()
+    try:
+        entry = session.get(FlatPlanCache, int(estate_id))
+        if entry is None:
+            return False
+        session.delete(entry)
+        session.commit()
+        return True
+    except SQLAlchemyError as exc:
+        logger.warning('[PLANS] Кэш планировки %s не сброшен: %s', estate_id, exc)
+        session.rollback()
+        return False
 
 
 def absolutize(url):

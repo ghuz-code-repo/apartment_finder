@@ -72,6 +72,24 @@ def _meta_path(cache_path):
     return f'{cache_path}.type'
 
 
+def _allowed_hosts():
+    """Хосты, с которых разрешено качать файлы планировок.
+
+    Хост самого API входит сюда всегда: чаще всего Macro отдаёт файлы оттуда же,
+    а MACRO_FILES_BASE_URL нужен только чтобы достроить относительный путь —
+    без этого умолчания абсолютные URL из ответа отвергались бы все до одного.
+    """
+    config = current_app.config
+    allowed = set()
+    for source in (config.get('MACRO_FILES_BASE_URL'), config.get('MACRO_API_URL')):
+        host = urlparse(source or '').hostname
+        if host:
+            allowed.add(host.lower())
+    extra = config.get('MACRO_FILES_ALLOWED_HOSTS') or ''
+    allowed.update(host.strip().lower() for host in extra.split(',') if host.strip())
+    return allowed
+
+
 def _is_host_allowed(url):
     """Скачиваем только с хоста файлового хранилища Macro.
 
@@ -81,12 +99,7 @@ def _is_host_allowed(url):
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https') or not parsed.hostname:
         return False
-    base = current_app.config.get('MACRO_FILES_BASE_URL') or ''
-    allowed = {urlparse(base).hostname} if base else set()
-    extra = current_app.config.get('MACRO_FILES_ALLOWED_HOSTS') or ''
-    allowed.update(host.strip().lower() for host in extra.split(',') if host.strip())
-    allowed.discard(None)
-    return parsed.hostname.lower() in allowed
+    return parsed.hostname.lower() in _allowed_hosts()
 
 
 def _store(cache_path, content, content_type):
@@ -137,11 +150,27 @@ def plan_image(sell_id, index):
     if not _can_view_plans():
         abort(403)
 
-    url = flat_plan_service.get_file_url(sell_id, index)
+    # Разбираем по шагам, а не через get_file_url: у 404 тут пять разных причин,
+    # и без записи в лог их не отличить.
+    plans = flat_plan_service.get_flat_plans(sell_id)
+    files = plans.get('files') or []
+    if not files:
+        logger.warning('[PLANS] У объекта %s нет файлов планировки (ошибка: %s)',
+                       sell_id, plans.get('error') or 'нет, Macro вернул пустой список')
+        abort(404)
+    if index >= len(files):
+        logger.warning('[PLANS] У объекта %s запрошен файл %s, а их всего %s (нумерация с нуля)',
+                       sell_id, index, len(files))
+        abort(404)
+
+    url = flat_plan_service.absolutize(files[index]['url'])
     if not url:
+        logger.warning('[PLANS] Путь %r не достроен до адреса — задайте MACRO_FILES_BASE_URL',
+                       files[index]['url'])
         abort(404)
     if not _is_host_allowed(url):
-        logger.warning('[PLANS] Отклонён внешний адрес планировки: %s', url)
+        logger.warning('[PLANS] Отклонён внешний адрес планировки: %s (разрешены: %s)',
+                       url, ', '.join(sorted(_allowed_hosts())) or 'ни одного')
         abort(404)
 
     cache_path = _cache_path(url)
@@ -197,6 +226,7 @@ def check_command(sell_id):
     click.echo(f'  MACRO_API_TOKEN       = {"задан, " + str(len(token)) + " символов" if token else "(пусто)"}')
     click.echo(f'  MACRO_FILES_BASE_URL  = {config.get("MACRO_FILES_BASE_URL") or "(пусто)"}')
     click.echo(f'  MACRO_API_VERIFY_SSL  = {config.get("MACRO_API_VERIFY_SSL")}')
+    click.echo(f'  разрешённые хосты     = {", ".join(sorted(_allowed_hosts())) or "(ни одного)"}')
 
     # Куда контейнер реально резолвит имя: расхождение с адресом MySQL-источника
     # означает, что DNS хоста отдаёт внешний адрес и до него нет маршрута.
@@ -250,3 +280,17 @@ def check_command(sell_id):
             response.close()
         except Exception as exc:
             click.echo(f'       загрузка: НЕ УДАЛАСЬ — {exc}')
+
+
+@plans_bp.cli.command('purge')
+@click.argument('sell_id', type=int)
+def purge_command(sell_id):
+    """Сбрасывает кэш планировки: flask plans purge 5139408
+
+    Неудачный запрос к Macro кэшируется на час, поэтому после починки доступа
+    страница ещё час отдаёт пустоту — эта команда снимает блок сразу.
+    """
+    if flat_plan_service.forget(sell_id):
+        click.echo(f'Кэш планировки {sell_id} сброшен — следующий запрос уйдёт в Macro.')
+    else:
+        click.echo(f'Записи по {sell_id} в кэше не было.')

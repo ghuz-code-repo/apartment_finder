@@ -240,20 +240,67 @@
         });
     }
 
-    function sendWithProgress(type, payload, onProgress) {
-        return new Promise((resolve, reject) => {
-            navigator.serviceWorker.ready.then(reg => {
-                const worker = reg.active;
-                if (!worker) return reject(new Error('worker inactive'));
-                const channel = new MessageChannel();
-                channel.port1.onmessage = e => {
-                    if (e.data && e.data.type === 'PROGRESS') onProgress(e.data);
-                    else resolve(e.data);
-                };
-                worker.postMessage(Object.assign({ type: type }, payload || {}),
-                                   [channel.port2]);
-            }, reject);
-        });
+    // Загрузка идёт здесь, а не в Service Worker: воркер живёт, пока браузер
+    // считает нужным, и на десятках тысяч плиток его успевают выгрузить
+    // посреди работы — тогда обещание на странице не разрешается никогда,
+    // и загрузка обрывается без единого сообщения. Страница живёт, пока
+    // открыта вкладка.
+    async function prefetchOnPage(urls, maxBytes, onProgress) {
+        const cache = await caches.open(CACHE_NAME);
+        const existing = await cachedUrlSet(cache);
+        const queue = urls.filter(url => !existing.has(absolute(url)));
+
+        const stats = { done: 0, stored: 0, cached: urls.length - queue.length,
+                        failed: 0, total: urls.length, limitReached: false };
+        let index = 0;
+        let used = await currentUsage();
+        let sinceCheck = 0;
+
+        async function worker() {
+            while (index < queue.length && !stats.limitReached) {
+                const url = queue[index++];
+                try {
+                    if (used !== null && used >= maxBytes) {
+                        stats.limitReached = true;
+                        return;
+                    }
+                    const res = await fetch(url, { credentials: 'same-origin' });
+                    if (res.ok &&
+                        (res.headers.get('Content-Type') || '').startsWith('image/') &&
+                        !(res.headers.get('Cache-Control') || '').includes('no-store')) {
+                        await cache.put(url, res.clone());
+                        stats.stored++;
+                        // Точный замер дорог, поэтому между сверками считаем
+                        // приблизительно, а раз в сотню плиток уточняем.
+                        if (used !== null) used += 25 * 1024;
+                        if (++sinceCheck >= 100) {
+                            sinceCheck = 0;
+                            used = await currentUsage();
+                        }
+                    } else {
+                        stats.failed++;
+                    }
+                } catch (e) {
+                    stats.failed++;
+                }
+                stats.done++;
+                if (onProgress && stats.done % 50 === 0) onProgress(stats);
+            }
+        }
+
+        await Promise.all(Array.from({ length: 6 }, worker));
+        if (onProgress) onProgress(stats);
+        return stats;
+    }
+
+    async function currentUsage() {
+        if (!navigator.storage || !navigator.storage.estimate) return null;
+        try {
+            const { usage } = await navigator.storage.estimate();
+            return usage || 0;
+        } catch (e) {
+            return null;
+        }
     }
 
     function lonLatToTile(lat, lon, z) {
@@ -462,19 +509,17 @@
         bar.style.width = '0%';
 
         try {
-            const result = await sendWithProgress('PREFETCH_TILES',
-                { urls: urls, total: urls.length, concurrency: 6 },
-                d => {
-                    bar.style.width = Math.round(d.done / d.total * 100) + '%';
-                    $('offlineStatus').textContent = d.done.toLocaleString() + ' / ' +
-                                                     d.total.toLocaleString();
-                });
-            $('offlineStatus').textContent = result && result.limitReached
+            const result = await prefetchOnPage(urls, settings.maxBytes, s => {
+                bar.style.width = Math.round(s.done / s.total * 100) + '%';
+                $('offlineStatus').textContent = s.done.toLocaleString() + ' / ' +
+                                                 s.total.toLocaleString();
+            });
+            $('offlineStatus').textContent = result.limitReached
                 ? (T.limitReached || 'Достигнут лимит объёма — загрузка остановлена')
                 : (T.saveDone || 'Готово');
         } catch (e) {
-            $('offlineStatus').textContent = (T.workerInactive ||
-                'Воркер ещё не активен, обновите страницу');
+            $('offlineStatus').textContent = (T.downloadFailed || 'Загрузка прервана') +
+                (e && e.message ? ': ' + e.message : '');
         } finally {
             buttons.forEach(b => { b.disabled = false; });
             box.classList.add('d-none');
@@ -820,31 +865,39 @@
                 say((T.fetchingRest || 'Догружаем остаток') + ': ' +
                     missing.length.toLocaleString() + ' — ' +
                     (T.slowPhase || 'сервер их ещё не прогрел, идёт медленно'));
-                await sendWithProgress('PREFETCH_TILES',
-                    { urls: missing, total: missing.length, concurrency: 6 },
-                    d => {
-                        progress(Math.round(d.done / d.total * 100));
-                        say((T.fetchingRest || 'Догружаем остаток') + ': ' +
-                            d.done.toLocaleString() + ' / ' + d.total.toLocaleString());
-                    });
+                const rest = await prefetchOnPage(missing, settings.maxBytes, s => {
+                    progress(Math.round(s.done / s.total * 100));
+                    say((T.fetchingRest || 'Догружаем остаток') + ': ' +
+                        s.done.toLocaleString() + ' / ' + s.total.toLocaleString());
+                });
+                if (rest.limitReached) {
+                    say(T.limitReached || 'Достигнут лимит объёма — загрузка остановлена');
+                    return;
+                }
             }
             say((T.saveDone || 'Готово') + ': ' +
                 (stored + missing.length).toLocaleString());
         } catch (e) {
-            // Пакетная отдача недоступна — возвращаемся к поштучной загрузке.
-            say(T.bundleFallback || 'Пакет недоступен, загружаем поштучно');
-            const existing = await cachedUrlSet(await caches.open(CACHE_NAME));
-            const missing = missingFrom(regionUrls(region), existing);
+            // Пакетная отдача не сложилась — тянем поштучно. Причину
+            // показываем: молчаливый откат выглядел как сброс загрузки.
+            say((T.bundleFallback || 'Пакет недоступен, загружаем поштучно') +
+                (e && e.message ? ' (' + e.message + ')' : ''));
             try {
-                await sendWithProgress('PREFETCH_TILES',
-                    { urls: missing, total: missing.length, concurrency: 6 },
-                    d => {
-                        progress(Math.round(d.done / d.total * 100));
-                        say(d.done.toLocaleString() + ' / ' + d.total.toLocaleString());
-                    });
-                say(T.saveDone || 'Готово');
+                const all = regionUrls(region);
+                const result = await prefetchOnPage(all, settings.maxBytes, s => {
+                    progress(Math.round(s.done / s.total * 100));
+                    say(s.done.toLocaleString() + ' / ' + s.total.toLocaleString() +
+                        (s.failed ? ' · ' + (T.failedCount || 'ошибок') + ': ' +
+                                    s.failed.toLocaleString() : ''));
+                });
+                say(result.limitReached
+                    ? (T.limitReached || 'Достигнут лимит объёма — загрузка остановлена')
+                    : (T.saveDone || 'Готово') + ': ' + result.stored.toLocaleString() +
+                      (result.failed ? ' · ' + (T.failedCount || 'ошибок') + ': ' +
+                                       result.failed.toLocaleString() : ''));
             } catch (err) {
-                say(T.workerInactive || 'Воркер ещё не активен, обновите страницу');
+                say((T.downloadFailed || 'Загрузка прервана') +
+                    (err && err.message ? ': ' + err.message : ''));
             }
         } finally {
             ui.download.disabled = false;
