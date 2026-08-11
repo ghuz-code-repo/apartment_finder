@@ -108,8 +108,8 @@ def _get_project_lead_stats(mysql_session, house_ids: list):
     # Базовый запрос (сразу фильтрует по ЖК и ТЕКУЩЕМУ МЕСЯЦУ)
     base_query = mysql_session.query(EstateBuy).filter(
         EstateBuy.house_id.in_(house_ids),
-        extract('year', EstateBuy.date_added) == current_year,
-        extract('month', EstateBuy.date_added) == current_month
+        extract('year', EstateBuy.created_at) == current_year,
+        extract('month', EstateBuy.created_at) == current_month
     )
     # ============================================
     # === КОНЕЦ ИЗМЕНЕНИЙ ===
