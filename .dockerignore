@@ -65,3 +65,10 @@ README.md
 Dockerfile
 docker-compose*.yml
 .dockerignore
+
+# Секреты: переменные приходят через env_file в docker-compose, копия внутри
+# образа только дублирует их в слоях. Заодно flask-cli не пытается её разобрать
+# (при не-UTF-8 байтах он падает ещё до старта команды).
+.env
+.env.*
+!.env.example
