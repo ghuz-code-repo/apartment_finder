@@ -18,11 +18,11 @@ DEDUCTION_AMOUNT = 3_000_000
 MAX_MORTGAGE_STANDARD = 420_000_000
 MIN_INITIAL_PAYMENT_PERCENT_STANDARD = 0.15
 
-# Скидки, зашитые в матрицу и применяемые всегда.
-BASE_DISCOUNT_FIELDS = (('mpp', 'МПП'), ('rop', 'РОП'))
-
-# Скидки, которые менеджер выставляет вручную в пределах максимума из матрицы.
+# Все скидки менеджер выставляет вручную: матрица задаёт только потолок,
+# ничего не применяется само. Порядок здесь определяет порядок полей в карточке.
 MANUAL_DISCOUNT_FIELDS = (
+    ('mpp', 'МПП'),
+    ('rop', 'РОП'),
     ('kd', 'КД'),
     ('opt', 'ОПТ'),
     ('gd', 'ГД'),
@@ -44,20 +44,25 @@ def _as_percent(rate):
 
 
 def _clean_percent(value):
-    """Проценты, пришедшие из формы/URL. Мусор и отрицательные -> 0."""
+    """Проценты, пришедшие от ползунка или из адреса КП. Мусор -> 0.
+
+    Менеджер выставляет целые проценты, поэтому дробь округляется вниз:
+    иначе подставленное в адрес 2.99 обошло бы шаг ползунка.
+    """
     try:
         percent = float(value)
     except (TypeError, ValueError):
-        return 0.0
-    return max(0.0, round(percent, 2))
+        return 0
+    return max(0, int(percent))
 
 
 def build_payment_options(base_price, discount_by_method):
     """Собирает варианты оплаты для карточки квартиры.
 
     discount_by_method: {PaymentMethod: сериализованная строка матрицы скидок}.
-    Ипотека показывается только если по ЖК есть ипотечная строка со скидкой —
-    это признак того, что схема доступна для комплекса.
+    Ипотека показывается, если по ЖК есть ипотечная строка матрицы: сама строка
+    и означает, что схема для комплекса доступна. По размеру скидок в ней судить
+    нельзя — теперь скидки нулевые до тех пор, пока менеджер их не выставит.
     """
     price_after_deduction = base_price - DEDUCTION_AMOUNT
     options = []
@@ -67,7 +72,7 @@ def build_payment_options(base_price, discount_by_method):
                                price_after_deduction, full_payment_row))
 
     mortgage_row = discount_by_method.get(PaymentMethod.MORTGAGE)
-    if mortgage_row and (mortgage_row.get('mpp', 0) > 0 or mortgage_row.get('rop', 0) > 0):
+    if mortgage_row is not None:
         options.append(_new_option(MORTGAGE_KEY, 'Ипотека', base_price,
                                    price_after_deduction, mortgage_row))
 
@@ -82,16 +87,14 @@ def _new_option(type_key, title, base_price, price_after_deduction, discount_row
         'base_price': base_price,
         'deduction': DEDUCTION_AMOUNT,
         'price_after_deduction': price_after_deduction,
-        'base_discounts': [
-            {'code': code, 'name': name, 'percent': _as_percent(discount_row.get(code))}
-            for code, name in BASE_DISCOUNT_FIELDS
-        ],
         # Только те скидки, которые реально доступны по матрице: менеджеру
-        # не показываем поля, в которые всё равно нельзя ничего ввести.
+        # не показываем поля, в которые всё равно нечего ввести. Ползунок ходит
+        # целыми процентами, поэтому дробный потолок округляем вниз.
         'manual_discount_limits': [
-            {'code': code, 'name': name, 'max_percent': _as_percent(discount_row.get(code))}
+            {'code': code, 'name': name,
+             'max_percent': int(_as_percent(discount_row.get(code)))}
             for code, name in MANUAL_DISCOUNT_FIELDS
-            if _as_percent(discount_row.get(code)) > 0
+            if int(_as_percent(discount_row.get(code))) > 0
         ],
         # Тело кредита зависит от цены после скидок и считается в recalculate.
         'mortgage_body': None,
@@ -116,10 +119,9 @@ def recalculate(option, manual_percents):
             applied.append({'code': code, 'name': name, 'percent': percent})
 
     price_after_deduction = option['price_after_deduction']
-    base_discounts = [d for d in option['base_discounts'] if d['percent'] > 0]
-    total_percent = sum(d['percent'] for d in base_discounts) + sum(d['percent'] for d in applied)
+    total_percent = sum(d['percent'] for d in applied)
 
-    for row in base_discounts + applied:
+    for row in applied:
         row['amount'] = price_after_deduction * row['percent'] / 100
 
     discount_amount = price_after_deduction * total_percent / 100

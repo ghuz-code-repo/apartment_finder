@@ -2,7 +2,8 @@
 """Клиент Macro API v2.
 
 Все методы вызываются через POST с JSON-телом, авторизация — Bearer-токен
-приложения плюс заголовок AppId. Лимит на ключ: 100 запросов в минуту
+приложения: в спецификации у каждой операции стоит только bearerAuth, поэтому
+заголовок AppId не отправляем. Лимит на ключ: 100 запросов в минуту
 (sliding window), при превышении приходит 429 с заголовками X-RateLimit-*.
 Поэтому вызовы сюда идут только через кэширующие сервисы, а не напрямую
 из обработчиков страниц.
@@ -68,9 +69,6 @@ def call(action, payload):
     url = f'{base_url}/{action.lstrip("/")}'
 
     headers = {'Authorization': f'Bearer {current_app.config["MACRO_API_TOKEN"]}'}
-    app_id = current_app.config.get('MACRO_APP_ID')
-    if app_id:
-        headers['AppId'] = str(app_id)
 
     try:
         response = _get_session().post(url, json=payload, headers=headers,

@@ -130,6 +130,28 @@ def create_app(config_class=DevelopmentConfig):
 
     os.makedirs(app.instance_path, exist_ok=True)
 
+    # Статика получает адрес вида ?v=<mtime файла>. Без этого браузер и шлюз
+    # держат прошлую версию скриптов после деплоя, и страница работает по коду,
+    # которого в шаблоне уже нет. Значения считаются один раз на процесс.
+    asset_versions = {}
+
+    @app.url_defaults
+    def add_asset_version(endpoint, values):
+        if endpoint != 'static' or 'filename' not in values:
+            return
+        filename = values['filename']
+        if filename not in asset_versions:
+            path = os.path.join(app.static_folder, filename)
+            try:
+                # Только для настоящих файлов: карта строит из url_for базовый
+                # путь к папке с иконками и клеит к нему имя, а '?v=' в середине
+                # такой склейки ломает адрес.
+                asset_versions[filename] = int(os.stat(path).st_mtime) if os.path.isfile(path) else 0
+            except OSError:
+                asset_versions[filename] = 0
+        if asset_versions[filename]:
+            values['v'] = asset_versions[filename]
+
     with app.app_context():
         # Импорт моделей
         from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, \

@@ -33,7 +33,6 @@ class Config:
     # Базовый адрес заканчивается версией: https://<ваш-сервер>/v2
     MACRO_API_URL = os.environ.get('MACRO_API_URL', '')
     MACRO_API_TOKEN = os.environ.get('MACRO_API_TOKEN', '')
-    MACRO_APP_ID = os.environ.get('MACRO_APP_ID', '')
     # Файлы планировок приходят относительными путями (/upload/estate/plan_1.jpg),
     # здесь — хост, к которому их достраивать.
     MACRO_FILES_BASE_URL = os.environ.get('MACRO_FILES_BASE_URL', '')

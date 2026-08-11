@@ -13,8 +13,7 @@
 {% macro render_payment_card(option, card_class) %}
 <div class="payment-option-card {{ card_class }}"
      data-type-key="{{ option.type_key }}"
-     data-base-price-deducted="{{ option.price_after_deduction }}"
-     data-base-discount-percent="{{ option.base_discounts|sum(attribute='percent') }}">
+     data-base-price-deducted="{{ option.price_after_deduction }}">
 
     <div class="card-header bg-transparent border-bottom-0 pt-3 px-3">
         <h5 class="mb-0 fw-bold">
@@ -30,20 +29,14 @@
             <tbody>
                 <tr><td class="discount-label">{{ _('Базовая цена') }}</td><td class="text-end">{{ "{:,.0f}".format(option.base_price) }}</td></tr>
                 <tr class="text-danger"><td class="discount-label">{{ _('Вычет') }}</td><td class="text-end">- {{ "{:,.0f}".format(option.deduction) }}</td></tr>
-                {% for discount in option.base_discounts if discount.percent > 0 %}
-                <tr class="text-danger">
-                    <td class="discount-label">{{ _('Скидка') }} {{ discount.name }} ({{ "%.1f"|format(discount.percent) }}%)</td>
-                    <td class="text-end">- {{ "{:,.0f}".format(discount.amount) }}</td>
-                </tr>
-                {% endfor %}
                 {% for limit in option.manual_discount_limits %}
                 <tr class="manual-discount-row d-none text-danger" data-discount-code="{{ limit.code }}">
-                    <td class="discount-label">{{ _('Скидка') }} {{ _(limit.name) }} (<span class="manual-discount-percent">0.0</span>%)</td>
+                    <td class="discount-label">{{ _('Скидка') }} {{ _(limit.name) }} (<span class="manual-discount-percent">0</span>%)</td>
                     <td class="text-end">- <span class="manual-discount-amount">0</span></td>
                 </tr>
                 {% endfor %}
                 <tr class="benefit-row fw-bold border-top">
-                    <td class="discount-label">{{ _('Выгода') }} (<span class="benefit-percent">0.0</span>%)</td>
+                    <td class="discount-label">{{ _('Выгода') }} (<span class="benefit-percent">0</span>%)</td>
                     <td class="text-end"><span class="benefit-amount">0</span></td>
                 </tr>
             </tbody>
@@ -53,17 +46,17 @@
         <div class="manual-discounts border rounded p-2 mb-2">
             <div class="small text-muted mb-2"><i class="bi bi-percent me-1"></i>{# '%%' — gettext прогоняет строку через %-форматирование, одиночный '%' роняет шаблон. #}
             {{ _('Скидка менеджера, %% (в пределах максимума)') }}</div>
-            <div class="row g-2">
+            <div class="row g-3">
                 {% for limit in option.manual_discount_limits %}
                 <div class="col-6">
-                    <label class="form-label small mb-1" for="{{ option.type_key }}-{{ limit.code }}">
-                        {{ _(limit.name) }} <span class="text-muted">{{ _('до') }} {{ "%.1f"|format(limit.max_percent) }}%</span>
+                    <label class="form-label small mb-1 d-flex justify-content-between" for="{{ option.type_key }}-{{ limit.code }}">
+                        <span>{{ _(limit.name) }}</span>
+                        <span><strong class="manual-discount-value">0</strong> / {{ limit.max_percent }}%</span>
                     </label>
-                    <input type="number" class="form-control form-control-sm manual-discount-input"
+                    <input type="range" class="form-range manual-discount-input"
                            id="{{ option.type_key }}-{{ limit.code }}"
                            data-discount-code="{{ limit.code }}"
-                           min="0" max="{{ limit.max_percent }}" step="0.1" value="0"
-                           placeholder="0">
+                           min="0" max="{{ limit.max_percent }}" step="1" value="0">
                 </div>
                 {% endfor %}
             </div>
@@ -93,9 +86,13 @@
     <h1 class="gradient-heading">{{ _('Карточка объекта') }} </h1>
     <div class="d-flex gap-2">
         <a href="{{ url_for('main.selection') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> {{ _('Назад к подбору') }}</a>
-        <button id="openKpBtn" class="btn btn-primary">
+        {# Обычная ссылка, а не window.open: работает при блокировке всплывающих
+           окон и открывает КП даже если скрипт карточки почему-то не завёлся —
+           тогда просто без ручных скидок. Скидки скрипт дописывает в href. #}
+        <a id="openKpBtn" class="btn btn-primary" target="_blank" rel="noopener"
+           href="{{ url_for('main.generate_commercial_offer', sell_id=data.apartment.id) }}">
             <i class="bi bi-file-earmark-text me-1"></i> {{ _('Сформировать КП') }}
-        </button>
+        </a>
     </div>
 </div>
 

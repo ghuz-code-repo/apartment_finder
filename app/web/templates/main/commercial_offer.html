@@ -246,22 +246,16 @@
                                     <tbody>
                                         <tr><td>{{ _('Прайс:') }}</td><td class="text-end price-uzs" data-price="{{ option.base_price }}">{{ "{:,.0f}".format(option.base_price) }} UZS</td></tr>
                                         <tr class="text-danger"><td>{{ _('Вычет (бронирование):') }}</td><td class="text-end price-uzs" data-price="{{ option.deduction }}">- {{ "{:,.0f}".format(option.deduction) }} UZS</td></tr>
-                                        {# Расшифровка скидок: и базовые из матрицы, и выставленные менеджером вручную. #}
-                                        {% for discount in option.base_discounts if discount.percent > 0 %}
-                                        <tr class="text-danger">
-                                            <td>{{ _('Скидка') }} {{ discount.name }} ({{ "%.1f"|format(discount.percent) }}%):</td>
-                                            <td class="text-end price-uzs" data-price="{{ discount.amount }}">- {{ "{:,.0f}".format(discount.amount) }} UZS</td>
-                                        </tr>
-                                        {% endfor %}
+                                        {# Расшифровка скидок, выставленных менеджером на карточке. #}
                                         {% for discount in option.applied_discounts %}
                                         <tr class="text-danger">
-                                            <td>{{ _('Скидка') }} {{ _(discount.name) }} ({{ "%.1f"|format(discount.percent) }}%):</td>
+                                            <td>{{ _('Скидка') }} {{ _(discount.name) }} ({{ discount.percent }}%):</td>
                                             <td class="text-end price-uzs" data-price="{{ discount.amount }}">- {{ "{:,.0f}".format(discount.amount) }} UZS</td>
                                         </tr>
                                         {% endfor %}
                                         {% if option.total_discount_amount > 0 %}
                                         <tr class="benefit-row">
-                                            <td>{{ _('Ваша выгода') }} ({{ "%.1f"|format(option.total_discount_percent) }}%):</td>
+                                            <td>{{ _('Ваша выгода') }} ({{ option.total_discount_percent }}%):</td>
                                             <td class="text-end price-uzs" data-price="{{ option.total_discount_amount }}">- {{ "{:,.0f}".format(option.total_discount_amount) }} UZS</td>
                                         </tr>
                                         {% endif %}
