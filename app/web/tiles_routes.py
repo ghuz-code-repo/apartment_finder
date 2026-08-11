@@ -14,7 +14,7 @@ import time
 import click
 import requests
 from flask import (Blueprint, Response, abort, current_app, jsonify, request,
-                   send_file, url_for)
+                   send_file, stream_with_context, url_for)
 from requests.adapters import HTTPAdapter
 
 from ..core.decorators import login_required
@@ -122,6 +122,78 @@ def _serve_cached(path):
     # 304 без тела, а send_file делегирует отдачу файла WSGI-серверу.
     return send_file(path, mimetype='image/png', max_age=CACHE_TTL,
                      conditional=True)
+
+
+def _tar_header(name, size):
+    """Заголовок ustar. Формат простой и позволяет отдавать архив потоком,
+    не собирая гигабайт в памяти и не завися от внешних библиотек."""
+    name_bytes = name.encode('utf-8')[:100]
+    fields = [
+        name_bytes.ljust(100, b'\0'),
+        b'0000644\0',                       # mode
+        b'0000000\0', b'0000000\0',         # uid, gid
+        f'{size:011o}\0'.encode(),          # size
+        f'{0:011o}\0'.encode(),             # mtime — ноль, чтобы архив был
+                                            # побайтно одинаковым между сборками
+        b' ' * 8,                           # checksum, считается ниже
+        b'0',                               # обычный файл
+        b'\0' * 100,                        # linkname
+        b'ustar\x0000',
+        b'\0' * 32, b'\0' * 32,             # uname, gname
+        b'0000000\0', b'0000000\0',         # devmajor, devminor
+        b'\0' * 155,
+    ]
+    header = b''.join(fields).ljust(512, b'\0')
+    checksum = sum(header)
+    header = header[:148] + f'{checksum:06o}\0 '.encode() + header[156:]
+    return header
+
+
+@tiles_bp.route('/tiles/region/<region_id>/bundle')
+@login_required
+def region_bundle(region_id):
+    """Отдаёт весь регион одним потоком.
+
+    Сорок тысяч отдельных запросов упираются не в канал, а в накладные
+    расходы на каждый: проверку сессии, заголовки, обход стека. Здесь клиент
+    получает то же самое одним tar, а недостающее (чего нет в кэше сервера)
+    дотягивает обычным путём.
+    """
+    region = REGIONS.get(region_id)
+    if not region:
+        abort(404)
+    style = request.args.get('style', 'light')
+    if style not in TILE_SOURCES:
+        style = 'light'
+
+    cache_root = _cache_root()
+
+    def generate():
+        for layer in region['layers']:
+            for z, x, y in iter_tiles(layer['bbox'], layer['min_zoom'],
+                                      layer['max_zoom']):
+                path = os.path.join(cache_root, style, str(z), str(x), f'{y}.png')
+                try:
+                    size = os.path.getsize(path)
+                    with open(path, 'rb') as fh:
+                        data = fh.read()
+                except OSError:
+                    continue        # нет в кэше — клиент возьмёт через прокси
+                if len(data) != size:
+                    continue
+                yield _tar_header(f'{style}/{z}/{x}/{y}.png', size)
+                yield data
+                padding = -size % 512
+                if padding:
+                    yield b'\0' * padding
+        yield b'\0' * 1024          # признак конца архива
+
+    response = Response(stream_with_context(generate()),
+                        mimetype='application/x-tar')
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename="{region_id}-{style}.tar"'
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @tiles_bp.route('/tiles-sw.js')

@@ -66,6 +66,12 @@
         center: CFG.center || [41.31, 69.24],
         zoom: CFG.zoom || 12
     });
+
+    // Префикс «Leaflet» (вместе с флагом, который библиотека дописывает от
+    // себя) убираем — он необязателен. Ссылка на OpenStreetMap остаётся:
+    // данные под ODbL, и указание авторства это условие лицензии.
+    // Опции карты сюда не доходят: Leaflet создаёт контрол без аргументов.
+    if (map.attributionControl) map.attributionControl.setPrefix('');
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     // Декодирование PNG по умолчанию происходит в главном потоке и на пачке
@@ -504,14 +510,145 @@
         }
     }
 
-    function onRegionDownload() {
+    // Поток байтов, из которого удобно забирать куски заданной длины.
+    // Держим очередь пришедших чанков, а не один растущий буфер: регион
+    // весит около гигабайта, и склеивать его в памяти нельзя.
+    function byteStream(reader) {
+        const queue = [];
+        let queued = 0, done = false, consumed = 0;
+
+        async function pull() {
+            const { value, done: finished } = await reader.read();
+            if (finished) { done = true; return false; }
+            queue.push(value);
+            queued += value.length;
+            return true;
+        }
+
+        return {
+            get consumed() { return consumed; },
+            async read(n) {
+                while (queued < n && !done) {
+                    if (!await pull()) break;
+                }
+                if (queued < n) return null;        // поток кончился раньше
+                const out = new Uint8Array(n);
+                let filled = 0;
+                while (filled < n) {
+                    const head = queue[0];
+                    const take = Math.min(head.length, n - filled);
+                    out.set(head.subarray(0, take), filled);
+                    filled += take;
+                    if (take === head.length) queue.shift();
+                    else queue[0] = head.subarray(take);
+                    queued -= take;
+                }
+                consumed += n;
+                return out;
+            }
+        };
+    }
+
+    function parseOctal(bytes) {
+        const s = new TextDecoder().decode(bytes).replace(/\0.*$/, '').trim();
+        return s ? parseInt(s, 8) : 0;
+    }
+
+    // Разбор ustar на лету: заголовок 512 байт, следом данные, выровненные
+    // до кратности 512.
+    async function unpackBundle(response, cache, onProgress) {
+        const stream = byteStream(response.body.getReader());
+        const decoder = new TextDecoder();
+        let stored = 0;
+
+        for (;;) {
+            const header = await stream.read(512);
+            if (!header) break;
+            const name = decoder.decode(header.subarray(0, 100)).replace(/\0.*$/, '');
+            if (!name) break;                       // два нулевых блока — конец
+            const size = parseOctal(header.subarray(124, 136));
+            const body = size ? await stream.read(size) : new Uint8Array(0);
+            if (!body) break;
+            const padding = (-size % 512 + 512) % 512;
+            if (padding) await stream.read(padding);
+
+            // Имя в архиве: <стиль>/<z>/<x>/<y>.png — восстанавливаем адрес,
+            // под которым плитку будет искать карта.
+            const m = name.match(/^([^/]+)\/(\d+)\/(\d+)\/(\d+)\.png$/);
+            if (!m) continue;
+            const url = CFG.tileUrlTemplate
+                .replace('__STYLE__', m[1])
+                .replace('{z}', m[2]).replace('{x}', m[3]).replace('{y}', m[4]);
+            await cache.put(url, new Response(body, {
+                headers: {
+                    'Content-Type': 'image/png',
+                    'Cache-Control': 'public, max-age=15552000'
+                }
+            }));
+            stored++;
+            if (stored % 200 === 0) onProgress(stored, stream.consumed);
+        }
+        return stored;
+    }
+
+    async function onRegionDownload() {
         if (!currentRegion) return;
-        const urls = regionUrls(currentRegion);
-        return download(urls,
+        const ok = confirm(
             (T.confirmRegion || 'Загрузить регион целиком?') + '\n\n' +
             currentRegion.title + '\n' +
-            (T.tiles || 'Плиток') + ': ' + urls.length.toLocaleString() + '\n' +
+            (T.tiles || 'Плиток') + ': ' + currentRegion.tiles.toLocaleString() + '\n' +
             (T.approxSize || 'Примерный объём') + ': ' + fmtBytes(currentRegion.bytes));
+        if (!ok) return;
+
+        const btn = $('regionDownloadBtn');
+        const box = $('offlineProgress');
+        const bar = box.querySelector('.progress-bar');
+        btn.disabled = true;
+        box.classList.remove('d-none');
+        bar.style.width = '0%';
+        $('offlineStatus').textContent = T.bundleStart || 'Загрузка одним пакетом...';
+
+        const style = isDark ? 'dark' : 'light';
+        try {
+            const res = await fetch(
+                CFG.prefix + '/tiles/region/' + currentRegion.id + '/bundle?style=' + style,
+                { credentials: 'same-origin' });
+            if (!res.ok || !res.body) throw new Error('bundle unavailable');
+
+            const cache = await caches.open(CACHE_NAME);
+            const stored = await unpackBundle(res, cache, (n, bytes) => {
+                const pct = Math.min(100, Math.round(n / currentRegion.tiles * 100));
+                bar.style.width = pct + '%';
+                $('offlineStatus').textContent = n.toLocaleString() + ' / ' +
+                    currentRegion.tiles.toLocaleString() + ' · ' + fmtBytes(bytes);
+            });
+
+            // В пакет попадает только то, что уже лежит в кэше сервера.
+            // Остальное дотягиваем поштучно — так регион полон в любом случае.
+            const missing = [];
+            const urls = regionUrls(currentRegion);
+            for (const url of urls) {
+                if (!(await cache.match(url))) missing.push(url);
+            }
+            if (missing.length) {
+                $('offlineStatus').textContent = (T.fetchingRest || 'Догружаем остаток') +
+                    ': ' + missing.length.toLocaleString();
+                await sendWithProgress('PREFETCH_TILES',
+                    { urls: missing, total: missing.length, concurrency: 6 },
+                    d => { bar.style.width = Math.round(d.done / d.total * 100) + '%'; });
+            }
+            $('offlineStatus').textContent = (T.saveDone || 'Готово') +
+                ': ' + (stored + missing.length).toLocaleString();
+        } catch (e) {
+            // Пакетная отдача недоступна — возвращаемся к поштучной загрузке.
+            $('offlineStatus').textContent = T.bundleFallback ||
+                'Пакет недоступен, загружаем поштучно';
+            await download(regionUrls(currentRegion), (T.confirmRegion || 'Загрузить регион?'));
+        } finally {
+            btn.disabled = false;
+            box.classList.add('d-none');
+            refreshStats();
+        }
     }
 
     if (offline.supported) {
