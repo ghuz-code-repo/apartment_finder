@@ -594,68 +594,83 @@ def start_background_seed(app):
 
 
 @tiles_bp.cli.command('pack-region')
-@click.option('--region', type=click.Choice(sorted(REGIONS)), default='tashkent',
-              show_default=True)
+@click.option('--region', type=click.Choice(sorted(REGIONS)), default=None,
+              help='По умолчанию собираются все регионы.')
 def pack_region_command(region):
-    """Собрать регион в один файл, чтобы отдавать его без участия Python.
+    """Собрать регионы в файлы, чтобы отдавать их без участия Python.
 
     В пакет попадают все стили сразу: карта переключает тему на ходу, и
     сохранённый регион должен работать в обеих. Запускать после seed-region
     и при обновлении плиток — пакет статичен и сам себя не обновляет.
     """
-    definition = REGIONS[region]
     cache_root = _cache_root()
-    target = _bundle_path(region)
-    tmp = target + '.tmp'
+    region_ids = [region] if region else sorted(REGIONS)
+    total_written = 0
 
-    written = 0
-    with open(tmp, 'wb') as fh:
-        for chunk in _iter_region_tar(cache_root, definition):
-            fh.write(chunk)
-            written += len(chunk)
-    os.replace(tmp, target)
+    for region_id in region_ids:
+        definition = REGIONS[region_id]
+        target = _bundle_path(region_id)
+        tmp = target + '.tmp'
 
-    click.echo(f'Пакет собран: {target}')
-    click.echo(f'  размер: {written / 1048576:.0f} МБ, '
+        written = 0
+        with open(tmp, 'wb') as fh:
+            for chunk in _iter_region_tar(cache_root, definition):
+                fh.write(chunk)
+                written += len(chunk)
+        os.replace(tmp, target)
+        total_written += written
+        click.echo(f'{definition["title"]}: {written / 1048576:.0f} МБ -> {target}')
+
+    click.echo(f'Готово: {len(region_ids)} пакет(ов), '
+               f'{total_written / 1073741824:.2f} ГБ, '
                f'стили: {", ".join(sorted(TILE_SOURCES))}')
-    click.echo('  Отдаётся как статический файл; если задан TILES_XACCEL_PREFIX, '
+    click.echo('  Отдаются как статические файлы; если задан TILES_XACCEL_PREFIX, '
                'выгрузку берёт на себя nginx.')
 
 
 @tiles_bp.cli.command('seed-region')
-@click.option('--region', type=click.Choice(sorted(REGIONS)), default='tashkent',
-              show_default=True)
+@click.option('--region', type=click.Choice(sorted(REGIONS)), default=None,
+              help='По умолчанию прогреваются все регионы.')
 @click.option('--style', type=click.Choice(sorted(TILE_SOURCES)), default=None,
               help='По умолчанию прогреваются все стили.')
 @click.option('--workers', type=int, default=4, show_default=True)
 @click.option('--delay', type=float, default=0.05, show_default=True)
 def seed_region_command(region, style, workers, delay):
-    """Прогреть кэш под готовый регион с его ступенчатой детализацией.
+    """Прогреть кэш под готовые регионы с их ступенчатой детализацией.
 
     Клиенты забирают плитки с нашего прокси, поэтому внешний источник
     отрабатывает это один раз, а не на каждого пользователя. Прогреваются
     оба стиля: тему на карте переключают на ходу, и в тёмной регион должен
     работать так же, как в светлой.
     """
-    definition = REGIONS[region]
     cache_root = _cache_root()
     styles = [style] if style else sorted(TILE_SOURCES)
-    per_style = region_tile_count(definition)
-    click.echo(f'Регион «{definition["title"]}»: {per_style:,} плиток на стиль, '
-               f'стили: {", ".join(styles)} — всего {per_style * len(styles):,}')
+    region_ids = [region] if region else sorted(REGIONS)
+
+    planned = sum(region_tile_count(REGIONS[r]) for r in region_ids) * len(styles)
+    # Пауза между плитками — не формальность: без неё источник банит по
+    # User-Agent, поэтому она и определяет длительность прогрева.
+    eta_hours = planned * delay / max(1, workers) / 3600
+    click.echo(f'К обработке: {planned:,} плиток '
+               f'({", ".join(region_ids)}; стили: {", ".join(styles)})')
+    click.echo(f'Одни только паузы займут ~{eta_hours:.1f} ч, '
+               f'реальное время больше на время запросов.')
 
     grand = {'ok': 0, 'cached': 0, 'fail': 0}
-    for current_style in styles:
-        for layer in definition['layers']:
-            z0, z1 = layer['min_zoom'], layer['max_zoom']
-            click.echo(f'  {current_style}, слой z{z0}-{z1}...')
-            stats = seed_tiles(cache_root, layer['bbox'], current_style, z0, z1,
-                               workers, delay,
-                               lambda i, s: click.echo(
-                                   f'    {i:,}/{s["total"]:,} скачано={s["ok"]:,} '
-                                   f'из кэша={s["cached"]:,} ошибок={s["fail"]:,}'))
-            for key in grand:
-                grand[key] += stats[key]
+    for region_id in region_ids:
+        definition = REGIONS[region_id]
+        click.echo(f'== {definition["title"]} ==')
+        for current_style in styles:
+            for layer in definition['layers']:
+                z0, z1 = layer['min_zoom'], layer['max_zoom']
+                click.echo(f'  {current_style}, слой z{z0}-{z1}...')
+                stats = seed_tiles(cache_root, layer['bbox'], current_style, z0, z1,
+                                   workers, delay,
+                                   lambda i, s: click.echo(
+                                       f'    {i:,}/{s["total"]:,} скачано={s["ok"]:,} '
+                                       f'из кэша={s["cached"]:,} ошибок={s["fail"]:,}'))
+                for key in grand:
+                    grand[key] += stats[key]
 
     click.echo(f'Готово: скачано={grand["ok"]:,} было в кэше={grand["cached"]:,} '
                f'ошибок={grand["fail"]:,}')
