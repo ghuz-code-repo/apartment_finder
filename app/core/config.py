@@ -49,6 +49,11 @@ class Config:
     MAP_DISABLE_CLUSTERING_AT_ZOOM = int(
         os.environ.get('MAP_DISABLE_CLUSTERING_AT_ZOOM', '16'))
 
+    # Если задан, выгрузку пакета региона берёт на себя nginx: приложение
+    # отвечает одним заголовком и сразу освобождает поток, а файл уходит
+    # в сокет средствами ядра. Требует internal-location в конфиге nginx.
+    TILES_XACCEL_PREFIX = os.environ.get('TILES_XACCEL_PREFIX', '')
+
 
 # --- ИЗМЕНЕНИЯ НУЖНО ВНЕСТИ ЗДЕСЬ ---
 class DevelopmentConfig(Config):
