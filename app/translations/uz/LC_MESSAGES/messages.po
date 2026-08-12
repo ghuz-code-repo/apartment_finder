@@ -1,13 +1,15 @@
 # Uzbek (Latin script) translations for ApartmentFinder.
 # ВНИМАНИЕ: перевод машинный и носителем языка не вычитан.
-# Особенно проверить термины: ipoteka, bo'lib to'lash, bron, kadastr, tub narx.
+# Особенно проверить термины: ipoteka, bo'lib to'lash, bron, kadastr, tub
+# narx.
 msgid ""
 msgstr ""
 "Project-Id-Version: ApartmentFinder VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-11 17:34+0500\n"
+"POT-Creation-Date: 2026-08-12 09:28+0500\n"
 "PO-Revision-Date: 2026-08-11 17:34+0500\n"
-"Last-Translator: Machine translation (Claude), needs review by a native speaker\n"
+"Last-Translator: Machine translation (Claude), needs review by a native "
+"speaker\n"
 "Language: uz\n"
 "Language-Team: Uzbek (Latin) <uz@golden-house>\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
@@ -20,7 +22,8 @@ msgstr ""
 msgid "Выберите Excel-файл со скидками"
 msgstr "Chegirmalar bilan Excel faylni tanlang"
 
-#: app/web/forms.py:14 app/web/forms.py:22 app/web/forms.py:29 app/web/forms.py:75
+#: app/web/forms.py:14 app/web/forms.py:22 app/web/forms.py:29
+#: app/web/forms.py:75
 msgid "Необходимо выбрать файл."
 msgstr "Fayl tanlanishi shart."
 
@@ -41,14 +44,16 @@ msgstr "Matritsani yuklash"
 msgid "Выберите Excel-файл с планами"
 msgstr "Rejalar bilan Excel faylni tanlang"
 
-#: app/web/forms.py:31 app/web/templates/reports/manager_analytics_report.html:38
+#: app/web/forms.py:31
+#: app/web/templates/reports/manager_analytics_report.html:38
 #: app/web/templates/reports/manager_performance_overview.html:86
 #: app/web/templates/reports/plan_fact_report.html:30
 #: app/web/templates/reports/quarterly_analytical_report.html:57
 msgid "Год"
 msgstr "Yil"
 
-#: app/web/forms.py:32 app/web/templates/reports/manager_analytics_report.html:31
+#: app/web/forms.py:32
+#: app/web/templates/reports/manager_analytics_report.html:31
 #: app/web/templates/reports/manager_performance_detail.html:95
 #: app/web/templates/reports/manager_performance_overview.html:76
 #: app/web/templates/reports/plan_fact_report.html:44
@@ -100,7 +105,8 @@ msgstr "\"0% li ipoteka\" uchun kvartira ID lari (vergul bilan)"
 msgid "Загрузить новую матрицу для \"Ипотеки под 0%\" (Excel)"
 msgstr "\"0% li ipoteka\" uchun yangi matritsani yuklash (Excel)"
 
-#: app/web/forms.py:77 app/web/templates/reports/manager_performance_overview.html:16
+#: app/web/forms.py:77
+#: app/web/templates/reports/manager_performance_overview.html:16
 msgid "Загрузить планы"
 msgstr "Rejalarni yuklash"
 
@@ -144,7 +150,7 @@ msgstr "YANGI planirovkani yuklash (ixtiyoriy)"
 msgid "Сохранить изменения"
 msgstr "O'zgarishlarni saqlash"
 
-#: app/web/main_routes.py:163
+#: app/web/main_routes.py:174
 msgid "Подбор по бюджету"
 msgstr "Byudjet bo'yicha tanlash"
 
@@ -365,11 +371,13 @@ msgstr "Raqobatchilar bazasini yuklab olish"
 msgid "Вернуться к карте"
 msgstr "Xaritaga qaytish"
 
-#: app/web/templates/competitors/map.html:20 app/web/templates/competitors/map.html:34
+#: app/web/templates/competitors/map.html:20
+#: app/web/templates/competitors/map.html:34
 msgid "Фильтры"
 msgstr "Filtrlar"
 
-#: app/web/templates/competitors/map.html:23 app/web/templates/competitors/map.html:78
+#: app/web/templates/competitors/map.html:23
+#: app/web/templates/competitors/map.html:78
 msgid "Сравнение"
 msgstr "Taqqoslash"
 
@@ -377,7 +385,8 @@ msgstr "Taqqoslash"
 msgid "Настройки"
 msgstr "Sozlamalar"
 
-#: app/web/templates/competitors/map.html:35 app/web/templates/competitors/map.html:79
+#: app/web/templates/competitors/map.html:35
+#: app/web/templates/competitors/map.html:79
 #: app/web/templates/competitors/map.html:104
 #: app/web/templates/discounts/edit_version.html:128
 #: app/web/templates/discounts/edit_version.html:146
@@ -422,10 +431,12 @@ msgid "Ваш проект (база)"
 msgstr "Sizning loyihangiz (baza)"
 
 #: app/web/templates/competitors/map.html:85
-msgid "Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами недоступно."
+msgid ""
+"Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами "
+"недоступно."
 msgstr ""
-"TJM lar ro'yxati bo'sh: MacroCRM bazasi bilan aloqa yo'q. Bizning loyihalarimiz bilan "
-"taqqoslash mavjud emas."
+"TJM lar ro'yxati bo'sh: MacroCRM bazasi bilan aloqa yo'q. Bizning "
+"loyihalarimiz bilan taqqoslash mavjud emas."
 
 #: app/web/templates/competitors/map.html:95
 msgid "Выберите отметку на карте для сравнения"
@@ -445,11 +456,11 @@ msgstr "Xarita keshi"
 
 #: app/web/templates/competitors/map.html:120
 msgid ""
-"Плитки карты хранятся в этом браузере. Что уже сохранено, открывается с вашего диска, "
-"без обращения к серверу."
+"Плитки карты хранятся в этом браузере. Что уже сохранено, открывается с "
+"вашего диска, без обращения к серверу."
 msgstr ""
-"Xarita plitkalari shu brauzerda saqlanadi. Saqlanganlari serverga murojaat qilmasdan, "
-"diskingizdan ochiladi."
+"Xarita plitkalari shu brauzerda saqlanadi. Saqlanganlari serverga "
+"murojaat qilmasdan, diskingizdan ochiladi."
 
 #: app/web/templates/competitors/map.html:123
 msgid "Хранение"
@@ -479,17 +490,18 @@ msgstr "Band"
 msgid "Показать папку"
 msgstr "Jildni ko'rsatish"
 
-#: app/web/templates/competitors/map.html:155 app/web/templates/competitors/map.html:232
+#: app/web/templates/competitors/map.html:155
+#: app/web/templates/competitors/map.html:232
 msgid "Скопировать путь"
 msgstr "Yo'lni nusxalash"
 
 #: app/web/templates/competitors/map.html:160
 msgid ""
-"Путь типовой для вашей системы: браузер не сообщает странице настоящее расположение и "
-"не может открыть проводник."
+"Путь типовой для вашей системы: браузер не сообщает странице настоящее "
+"расположение и не может открыть проводник."
 msgstr ""
-"Yo'l tizimingiz uchun namunaviy: brauzer sahifaga haqiqiy joylashuvni bermaydi va fayl "
-"menejerini ocholmaydi."
+"Yo'l tizimingiz uchun namunaviy: brauzer sahifaga haqiqiy joylashuvni "
+"bermaydi va fayl menejerini ocholmaydi."
 
 #: app/web/templates/competitors/map.html:164
 msgid "Максимальный объём"
@@ -507,21 +519,23 @@ msgstr "Zaxirasiz"
 msgid "плитка"
 msgstr "plitka"
 
-#: app/web/templates/competitors/map.html:178 app/web/templates/competitors/map.html:179
+#: app/web/templates/competitors/map.html:178
+#: app/web/templates/competitors/map.html:179
 msgid "плитки"
 msgstr "plitka"
 
-#: app/web/templates/competitors/map.html:180 app/web/templates/competitors/map.html:230
+#: app/web/templates/competitors/map.html:180
+#: app/web/templates/competitors/map.html:230
 msgid "плиток"
 msgstr "plitka"
 
 #: app/web/templates/competitors/map.html:183
 msgid ""
-"Сколько плиток за пределами экрана скачивать заранее, чтобы карта успевала за "
-"прокруткой."
+"Сколько плиток за пределами экрана скачивать заранее, чтобы карта "
+"успевала за прокруткой."
 msgstr ""
-"Xarita aylantirishga ulgurishi uchun ekran tashqarisidagi qancha plitka oldindan yuklab"
-" olinsin."
+"Xarita aylantirishga ulgurishi uchun ekran tashqarisidagi qancha plitka "
+"oldindan yuklab olinsin."
 
 #: app/web/templates/competitors/map.html:186
 msgid "Регионы"
@@ -700,7 +714,8 @@ msgid "Стандартные скидки"
 msgstr "Standart chegirmalar"
 
 #: app/web/templates/discounts/discounts.html:120
-#: app/web/templates/discounts/discounts.html:191 app/web/templates/main/selection.html:75
+#: app/web/templates/discounts/discounts.html:191
+#: app/web/templates/main/selection.html:75
 #: app/web/templates/main/selection.html:117
 #: app/web/templates/reports/project_passport.html:131
 #: app/web/templates/reports/yearly_manager_report.html:128
@@ -708,7 +723,8 @@ msgstr "Standart chegirmalar"
 msgid "100%% оплата"
 msgstr "100%% to'lov"
 
-#: app/web/templates/discounts/discounts.html:124 app/web/templates/main/selection.html:76
+#: app/web/templates/discounts/discounts.html:124
+#: app/web/templates/main/selection.html:76
 #: app/web/templates/main/selection.html:118
 #: app/web/templates/reports/project_passport.html:485
 msgid "Ипотека"
@@ -722,7 +738,8 @@ msgstr "Ipoteka"
 msgid "Акция"
 msgstr "Aksiya"
 
-#: app/web/templates/discounts/discounts.html:161 app/web/templates/main/selection.html:38
+#: app/web/templates/discounts/discounts.html:161
+#: app/web/templates/main/selection.html:38
 #: app/web/templates/reports/plan_fact_report.html:50
 #: app/web/templates/reports/project_dashboard.html:315
 #: app/web/templates/reports/project_dashboard.html:352
@@ -966,8 +983,12 @@ msgid "Загрузка файла со скидками (Excel)"
 msgstr "Chegirmalar faylini yuklash (Excel)"
 
 #: app/web/templates/discounts/upload.html:6
-msgid "Вы можете скачать актуальный шаблон, чтобы заполнить его и загрузить обратно в систему."
-msgstr "Uni to'ldirib, tizimga qayta yuklash uchun joriy shablonni yuklab olishingiz mumkin."
+msgid ""
+"Вы можете скачать актуальный шаблон, чтобы заполнить его и загрузить "
+"обратно в систему."
+msgstr ""
+"Uni to'ldirib, tizimga qayta yuklash uchun joriy shablonni yuklab "
+"olishingiz mumkin."
 
 #: app/web/templates/discounts/upload.html:14
 #: app/web/templates/reports/project_passport.html:469
@@ -1039,11 +1060,11 @@ msgstr "Chegirmalar tizimini faollashtirish"
 
 #: app/web/templates/discounts/versions.html:95
 msgid ""
-"Вы собираетесь активировать новую систему скидок. После активации будет отправлено "
-"email-уведомление."
+"Вы собираетесь активировать новую систему скидок. После активации будет "
+"отправлено email-уведомление."
 msgstr ""
-"Siz yangi chegirmalar tizimini faollashtirmoqchisiz. Faollashtirilgandan so'ng email-"
-"xabarnoma yuboriladi."
+"Siz yangi chegirmalar tizimini faollashtirmoqchisiz. Faollashtirilgandan "
+"so'ng email-xabarnoma yuboriladi."
 
 #: app/web/templates/discounts/versions.html:97
 msgid "Название / Комментарий для версии (обязательно):"
@@ -1170,19 +1191,15 @@ msgstr "Ma'lumotlarni yuklash"
 msgid "Загрузить скидки"
 msgstr "Chegirmalarni yuklash"
 
-#: app/web/templates/layouts/base.html:186
-msgid "Русский"
-msgstr "Ruscha"
-
-#: app/web/templates/layouts/base.html:199
+#: app/web/templates/layouts/base.html:207
 msgid "Профиль"
 msgstr "Profil"
 
-#: app/web/templates/layouts/base.html:200
+#: app/web/templates/layouts/base.html:208
 msgid "Меню сервисов"
 msgstr "Xizmatlar menyusi"
 
-#: app/web/templates/layouts/base.html:202
+#: app/web/templates/layouts/base.html:210
 msgid "Выйти"
 msgstr "Chiqish"
 
@@ -1196,7 +1213,7 @@ msgid "Вычет"
 msgstr "Ushlab qolish"
 
 #: app/web/templates/main/apartment_details.html:34
-#: app/web/templates/main/commercial_offer.html:259
+#: app/web/templates/main/commercial_offer.html:261
 msgid "Скидка"
 msgstr "Chegirma"
 
@@ -1233,12 +1250,15 @@ msgstr "Tanlashga qaytish"
 msgid "Сформировать КП"
 msgstr "Tijorat taklifini shakllantirish"
 
-#: app/web/templates/main/apartment_details.html:106 app/web/templates/main/index.html:15
+#: app/web/templates/main/apartment_details.html:106
+#: app/web/templates/main/index.html:15
 msgid "Номер дома"
 msgstr "Uy raqami"
 
-#: app/web/templates/main/apartment_details.html:107 app/web/templates/main/index.html:14
-#: app/web/templates/main/selection.html:51 app/web/templates/main/selection.html:151
+#: app/web/templates/main/apartment_details.html:107
+#: app/web/templates/main/index.html:14
+#: app/web/templates/main/selection.html:51
+#: app/web/templates/main/selection.html:151
 #: app/web/templates/reports/project_dashboard.html:426
 msgid "Этаж"
 msgstr "Qavat"
@@ -1247,13 +1267,14 @@ msgstr "Qavat"
 msgid "Комнаты"
 msgstr "Xonalar"
 
-#: app/web/templates/main/apartment_details.html:110 app/web/templates/main/index.html:12
+#: app/web/templates/main/apartment_details.html:110
+#: app/web/templates/main/index.html:12
 msgid "Тип объекта"
 msgstr "Obyekt turi"
 
 #: app/web/templates/main/apartment_details.html:117
-#: app/web/templates/main/commercial_offer.html:310
-#: app/web/templates/main/commercial_offer.html:315
+#: app/web/templates/main/commercial_offer.html:312
+#: app/web/templates/main/commercial_offer.html:317
 #: app/web/templates/reports/project_dashboard.html:120
 msgid "Планировка"
 msgstr "Planirovka"
@@ -1267,126 +1288,120 @@ msgid "Варианты оплаты"
 msgstr "To'lov variantlari"
 
 #: app/web/templates/main/apartment_details.html:150
-#: app/web/templates/main/commercial_offer.html:296
+#: app/web/templates/main/commercial_offer.html:298
 msgid "Не удалось рассчитать варианты оплаты."
 msgstr "To'lov variantlarini hisoblab bo'lmadi."
 
-#: app/web/templates/main/commercial_offer.html:6
-msgid "Коммерческое предложение по объекту ID:"
-msgstr "Obyekt bo'yicha tijorat taklifi ID:"
-
-#: app/web/templates/main/commercial_offer.html:219
-#: app/web/templates/reports/hall_of_fame.html:33
-msgid "Показать в USD"
-msgstr "USD da ko'rsatish"
-
-#: app/web/templates/main/commercial_offer.html:223
-#: app/web/templates/main/commercial_offer_complex.html:24
-msgid "Печать"
-msgstr "Chop etish"
-
-#: app/web/templates/main/commercial_offer.html:227
-#: app/web/templates/main/commercial_offer.html:309
-msgid "Логотип"
-msgstr "Logotip"
-
-#: app/web/templates/main/commercial_offer.html:228
+#: app/web/templates/main/commercial_offer.html:8
+#: app/web/templates/main/commercial_offer.html:230
 #: app/web/templates/main/commercial_offer_complex.html:30
 msgid "Коммерческое предложение"
 msgstr "Tijorat taklifi"
 
+#: app/web/templates/main/commercial_offer.html:221
+#: app/web/templates/reports/hall_of_fame.html:33
+msgid "Показать в USD"
+msgstr "USD da ko'rsatish"
+
+#: app/web/templates/main/commercial_offer.html:225
+#: app/web/templates/main/commercial_offer_complex.html:24
+msgid "Печать"
+msgstr "Chop etish"
+
 #: app/web/templates/main/commercial_offer.html:229
+#: app/web/templates/main/commercial_offer.html:311
+msgid "Логотип"
+msgstr "Logotip"
+
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Жилая недвижимость"
 msgstr "Turar-joy ko'chmas mulki"
 
-#: app/web/templates/main/commercial_offer.html:229
-#: app/web/templates/main/commercial_offer.html:311
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Дата"
 msgstr "Sana"
 
-#: app/web/templates/main/commercial_offer.html:232
+#: app/web/templates/main/commercial_offer.html:234
 #: app/web/templates/main/commercial_offer_complex.html:36
 msgid "Информация об объекте"
 msgstr "Obyekt haqida ma'lumot"
 
-#: app/web/templates/main/commercial_offer.html:234
+#: app/web/templates/main/commercial_offer.html:236
 msgid "Жилой комплекс:"
 msgstr "Turar-joy majmuasi:"
 
-#: app/web/templates/main/commercial_offer.html:235
+#: app/web/templates/main/commercial_offer.html:237
 msgid "Номер дома:"
 msgstr "Uy raqami:"
 
-#: app/web/templates/main/commercial_offer.html:236
+#: app/web/templates/main/commercial_offer.html:238
 msgid "Тип/Этаж/Комнат:"
 msgstr "Turi/Qavat/Xonalar:"
 
-#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:239
 msgid "Общая площадь:"
 msgstr "Umumiy maydon:"
 
-#: app/web/templates/main/commercial_offer.html:238
+#: app/web/templates/main/commercial_offer.html:240
 msgid "Цена за м² (Прайс):"
 msgstr "1 m² narxi (Narxlar ro'yxati):"
 
-#: app/web/templates/main/commercial_offer.html:239
-#: app/web/templates/main/commercial_offer.html:254
+#: app/web/templates/main/commercial_offer.html:241
+#: app/web/templates/main/commercial_offer.html:256
 msgid "Прайс:"
 msgstr "Narx:"
 
-#: app/web/templates/main/commercial_offer.html:242
+#: app/web/templates/main/commercial_offer.html:244
 msgid "Предлагаемые варианты оплаты"
 msgstr "Taklif etilayotgan to'lov variantlari"
 
-#: app/web/templates/main/commercial_offer.html:255
+#: app/web/templates/main/commercial_offer.html:257
 msgid "Вычет (бронирование):"
 msgstr "Ushlab qolish (band qilish):"
 
-#: app/web/templates/main/commercial_offer.html:265
+#: app/web/templates/main/commercial_offer.html:267
 msgid "Ваша выгода"
 msgstr "Sizning foydangiz"
 
-#: app/web/templates/main/commercial_offer.html:272
+#: app/web/templates/main/commercial_offer.html:274
 msgid "Цена за м² (со скидкой):"
 msgstr "1 m² narxi (chegirma bilan):"
 
-#: app/web/templates/main/commercial_offer.html:281
+#: app/web/templates/main/commercial_offer.html:283
 #: app/web/templates/main/commercial_offer_complex.html:78
 #: app/web/templates/main/commercial_offer_complex.html:113
 msgid "Первоначальный взнос:"
 msgstr "Boshlang'ich to'lov:"
 
-#: app/web/templates/main/commercial_offer.html:283
-#: app/web/templates/main/commercial_offer.html:286
+#: app/web/templates/main/commercial_offer.html:285
+#: app/web/templates/main/commercial_offer.html:288
 msgid "Итоговая стоимость:"
 msgstr "Yakuniy qiymat:"
 
-#: app/web/templates/main/commercial_offer.html:300
+#: app/web/templates/main/commercial_offer.html:302
 #: app/web/templates/main/commercial_offer_complex.html:151
 msgid ""
-"Это коммерческое предложение не является публичной офертой. Актуальность цен и условий "
-"уточняйте у менеджеров Golden House."
+"Это коммерческое предложение не является публичной офертой. Актуальность "
+"цен и условий уточняйте у менеджеров Golden House."
 msgstr ""
-"Ushbu tijorat taklifi ommaviy oferta hisoblanmaydi. Narxlar va shartlarning "
-"dolzarbligini Golden House menejerlaridan aniqlashtiring."
+"Ushbu tijorat taklifi ommaviy oferta hisoblanmaydi. Narxlar va "
+"shartlarning dolzarbligini Golden House menejerlaridan aniqlashtiring."
 
-#: app/web/templates/main/commercial_offer.html:311
-msgid "Объект"
-msgstr "Obyekt"
-
-#: app/web/templates/main/commercial_offer.html:327
+#: app/web/templates/main/commercial_offer.html:329
 msgid "Вариант"
 msgstr "Variant"
 
-#: app/web/templates/main/commercial_offer.html:334
+#: app/web/templates/main/commercial_offer.html:336
 msgid ""
-"Планировка приведена для ознакомления. Точные размеры уточняйте у менеджеров Golden "
-"House."
+"Планировка приведена для ознакомления. Точные размеры уточняйте у "
+"менеджеров Golden House."
 msgstr ""
-"Planirovka tanishish uchun keltirilgan. Aniq o'lchamlarni Golden House menejerlaridan "
-"aniqlashtiring."
+"Planirovka tanishish uchun keltirilgan. Aniq o'lchamlarni Golden House "
+"menejerlaridan aniqlashtiring."
 
 #: app/web/templates/main/commercial_offer_complex.html:15
 msgid "Тема:"
@@ -1429,8 +1444,8 @@ msgstr "Standart bo'lib to'lash bo'yicha hisob-kitob"
 #, python-format
 msgid ""
 "\n"
-"                                Расчет произведен на срок <strong>%(term)s "
-"мес.</strong>\n"
+"                                Расчет произведен на срок "
+"<strong>%(term)s мес.</strong>\n"
 "                                "
 msgstr "Hisob-kitob <strong>%(term)s oy</strong> muddatga amalga oshirildi."
 
@@ -1457,9 +1472,12 @@ msgstr "Boshlang'ich to'lovni bo'lib to'lash bo'yicha hisob-kitob"
 #, python-format
 msgid ""
 "\n"
-"                                Рассрочка на ПВ на срок <strong>%(term)s мес.</strong>\n"
+"                                Рассрочка на ПВ на срок <strong>%(term)s "
+"мес.</strong>\n"
 "                                "
-msgstr "Boshlang'ich to'lovni <strong>%(term)s oy</strong> muddatga bo'lib to'lash."
+msgstr ""
+"Boshlang'ich to'lovni <strong>%(term)s oy</strong> muddatga bo'lib "
+"to'lash."
 
 #: app/web/templates/main/commercial_offer_complex.html:95
 msgid "Ежемесячный платеж по ПВ:"
@@ -1478,12 +1496,13 @@ msgstr "\"0%% li ipoteka\" bo'yicha hisob-kitob"
 #, python-format
 msgid ""
 "\n"
-"                                Расчет произведен на срок <strong>%(term)s "
-"мес.</strong> с первоначальным взносом <strong>%(dp)s%%</strong>.\n"
+"                                Расчет произведен на срок "
+"<strong>%(term)s мес.</strong> с первоначальным взносом "
+"<strong>%(dp)s%%</strong>.\n"
 "                                "
 msgstr ""
-"Hisob-kitob <strong>%(term)s oy</strong> muddatga, <strong>%(dp)s%%</strong> "
-"boshlang'ich to'lov bilan amalga oshirildi."
+"Hisob-kitob <strong>%(term)s oy</strong> muddatga, "
+"<strong>%(dp)s%%</strong> boshlang'ich to'lov bilan amalga oshirildi."
 
 #: app/web/templates/main/commercial_offer_complex.html:126
 msgid "График платежей"
@@ -1549,7 +1568,8 @@ msgstr "Ko'chmas mulk obyektlari katalogi"
 msgid "ID объекта"
 msgstr "Obyekt ID si"
 
-#: app/web/templates/main/index.html:13 app/web/templates/reports/project_passport.html:480
+#: app/web/templates/main/index.html:13
+#: app/web/templates/reports/project_passport.html:480
 msgid "Название проекта"
 msgstr "Loyiha nomi"
 
@@ -1590,7 +1610,8 @@ msgstr "Obyekt ID si"
 msgid "Введите ID объекта..."
 msgstr "Obyekt ID sini kiriting..."
 
-#: app/web/templates/main/selection.html:14 app/web/templates/main/selection.html:47
+#: app/web/templates/main/selection.html:14
+#: app/web/templates/main/selection.html:47
 #: app/web/templates/reports/manager_performance_overview.html:40
 msgid "Найти"
 msgstr "Topish"
@@ -1607,7 +1628,8 @@ msgstr "Mijozdagi mavjud summa"
 msgid "Валюта"
 msgstr "Valyuta"
 
-#: app/web/templates/main/selection.html:53 app/web/templates/main/selection.html:71
+#: app/web/templates/main/selection.html:53
+#: app/web/templates/main/selection.html:71
 msgid "Любой"
 msgstr "Har qanday"
 
@@ -1669,11 +1691,11 @@ msgstr "Hech narsa topilmadi"
 
 #: app/web/templates/main/selection.html:201
 msgid ""
-"По вашему запросу не найдено ни одной подходящей квартиры. Попробуйте увеличить сумму "
-"бюджета или смягчить условия фильтрации."
+"По вашему запросу не найдено ни одной подходящей квартиры. Попробуйте "
+"увеличить сумму бюджета или смягчить условия фильтрации."
 msgstr ""
-"So'rovingiz bo'yicha mos kvartira topilmadi. Byudjet summasini oshirib yoki filtr "
-"shartlarini yumshatib ko'ring."
+"So'rovingiz bo'yicha mos kvartira topilmadi. Byudjet summasini oshirib "
+"yoki filtr shartlarini yumshatib ko'ring."
 
 #: app/web/templates/reports/deal_registry_report.html:13
 msgid "Экспорт в Excel"
@@ -1697,7 +1719,9 @@ msgstr "Arizalar topilmadi."
 
 #: app/web/templates/reports/funnel_leads.html:38
 msgid "Не удалось получить список ID или по указанным ID нет данных."
-msgstr "ID lar ro'yxatini olib bo'lmadi yoki ko'rsatilgan ID lar bo'yicha ma'lumot yo'q."
+msgstr ""
+"ID lar ro'yxatini olib bo'lmadi yoki ko'rsatilgan ID lar bo'yicha "
+"ma'lumot yo'q."
 
 #: app/web/templates/reports/funnel_leads.html:44
 msgid "Закрыть окно"
@@ -2829,7 +2853,9 @@ msgstr "O'rtacha narx ($)"
 
 #: app/web/templates/reports/sales_pace_report.html:179
 msgid "Нет данных о продажах за выбранный период и тип недвижимости."
-msgstr "Tanlangan davr va ko'chmas mulk turi bo'yicha sotuvlar haqida ma'lumot yo'q."
+msgstr ""
+"Tanlangan davr va ko'chmas mulk turi bo'yicha sotuvlar haqida ma'lumot "
+"yo'q."
 
 #: app/web/templates/reports/upload_manager_plan.html:8
 msgid "Загрузка планов менеджеров"
@@ -2841,11 +2867,11 @@ msgstr "To'ldirish uchun shablonni yuklab olish"
 
 #: app/web/templates/reports/upload_manager_plan.html:16
 msgid ""
-"Загрузите Excel-файл. Первый столбец: ФИО менеджера. Остальные столбцы: \"Контрактация "
-"ДД.ММ.ГГГГ\" и \"Поступления ДД.ММ.ГГГГ\"."
+"Загрузите Excel-файл. Первый столбец: ФИО менеджера. Остальные столбцы: "
+"\"Контрактация ДД.ММ.ГГГГ\" и \"Поступления ДД.ММ.ГГГГ\"."
 msgstr ""
-"Excel faylni yuklang. Birinchi ustun: menejerning F.I.Sh. Qolgan ustunlar: "
-"\"Shartnomalar KK.OO.YYYY\" va \"Tushumlar KK.OO.YYYY\"."
+"Excel faylni yuklang. Birinchi ustun: menejerning F.I.Sh. Qolgan "
+"ustunlar: \"Shartnomalar KK.OO.YYYY\" va \"Tushumlar KK.OO.YYYY\"."
 
 #: app/web/templates/reports/upload_plan.html:4
 msgid "Загрузка плановых показателей (Excel)"
@@ -2853,11 +2879,11 @@ msgstr "Rejadagi ko'rsatkichlarni yuklash (Excel)"
 
 #: app/web/templates/reports/upload_plan.html:6
 msgid ""
-"Вы можете скачать актуальный шаблон с названиями всех ЖК, чтобы заполнить его и "
-"загрузить обратно в систему."
+"Вы можете скачать актуальный шаблон с названиями всех ЖК, чтобы заполнить"
+" его и загрузить обратно в систему."
 msgstr ""
-"Uni to'ldirib, tizimga qayta yuklash uchun barcha TJM nomlari bilan joriy shablonni "
-"yuklab olishingiz mumkin."
+"Uni to'ldirib, tizimga qayta yuklash uchun barcha TJM nomlari bilan joriy"
+" shablonni yuklab olishingiz mumkin."
 
 #: app/web/templates/reports/yearly_manager_report.html:268
 msgid "Темпы строительства"
@@ -2975,8 +3001,12 @@ msgid "Исключения из подбора (по ID квартиры)"
 msgstr "Tanlashdan istisnolar (kvartira ID si bo'yicha)"
 
 #: app/web/templates/settings/manage_exclusions.html:13
-msgid "Квартиры из этого списка не будут отображаться в результатах поиска по бюджету."
-msgstr "Bu ro'yxatdagi kvartiralar byudjet bo'yicha qidiruv natijalarida ko'rsatilmaydi."
+msgid ""
+"Квартиры из этого списка не будут отображаться в результатах поиска по "
+"бюджету."
+msgstr ""
+"Bu ro'yxatdagi kvartiralar byudjet bo'yicha qidiruv natijalarida "
+"ko'rsatilmaydi."
 
 #: app/web/templates/settings/manage_exclusions.html:20
 #: app/web/templates/settings/manage_exclusions.html:43
@@ -3026,11 +3056,11 @@ msgstr "Qoldiqlar hisobotidan istisnolar (TJM bo'yicha)"
 
 #: app/web/templates/settings/manage_exclusions.html:84
 msgid ""
-"Нажмите на название проекта, чтобы скрыть его из \"Сводки по товарному запасу\" или "
-"вернуть обратно."
+"Нажмите на название проекта, чтобы скрыть его из \"Сводки по товарному "
+"запасу\" или вернуть обратно."
 msgstr ""
-"Loyihani \"Tovar zaxirasi jamlanmasi\" dan yashirish yoki qaytarish uchun uning nomiga "
-"bosing."
+"Loyihani \"Tovar zaxirasi jamlanmasi\" dan yashirish yoki qaytarish uchun"
+" uning nomiga bosing."
 
 #: app/web/templates/settings/manage_exclusions.html:92
 msgid "Скрыт в отчете"
@@ -3046,13 +3076,22 @@ msgstr "Email-xabarnoma oluvchilarni boshqarish"
 
 #: app/web/templates/settings/manage_recipients.html:5
 msgid ""
-"Отметьте пользователей, которые должны получать уведомления при активации новой системы"
-" скидок."
+"Отметьте пользователей, которые должны получать уведомления при активации"
+" новой системы скидок."
 msgstr ""
-"Yangi chegirmalar tizimi faollashtirilganda xabarnoma olishi kerak bo'lgan "
-"foydalanuvchilarni belgilang."
+"Yangi chegirmalar tizimi faollashtirilganda xabarnoma olishi kerak "
+"bo'lgan foydalanuvchilarni belgilang."
 
 #: app/web/templates/settings/manage_recipients.html:26
 msgid "Сохранить список"
 msgstr "Ro'yxatni saqlash"
+
+#~ msgid "Русский"
+#~ msgstr "Ruscha"
+
+#~ msgid "Коммерческое предложение по объекту ID:"
+#~ msgstr "Obyekt bo'yicha tijorat taklifi ID:"
+
+#~ msgid "Объект"
+#~ msgstr "Obyekt"
 

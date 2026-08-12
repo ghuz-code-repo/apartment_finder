@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ApartmentFinder VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-11 17:34+0500\n"
+"POT-Creation-Date: 2026-08-12 09:28+0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -150,7 +150,7 @@ msgstr ""
 msgid "Сохранить изменения"
 msgstr ""
 
-#: app/web/main_routes.py:163
+#: app/web/main_routes.py:174
 msgid "Подбор по бюджету"
 msgstr ""
 
@@ -1179,19 +1179,15 @@ msgstr ""
 msgid "Загрузить скидки"
 msgstr ""
 
-#: app/web/templates/layouts/base.html:186
-msgid "Русский"
-msgstr ""
-
-#: app/web/templates/layouts/base.html:199
+#: app/web/templates/layouts/base.html:207
 msgid "Профиль"
 msgstr ""
 
-#: app/web/templates/layouts/base.html:200
+#: app/web/templates/layouts/base.html:208
 msgid "Меню сервисов"
 msgstr ""
 
-#: app/web/templates/layouts/base.html:202
+#: app/web/templates/layouts/base.html:210
 msgid "Выйти"
 msgstr ""
 
@@ -1205,7 +1201,7 @@ msgid "Вычет"
 msgstr ""
 
 #: app/web/templates/main/apartment_details.html:34
-#: app/web/templates/main/commercial_offer.html:259
+#: app/web/templates/main/commercial_offer.html:261
 msgid "Скидка"
 msgstr ""
 
@@ -1265,8 +1261,8 @@ msgid "Тип объекта"
 msgstr ""
 
 #: app/web/templates/main/apartment_details.html:117
-#: app/web/templates/main/commercial_offer.html:310
-#: app/web/templates/main/commercial_offer.html:315
+#: app/web/templates/main/commercial_offer.html:312
+#: app/web/templates/main/commercial_offer.html:317
 #: app/web/templates/reports/project_dashboard.html:120
 msgid "Планировка"
 msgstr ""
@@ -1280,118 +1276,112 @@ msgid "Варианты оплаты"
 msgstr ""
 
 #: app/web/templates/main/apartment_details.html:150
-#: app/web/templates/main/commercial_offer.html:296
+#: app/web/templates/main/commercial_offer.html:298
 msgid "Не удалось рассчитать варианты оплаты."
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:6
-msgid "Коммерческое предложение по объекту ID:"
-msgstr ""
-
-#: app/web/templates/main/commercial_offer.html:219
-#: app/web/templates/reports/hall_of_fame.html:33
-msgid "Показать в USD"
-msgstr ""
-
-#: app/web/templates/main/commercial_offer.html:223
-#: app/web/templates/main/commercial_offer_complex.html:24
-msgid "Печать"
-msgstr ""
-
-#: app/web/templates/main/commercial_offer.html:227
-#: app/web/templates/main/commercial_offer.html:309
-msgid "Логотип"
-msgstr ""
-
-#: app/web/templates/main/commercial_offer.html:228
+#: app/web/templates/main/commercial_offer.html:8
+#: app/web/templates/main/commercial_offer.html:230
 #: app/web/templates/main/commercial_offer_complex.html:30
 msgid "Коммерческое предложение"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:229
-#: app/web/templates/main/commercial_offer_complex.html:31
-msgid "Жилая недвижимость"
+#: app/web/templates/main/commercial_offer.html:221
+#: app/web/templates/reports/hall_of_fame.html:33
+msgid "Показать в USD"
+msgstr ""
+
+#: app/web/templates/main/commercial_offer.html:225
+#: app/web/templates/main/commercial_offer_complex.html:24
+msgid "Печать"
 msgstr ""
 
 #: app/web/templates/main/commercial_offer.html:229
 #: app/web/templates/main/commercial_offer.html:311
+msgid "Логотип"
+msgstr ""
+
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
+#: app/web/templates/main/commercial_offer_complex.html:31
+msgid "Жилая недвижимость"
+msgstr ""
+
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Дата"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:232
+#: app/web/templates/main/commercial_offer.html:234
 #: app/web/templates/main/commercial_offer_complex.html:36
 msgid "Информация об объекте"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:234
+#: app/web/templates/main/commercial_offer.html:236
 msgid "Жилой комплекс:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:235
+#: app/web/templates/main/commercial_offer.html:237
 msgid "Номер дома:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:236
+#: app/web/templates/main/commercial_offer.html:238
 msgid "Тип/Этаж/Комнат:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:239
 msgid "Общая площадь:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:238
+#: app/web/templates/main/commercial_offer.html:240
 msgid "Цена за м² (Прайс):"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:239
-#: app/web/templates/main/commercial_offer.html:254
+#: app/web/templates/main/commercial_offer.html:241
+#: app/web/templates/main/commercial_offer.html:256
 msgid "Прайс:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:242
+#: app/web/templates/main/commercial_offer.html:244
 msgid "Предлагаемые варианты оплаты"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:255
+#: app/web/templates/main/commercial_offer.html:257
 msgid "Вычет (бронирование):"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:265
+#: app/web/templates/main/commercial_offer.html:267
 msgid "Ваша выгода"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:272
+#: app/web/templates/main/commercial_offer.html:274
 msgid "Цена за м² (со скидкой):"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:281
+#: app/web/templates/main/commercial_offer.html:283
 #: app/web/templates/main/commercial_offer_complex.html:78
 #: app/web/templates/main/commercial_offer_complex.html:113
 msgid "Первоначальный взнос:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:283
-#: app/web/templates/main/commercial_offer.html:286
+#: app/web/templates/main/commercial_offer.html:285
+#: app/web/templates/main/commercial_offer.html:288
 msgid "Итоговая стоимость:"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:300
+#: app/web/templates/main/commercial_offer.html:302
 #: app/web/templates/main/commercial_offer_complex.html:151
 msgid ""
 "Это коммерческое предложение не является публичной офертой. Актуальность "
 "цен и условий уточняйте у менеджеров Golden House."
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:311
-msgid "Объект"
-msgstr ""
-
-#: app/web/templates/main/commercial_offer.html:327
+#: app/web/templates/main/commercial_offer.html:329
 msgid "Вариант"
 msgstr ""
 
-#: app/web/templates/main/commercial_offer.html:334
+#: app/web/templates/main/commercial_offer.html:336
 msgid ""
 "Планировка приведена для ознакомления. Точные размеры уточняйте у "
 "менеджеров Golden House."

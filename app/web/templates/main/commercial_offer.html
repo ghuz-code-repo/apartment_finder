@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ _('Коммерческое предложение по объекту ID:') }} {{ data.apartment.id }}</title>
+    {# Заголовок попадает в имя файла при печати в PDF, поэтому вместо
+       внутреннего ID объекта — название ЖК, понятное клиенту. #}
+    <title>{{ _('Коммерческое предложение') }}{% if data.apartment.house and data.apartment.house.complex_name %} — {{ data.apartment.house.complex_name }}{% endif %}</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}" rel="stylesheet">
     <style>
@@ -308,7 +310,7 @@
         <div class="header">
             <img src="{{ url_for('static', filename='logo_light.svg') }}" alt="{{ _('Логотип') }}" class="header-logo">
             <h1>{{ _('Планировка') }}</h1>
-            <p><strong>Golden House | {{ _('Объект') }} ID: {{ data.apartment.id }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
+            <p><strong>Golden House | {{ _('Жилая недвижимость') }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
         </div>
 
         <div class="section-title">

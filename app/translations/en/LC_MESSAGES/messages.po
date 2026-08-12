@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-11 17:34+0500\n"
+"POT-Creation-Date: 2026-08-12 09:28+0500\n"
 "PO-Revision-Date: 2025-08-15 17:40+0500\n"
 "Last-Translator: Gemini Assistant\n"
 "Language: en\n"
@@ -22,7 +22,8 @@ msgstr ""
 msgid "Выберите Excel-файл со скидками"
 msgstr "Select Excel file with discounts"
 
-#: app/web/forms.py:14 app/web/forms.py:22 app/web/forms.py:29 app/web/forms.py:75
+#: app/web/forms.py:14 app/web/forms.py:22 app/web/forms.py:29
+#: app/web/forms.py:75
 msgid "Необходимо выбрать файл."
 msgstr "A file must be selected."
 
@@ -43,14 +44,16 @@ msgstr "Upload matrix"
 msgid "Выберите Excel-файл с планами"
 msgstr "Select Excel file with plans"
 
-#: app/web/forms.py:31 app/web/templates/reports/manager_analytics_report.html:38
+#: app/web/forms.py:31
+#: app/web/templates/reports/manager_analytics_report.html:38
 #: app/web/templates/reports/manager_performance_overview.html:86
 #: app/web/templates/reports/plan_fact_report.html:30
 #: app/web/templates/reports/quarterly_analytical_report.html:57
 msgid "Год"
 msgstr "Year"
 
-#: app/web/forms.py:32 app/web/templates/reports/manager_analytics_report.html:31
+#: app/web/forms.py:32
+#: app/web/templates/reports/manager_analytics_report.html:31
 #: app/web/templates/reports/manager_performance_detail.html:95
 #: app/web/templates/reports/manager_performance_overview.html:76
 #: app/web/templates/reports/plan_fact_report.html:44
@@ -102,7 +105,8 @@ msgstr "Apartment IDs for \"0% Mortgage\" (comma-separated)"
 msgid "Загрузить новую матрицу для \"Ипотеки под 0%\" (Excel)"
 msgstr "Upload new matrix for \"0% Mortgage\" (Excel)"
 
-#: app/web/forms.py:77 app/web/templates/reports/manager_performance_overview.html:16
+#: app/web/forms.py:77
+#: app/web/templates/reports/manager_performance_overview.html:16
 msgid "Загрузить планы"
 msgstr "Upload Plans"
 
@@ -146,7 +150,7 @@ msgstr "Upload NEW floor plan (optional)"
 msgid "Сохранить изменения"
 msgstr "Save Changes"
 
-#: app/web/main_routes.py:163
+#: app/web/main_routes.py:174
 msgid "Подбор по бюджету"
 msgstr "Budget Selection"
 
@@ -367,11 +371,13 @@ msgstr "Download competitor database"
 msgid "Вернуться к карте"
 msgstr "Back to map"
 
-#: app/web/templates/competitors/map.html:20 app/web/templates/competitors/map.html:34
+#: app/web/templates/competitors/map.html:20
+#: app/web/templates/competitors/map.html:34
 msgid "Фильтры"
 msgstr "Filters"
 
-#: app/web/templates/competitors/map.html:23 app/web/templates/competitors/map.html:78
+#: app/web/templates/competitors/map.html:23
+#: app/web/templates/competitors/map.html:78
 msgid "Сравнение"
 msgstr "Comparison"
 
@@ -379,7 +385,8 @@ msgstr "Comparison"
 msgid "Настройки"
 msgstr "Settings"
 
-#: app/web/templates/competitors/map.html:35 app/web/templates/competitors/map.html:79
+#: app/web/templates/competitors/map.html:35
+#: app/web/templates/competitors/map.html:79
 #: app/web/templates/competitors/map.html:104
 #: app/web/templates/discounts/edit_version.html:128
 #: app/web/templates/discounts/edit_version.html:146
@@ -424,10 +431,12 @@ msgid "Ваш проект (база)"
 msgstr "Your project (base)"
 
 #: app/web/templates/competitors/map.html:85
-msgid "Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами недоступно."
+msgid ""
+"Список ЖК пуст: нет связи с базой MacroCRM. Сравнение с нашими проектами "
+"недоступно."
 msgstr ""
-"Complex list is empty: no connection to the MacroCRM database. Comparison with our "
-"projects is unavailable."
+"Complex list is empty: no connection to the MacroCRM database. Comparison"
+" with our projects is unavailable."
 
 #: app/web/templates/competitors/map.html:95
 msgid "Выберите отметку на карте для сравнения"
@@ -447,11 +456,11 @@ msgstr "Map cache"
 
 #: app/web/templates/competitors/map.html:120
 msgid ""
-"Плитки карты хранятся в этом браузере. Что уже сохранено, открывается с вашего диска, "
-"без обращения к серверу."
+"Плитки карты хранятся в этом браузере. Что уже сохранено, открывается с "
+"вашего диска, без обращения к серверу."
 msgstr ""
-"Map tiles are stored in this browser. What is already saved opens from your disk, "
-"without contacting the server."
+"Map tiles are stored in this browser. What is already saved opens from "
+"your disk, without contacting the server."
 
 #: app/web/templates/competitors/map.html:123
 msgid "Хранение"
@@ -481,17 +490,18 @@ msgstr "Used"
 msgid "Показать папку"
 msgstr "Show folder"
 
-#: app/web/templates/competitors/map.html:155 app/web/templates/competitors/map.html:232
+#: app/web/templates/competitors/map.html:155
+#: app/web/templates/competitors/map.html:232
 msgid "Скопировать путь"
 msgstr "Copy path"
 
 #: app/web/templates/competitors/map.html:160
 msgid ""
-"Путь типовой для вашей системы: браузер не сообщает странице настоящее расположение и "
-"не может открыть проводник."
+"Путь типовой для вашей системы: браузер не сообщает странице настоящее "
+"расположение и не может открыть проводник."
 msgstr ""
-"The path is typical for your system: the browser does not tell the page the real "
-"location and cannot open the file manager."
+"The path is typical for your system: the browser does not tell the page "
+"the real location and cannot open the file manager."
 
 #: app/web/templates/competitors/map.html:164
 msgid "Максимальный объём"
@@ -509,21 +519,23 @@ msgstr "No margin"
 msgid "плитка"
 msgstr "tile"
 
-#: app/web/templates/competitors/map.html:178 app/web/templates/competitors/map.html:179
+#: app/web/templates/competitors/map.html:178
+#: app/web/templates/competitors/map.html:179
 msgid "плитки"
 msgstr "tiles"
 
-#: app/web/templates/competitors/map.html:180 app/web/templates/competitors/map.html:230
+#: app/web/templates/competitors/map.html:180
+#: app/web/templates/competitors/map.html:230
 msgid "плиток"
 msgstr "tiles"
 
 #: app/web/templates/competitors/map.html:183
 msgid ""
-"Сколько плиток за пределами экрана скачивать заранее, чтобы карта успевала за "
-"прокруткой."
+"Сколько плиток за пределами экрана скачивать заранее, чтобы карта "
+"успевала за прокруткой."
 msgstr ""
-"How many tiles beyond the screen to download in advance so the map keeps up with "
-"panning."
+"How many tiles beyond the screen to download in advance so the map keeps "
+"up with panning."
 
 #: app/web/templates/competitors/map.html:186
 msgid "Регионы"
@@ -702,7 +714,8 @@ msgid "Стандартные скидки"
 msgstr "Standard Discounts"
 
 #: app/web/templates/discounts/discounts.html:120
-#: app/web/templates/discounts/discounts.html:191 app/web/templates/main/selection.html:75
+#: app/web/templates/discounts/discounts.html:191
+#: app/web/templates/main/selection.html:75
 #: app/web/templates/main/selection.html:117
 #: app/web/templates/reports/project_passport.html:131
 #: app/web/templates/reports/yearly_manager_report.html:128
@@ -710,7 +723,8 @@ msgstr "Standard Discounts"
 msgid "100%% оплата"
 msgstr "100%% payment"
 
-#: app/web/templates/discounts/discounts.html:124 app/web/templates/main/selection.html:76
+#: app/web/templates/discounts/discounts.html:124
+#: app/web/templates/main/selection.html:76
 #: app/web/templates/main/selection.html:118
 #: app/web/templates/reports/project_passport.html:485
 msgid "Ипотека"
@@ -724,7 +738,8 @@ msgstr "Mortgage"
 msgid "Акция"
 msgstr "Promotion"
 
-#: app/web/templates/discounts/discounts.html:161 app/web/templates/main/selection.html:38
+#: app/web/templates/discounts/discounts.html:161
+#: app/web/templates/main/selection.html:38
 #: app/web/templates/reports/plan_fact_report.html:50
 #: app/web/templates/reports/project_dashboard.html:315
 #: app/web/templates/reports/project_dashboard.html:352
@@ -968,8 +983,12 @@ msgid "Загрузка файла со скидками (Excel)"
 msgstr "Uploading discount file (Excel)"
 
 #: app/web/templates/discounts/upload.html:6
-msgid "Вы можете скачать актуальный шаблон, чтобы заполнить его и загрузить обратно в систему."
-msgstr "You can download the current template to fill it out and upload it back into the system."
+msgid ""
+"Вы можете скачать актуальный шаблон, чтобы заполнить его и загрузить "
+"обратно в систему."
+msgstr ""
+"You can download the current template to fill it out and upload it back "
+"into the system."
 
 #: app/web/templates/discounts/upload.html:14
 #: app/web/templates/reports/project_passport.html:469
@@ -1041,11 +1060,11 @@ msgstr "Discount System Activation"
 
 #: app/web/templates/discounts/versions.html:95
 msgid ""
-"Вы собираетесь активировать новую систему скидок. После активации будет отправлено "
-"email-уведомление."
+"Вы собираетесь активировать новую систему скидок. После активации будет "
+"отправлено email-уведомление."
 msgstr ""
-"You are about to activate a new discount system. An email notification will be sent "
-"after activation."
+"You are about to activate a new discount system. An email notification "
+"will be sent after activation."
 
 #: app/web/templates/discounts/versions.html:97
 msgid "Название / Комментарий для версии (обязательно):"
@@ -1172,19 +1191,15 @@ msgstr "Data Upload"
 msgid "Загрузить скидки"
 msgstr "Upload Discounts"
 
-#: app/web/templates/layouts/base.html:186
-msgid "Русский"
-msgstr "Russian"
-
-#: app/web/templates/layouts/base.html:199
+#: app/web/templates/layouts/base.html:207
 msgid "Профиль"
 msgstr "Profile"
 
-#: app/web/templates/layouts/base.html:200
+#: app/web/templates/layouts/base.html:208
 msgid "Меню сервисов"
 msgstr "Services menu"
 
-#: app/web/templates/layouts/base.html:202
+#: app/web/templates/layouts/base.html:210
 msgid "Выйти"
 msgstr "Logout"
 
@@ -1198,7 +1213,7 @@ msgid "Вычет"
 msgstr "Deduction"
 
 #: app/web/templates/main/apartment_details.html:34
-#: app/web/templates/main/commercial_offer.html:259
+#: app/web/templates/main/commercial_offer.html:261
 msgid "Скидка"
 msgstr "Discount"
 
@@ -1235,12 +1250,15 @@ msgstr "Back to selection"
 msgid "Сформировать КП"
 msgstr "Generate commercial offer"
 
-#: app/web/templates/main/apartment_details.html:106 app/web/templates/main/index.html:15
+#: app/web/templates/main/apartment_details.html:106
+#: app/web/templates/main/index.html:15
 msgid "Номер дома"
 msgstr "Building Number"
 
-#: app/web/templates/main/apartment_details.html:107 app/web/templates/main/index.html:14
-#: app/web/templates/main/selection.html:51 app/web/templates/main/selection.html:151
+#: app/web/templates/main/apartment_details.html:107
+#: app/web/templates/main/index.html:14
+#: app/web/templates/main/selection.html:51
+#: app/web/templates/main/selection.html:151
 #: app/web/templates/reports/project_dashboard.html:426
 msgid "Этаж"
 msgstr "Floor"
@@ -1249,13 +1267,14 @@ msgstr "Floor"
 msgid "Комнаты"
 msgstr "Rooms"
 
-#: app/web/templates/main/apartment_details.html:110 app/web/templates/main/index.html:12
+#: app/web/templates/main/apartment_details.html:110
+#: app/web/templates/main/index.html:12
 msgid "Тип объекта"
 msgstr "Object Type"
 
 #: app/web/templates/main/apartment_details.html:117
-#: app/web/templates/main/commercial_offer.html:310
-#: app/web/templates/main/commercial_offer.html:315
+#: app/web/templates/main/commercial_offer.html:312
+#: app/web/templates/main/commercial_offer.html:317
 #: app/web/templates/reports/project_dashboard.html:120
 msgid "Планировка"
 msgstr "Floor plan"
@@ -1269,126 +1288,120 @@ msgid "Варианты оплаты"
 msgstr "Payment Options"
 
 #: app/web/templates/main/apartment_details.html:150
-#: app/web/templates/main/commercial_offer.html:296
+#: app/web/templates/main/commercial_offer.html:298
 msgid "Не удалось рассчитать варианты оплаты."
 msgstr "Could not calculate payment options."
 
-#: app/web/templates/main/commercial_offer.html:6
-msgid "Коммерческое предложение по объекту ID:"
-msgstr "Commercial Offer for Object ID:"
-
-#: app/web/templates/main/commercial_offer.html:219
-#: app/web/templates/reports/hall_of_fame.html:33
-msgid "Показать в USD"
-msgstr "Show in USD"
-
-#: app/web/templates/main/commercial_offer.html:223
-#: app/web/templates/main/commercial_offer_complex.html:24
-msgid "Печать"
-msgstr "Print"
-
-#: app/web/templates/main/commercial_offer.html:227
-#: app/web/templates/main/commercial_offer.html:309
-msgid "Логотип"
-msgstr "Logo"
-
-#: app/web/templates/main/commercial_offer.html:228
+#: app/web/templates/main/commercial_offer.html:8
+#: app/web/templates/main/commercial_offer.html:230
 #: app/web/templates/main/commercial_offer_complex.html:30
 msgid "Коммерческое предложение"
 msgstr "Commercial Offer"
 
+#: app/web/templates/main/commercial_offer.html:221
+#: app/web/templates/reports/hall_of_fame.html:33
+msgid "Показать в USD"
+msgstr "Show in USD"
+
+#: app/web/templates/main/commercial_offer.html:225
+#: app/web/templates/main/commercial_offer_complex.html:24
+msgid "Печать"
+msgstr "Print"
+
 #: app/web/templates/main/commercial_offer.html:229
+#: app/web/templates/main/commercial_offer.html:311
+msgid "Логотип"
+msgstr "Logo"
+
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Жилая недвижимость"
 msgstr "Residential Real Estate"
 
-#: app/web/templates/main/commercial_offer.html:229
-#: app/web/templates/main/commercial_offer.html:311
+#: app/web/templates/main/commercial_offer.html:231
+#: app/web/templates/main/commercial_offer.html:313
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Дата"
 msgstr "Date"
 
-#: app/web/templates/main/commercial_offer.html:232
+#: app/web/templates/main/commercial_offer.html:234
 #: app/web/templates/main/commercial_offer_complex.html:36
 msgid "Информация об объекте"
 msgstr "Object Information"
 
-#: app/web/templates/main/commercial_offer.html:234
+#: app/web/templates/main/commercial_offer.html:236
 msgid "Жилой комплекс:"
 msgstr "Residential Complex:"
 
-#: app/web/templates/main/commercial_offer.html:235
+#: app/web/templates/main/commercial_offer.html:237
 msgid "Номер дома:"
 msgstr "Building Number:"
 
-#: app/web/templates/main/commercial_offer.html:236
+#: app/web/templates/main/commercial_offer.html:238
 msgid "Тип/Этаж/Комнат:"
 msgstr "Type/Floor/Rooms:"
 
-#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:239
 msgid "Общая площадь:"
 msgstr "Total Area:"
 
-#: app/web/templates/main/commercial_offer.html:238
+#: app/web/templates/main/commercial_offer.html:240
 msgid "Цена за м² (Прайс):"
 msgstr "Price per m² (List):"
 
-#: app/web/templates/main/commercial_offer.html:239
-#: app/web/templates/main/commercial_offer.html:254
+#: app/web/templates/main/commercial_offer.html:241
+#: app/web/templates/main/commercial_offer.html:256
 msgid "Прайс:"
 msgstr "List Price:"
 
-#: app/web/templates/main/commercial_offer.html:242
+#: app/web/templates/main/commercial_offer.html:244
 msgid "Предлагаемые варианты оплаты"
 msgstr "Offered Payment Options"
 
-#: app/web/templates/main/commercial_offer.html:255
+#: app/web/templates/main/commercial_offer.html:257
 msgid "Вычет (бронирование):"
 msgstr "Deduction (reservation):"
 
-#: app/web/templates/main/commercial_offer.html:265
+#: app/web/templates/main/commercial_offer.html:267
 msgid "Ваша выгода"
 msgstr "Your savings"
 
-#: app/web/templates/main/commercial_offer.html:272
+#: app/web/templates/main/commercial_offer.html:274
 msgid "Цена за м² (со скидкой):"
 msgstr "Price per m² (with discount):"
 
-#: app/web/templates/main/commercial_offer.html:281
+#: app/web/templates/main/commercial_offer.html:283
 #: app/web/templates/main/commercial_offer_complex.html:78
 #: app/web/templates/main/commercial_offer_complex.html:113
 msgid "Первоначальный взнос:"
 msgstr "Down payment:"
 
-#: app/web/templates/main/commercial_offer.html:283
-#: app/web/templates/main/commercial_offer.html:286
+#: app/web/templates/main/commercial_offer.html:285
+#: app/web/templates/main/commercial_offer.html:288
 msgid "Итоговая стоимость:"
 msgstr "Total cost:"
 
-#: app/web/templates/main/commercial_offer.html:300
+#: app/web/templates/main/commercial_offer.html:302
 #: app/web/templates/main/commercial_offer_complex.html:151
 msgid ""
-"Это коммерческое предложение не является публичной офертой. Актуальность цен и условий "
-"уточняйте у менеджеров Golden House."
+"Это коммерческое предложение не является публичной офертой. Актуальность "
+"цен и условий уточняйте у менеджеров Golden House."
 msgstr ""
-"This commercial offer is not a public offer. Please check the relevance of prices and "
-"conditions with Golden House managers."
+"This commercial offer is not a public offer. Please check the relevance "
+"of prices and conditions with Golden House managers."
 
-#: app/web/templates/main/commercial_offer.html:311
-msgid "Объект"
-msgstr "Object"
-
-#: app/web/templates/main/commercial_offer.html:327
+#: app/web/templates/main/commercial_offer.html:329
 msgid "Вариант"
 msgstr "Option"
 
-#: app/web/templates/main/commercial_offer.html:334
+#: app/web/templates/main/commercial_offer.html:336
 msgid ""
-"Планировка приведена для ознакомления. Точные размеры уточняйте у менеджеров Golden "
-"House."
+"Планировка приведена для ознакомления. Точные размеры уточняйте у "
+"менеджеров Golden House."
 msgstr ""
-"The floor plan is provided for reference. Please confirm exact dimensions with Golden "
-"House managers."
+"The floor plan is provided for reference. Please confirm exact dimensions"
+" with Golden House managers."
 
 #: app/web/templates/main/commercial_offer_complex.html:15
 msgid "Тема:"
@@ -1431,8 +1444,8 @@ msgstr "Standard installment calculation"
 #, python-format
 msgid ""
 "\n"
-"                                Расчет произведен на срок <strong>%(term)s "
-"мес.</strong>\n"
+"                                Расчет произведен на срок "
+"<strong>%(term)s мес.</strong>\n"
 "                                "
 msgstr "Calculated for a term of <strong>%(term)s months</strong>"
 
@@ -1459,7 +1472,8 @@ msgstr "Down payment installment calculation"
 #, python-format
 msgid ""
 "\n"
-"                                Рассрочка на ПВ на срок <strong>%(term)s мес.</strong>\n"
+"                                Рассрочка на ПВ на срок <strong>%(term)s "
+"мес.</strong>\n"
 "                                "
 msgstr "Down payment installment for <strong>%(term)s months</strong>"
 
@@ -1480,12 +1494,13 @@ msgstr "\"0%% Mortgage\" calculation"
 #, python-format
 msgid ""
 "\n"
-"                                Расчет произведен на срок <strong>%(term)s "
-"мес.</strong> с первоначальным взносом <strong>%(dp)s%%</strong>.\n"
+"                                Расчет произведен на срок "
+"<strong>%(term)s мес.</strong> с первоначальным взносом "
+"<strong>%(dp)s%%</strong>.\n"
 "                                "
 msgstr ""
-"Calculated for a term of <strong>%(term)s months</strong> with a down payment of "
-"<strong>%(dp)s%%</strong>."
+"Calculated for a term of <strong>%(term)s months</strong> with a down "
+"payment of <strong>%(dp)s%%</strong>."
 
 #: app/web/templates/main/commercial_offer_complex.html:126
 msgid "График платежей"
@@ -1551,7 +1566,8 @@ msgstr "Real Estate Catalog"
 msgid "ID объекта"
 msgstr "Object ID"
 
-#: app/web/templates/main/index.html:13 app/web/templates/reports/project_passport.html:480
+#: app/web/templates/main/index.html:13
+#: app/web/templates/reports/project_passport.html:480
 msgid "Название проекта"
 msgstr "Project Name"
 
@@ -1592,7 +1608,8 @@ msgstr "Object ID"
 msgid "Введите ID объекта..."
 msgstr "Enter object ID..."
 
-#: app/web/templates/main/selection.html:14 app/web/templates/main/selection.html:47
+#: app/web/templates/main/selection.html:14
+#: app/web/templates/main/selection.html:47
 #: app/web/templates/reports/manager_performance_overview.html:40
 msgid "Найти"
 msgstr "Find"
@@ -1609,7 +1626,8 @@ msgstr "Client's cash on hand"
 msgid "Валюта"
 msgstr "Currency"
 
-#: app/web/templates/main/selection.html:53 app/web/templates/main/selection.html:71
+#: app/web/templates/main/selection.html:53
+#: app/web/templates/main/selection.html:71
 msgid "Любой"
 msgstr "Any"
 
@@ -1671,11 +1689,11 @@ msgstr "Nothing found"
 
 #: app/web/templates/main/selection.html:201
 msgid ""
-"По вашему запросу не найдено ни одной подходящей квартиры. Попробуйте увеличить сумму "
-"бюджета или смягчить условия фильтрации."
+"По вашему запросу не найдено ни одной подходящей квартиры. Попробуйте "
+"увеличить сумму бюджета или смягчить условия фильтрации."
 msgstr ""
-"No suitable apartments were found for your request. Try increasing the budget amount or"
-" softening the filter conditions."
+"No suitable apartments were found for your request. Try increasing the "
+"budget amount or softening the filter conditions."
 
 #: app/web/templates/reports/deal_registry_report.html:13
 msgid "Экспорт в Excel"
@@ -2843,11 +2861,11 @@ msgstr "Download a template to fill in"
 
 #: app/web/templates/reports/upload_manager_plan.html:16
 msgid ""
-"Загрузите Excel-файл. Первый столбец: ФИО менеджера. Остальные столбцы: \"Контрактация "
-"ДД.ММ.ГГГГ\" и \"Поступления ДД.ММ.ГГГГ\"."
+"Загрузите Excel-файл. Первый столбец: ФИО менеджера. Остальные столбцы: "
+"\"Контрактация ДД.ММ.ГГГГ\" и \"Поступления ДД.ММ.ГГГГ\"."
 msgstr ""
-"Upload an Excel file. First column: manager full name. Other columns: \"Контрактация "
-"DD.MM.YYYY\" and \"Поступления DD.MM.YYYY\"."
+"Upload an Excel file. First column: manager full name. Other columns: "
+"\"Контрактация DD.MM.YYYY\" and \"Поступления DD.MM.YYYY\"."
 
 #: app/web/templates/reports/upload_plan.html:4
 msgid "Загрузка плановых показателей (Excel)"
@@ -2855,11 +2873,11 @@ msgstr "Uploading planned figures (Excel)"
 
 #: app/web/templates/reports/upload_plan.html:6
 msgid ""
-"Вы можете скачать актуальный шаблон с названиями всех ЖК, чтобы заполнить его и "
-"загрузить обратно в систему."
+"Вы можете скачать актуальный шаблон с названиями всех ЖК, чтобы заполнить"
+" его и загрузить обратно в систему."
 msgstr ""
-"You can download the current template with the names of all complexes to fill it out "
-"and upload it back into the system."
+"You can download the current template with the names of all complexes to "
+"fill it out and upload it back into the system."
 
 #: app/web/templates/reports/yearly_manager_report.html:268
 msgid "Темпы строительства"
@@ -2977,8 +2995,12 @@ msgid "Исключения из подбора (по ID квартиры)"
 msgstr "Exclusions from Selection (by Apartment ID)"
 
 #: app/web/templates/settings/manage_exclusions.html:13
-msgid "Квартиры из этого списка не будут отображаться в результатах поиска по бюджету."
-msgstr "Apartments from this list will not be displayed in the budget search results."
+msgid ""
+"Квартиры из этого списка не будут отображаться в результатах поиска по "
+"бюджету."
+msgstr ""
+"Apartments from this list will not be displayed in the budget search "
+"results."
 
 #: app/web/templates/settings/manage_exclusions.html:20
 #: app/web/templates/settings/manage_exclusions.html:43
@@ -3028,9 +3050,11 @@ msgstr "Exclusions from Inventory Report (by Complex)"
 
 #: app/web/templates/settings/manage_exclusions.html:84
 msgid ""
-"Нажмите на название проекта, чтобы скрыть его из \"Сводки по товарному запасу\" или "
-"вернуть обратно."
-msgstr "Click on the project name to hide it from the \"Inventory Summary\" or show it again."
+"Нажмите на название проекта, чтобы скрыть его из \"Сводки по товарному "
+"запасу\" или вернуть обратно."
+msgstr ""
+"Click on the project name to hide it from the \"Inventory Summary\" or "
+"show it again."
 
 #: app/web/templates/settings/manage_exclusions.html:92
 msgid "Скрыт в отчете"
@@ -3046,11 +3070,11 @@ msgstr "Manage Email Notification Recipients"
 
 #: app/web/templates/settings/manage_recipients.html:5
 msgid ""
-"Отметьте пользователей, которые должны получать уведомления при активации новой системы"
-" скидок."
+"Отметьте пользователей, которые должны получать уведомления при активации"
+" новой системы скидок."
 msgstr ""
-"Select the users who should receive notifications when a new discount system is "
-"activated."
+"Select the users who should receive notifications when a new discount "
+"system is activated."
 
 #: app/web/templates/settings/manage_recipients.html:26
 msgid "Сохранить список"
@@ -3296,8 +3320,12 @@ msgstr "Save List"
 #~ msgid "Расчет по \"Рассрочке на ПВ + Ипотека\""
 #~ msgstr "Calculation for \"DP Installment + Mortgage\""
 
-#~ msgid "Рассрочка на первоначальный взнос оформлена на срок <strong>%(term)s мес.</strong>"
-#~ msgstr "Down payment installment is for a term of <strong>%(term)s months</strong>"
+#~ msgid ""
+#~ "Рассрочка на первоначальный взнос оформлена"
+#~ " на срок <strong>%(term)s мес.</strong>"
+#~ msgstr ""
+#~ "Down payment installment is for a "
+#~ "term of <strong>%(term)s months</strong>"
 
 #~ msgid "Тело ипотеки (остаток долга):"
 #~ msgstr "Mortgage body (remaining debt):"
@@ -3336,12 +3364,13 @@ msgstr "Save List"
 #~ msgstr "Bottom price, per m²"
 
 #~ msgid ""
-#~ "Нет данных для отображения. Возможно, нет "
-#~ "активной системы скидок или все объекты проданы."
+#~ "Нет данных для отображения. Возможно, "
+#~ "нет активной системы скидок или все "
+#~ "объекты проданы."
 #~ msgstr ""
-#~ "No data to display. There may be no "
-#~ "active discount system or all properties are "
-#~ "sold."
+#~ "No data to display. There may be"
+#~ " no active discount system or all "
+#~ "properties are sold."
 
 #~ msgid "Аналитика по проекту:"
 #~ msgstr "Analytics for project:"
@@ -3421,4 +3450,13 @@ msgstr "Save List"
 
 #~ msgid "м²"
 #~ msgstr "ft"
+
+#~ msgid "Русский"
+#~ msgstr "Russian"
+
+#~ msgid "Коммерческое предложение по объекту ID:"
+#~ msgstr "Commercial Offer for Object ID:"
+
+#~ msgid "Объект"
+#~ msgstr "Object"
 
