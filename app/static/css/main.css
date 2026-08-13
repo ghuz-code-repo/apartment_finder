@@ -64,10 +64,8 @@ body {
     /* Пункты меню не должны ломаться на две строки: это и растит шапку. */
     white-space: nowrap;
 }
-.brand-logo-img { height: 26px; width: auto; display: block; }
-.brand-logo-on-dark { display: none; }
-[data-bs-theme="dark"] .brand-logo-on-light { display: none; }
-[data-bs-theme="dark"] .brand-logo-on-dark { display: block; }
+/* Герб золотой в обеих темах — вариант один, подмена по теме не нужна. */
+.brand-logo-img { height: 28px; width: auto; display: block; }
 /* Обе половины бренда — ссылки в разные места, поэтому у каждой свой
    отклик на наведение, иначе переход неочевиден. */
 .brand-logo {

@@ -43,8 +43,10 @@
                    это две отдельные ссылки, каждая со своей подсказкой. #}
                 <div class="navbar-brand d-flex align-items-center gap-2 me-3 mb-0 p-0">
                     <a class="brand-logo" href="/menu" title="{{ _('К меню сервисов') }}" aria-label="{{ _('К меню сервисов') }}">
-                        <img class="brand-logo-img brand-logo-on-light" src="{{ url_for('static', filename='logo_light.svg') }}" alt="Golden House">
-                        <img class="brand-logo-img brand-logo-on-dark" src="{{ url_for('static', filename='logo.svg') }}" alt="Golden House">
+                        {# Только герб, без словесной части: она дублировала бы
+                           название сервиса рядом. Герб золотой в обеих темах,
+                           поэтому вариант всего один. #}
+                        <img class="brand-logo-img" src="{{ url_for('static', filename='logo-mark.svg') }}" alt="Golden House">
                     </a>
                     <a class="brand-name" href="{{ url_for('main.index') }}" title="{{ _('На главную сервиса') }}">ApartmentFinder</a>
                 </div>
