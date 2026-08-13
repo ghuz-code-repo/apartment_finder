@@ -37,7 +37,7 @@
     {% block background_effects %}<div id="particles-js"></div>{% endblock %}
     <header class="header sticky-top border-bottom">
         <nav class="navbar navbar-expand-lg app-navbar">
-            <div class="container-fluid px-3 px-xl-4">
+            <div class="container-fluid px-3 px-xl-4" style="min-height: 50px;">
                 {# Логотип и название ведут в РАЗНЫЕ места: логотип — в общее меню
                    сервисов gateway, название — на главную этого сервиса. Поэтому
                    это две отдельные ссылки, каждая со своей подсказкой. #}
@@ -217,9 +217,6 @@
                             <a class="btn btn-outline-secondary btn-sm header-user" href="/profile" title="{{ _('Личный кабинет') }}">
                                 <i class="bi bi-person-circle"></i>
                                 <span class="header-user-name">{{ current_user.username }}</span>
-                            </a>
-                            <a class="btn btn-outline-secondary btn-sm" href="/logout" title="{{ _('Выйти') }}" aria-label="{{ _('Выйти') }}">
-                                <i class="bi bi-box-arrow-right"></i>
                             </a>
                         {% endif %}
                     </div>
