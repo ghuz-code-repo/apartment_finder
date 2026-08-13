@@ -50,49 +50,86 @@ body {
     box-shadow: 0 2px 10px var(--gh-card-shadow);
 }
 
-/* --- Шапка -------------------------------------------------------------
-   Слева логотип GH и название сервиса, по центру меню, справа действия.
-   Логотип ведёт в общее меню сервисов, название — на главную сервиса. */
-.app-navbar {
-    --bs-navbar-padding-y: 0.3rem;
-    padding-top: var(--bs-navbar-padding-y);
-    padding-bottom: var(--bs-navbar-padding-y);
+/* ═══ ЕДИНАЯ ШАПКА СЕРВИСОВ GOLDEN HOUSE ═══════════════════════════════════
+   Идентичный блок во всех сервисах (gateway, apartment_finder, referal,
+   client_service, scriptovod). Общего статик-хоста нет и сеть изолирована,
+   поэтому блок живёт копией в каждом сервисе — правки вносить во все сразу.
+
+   Раскладка: слева герб компании и название сервиса, справа действия.
+   Герб ведёт в общее меню сервисов, название — на главную своего сервиса.
+   ────────────────────────────────────────────────────────────────────── */
+:root {
+    --gh-header-min-height: 50px;
+    /* Цвет герба: название сервиса красится в него же, чтобы бренд читался
+       как одно целое независимо от палитры конкретного сервиса. */
+    --gh-brand-gold: #D29F66;
 }
-.app-navbar .nav-link {
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
-    /* Пункты меню не должны ломаться на две строки: это и растит шапку. */
-    white-space: nowrap;
-}
-/* Герб золотой в обеих темах — вариант один, подмена по теме не нужна. */
-.brand-logo-img { height: 28px; width: auto; display: block; }
-/* Обе половины бренда — ссылки в разные места, поэтому у каждой свой
-   отклик на наведение, иначе переход неочевиден. */
-.brand-logo {
+
+.gh-header { min-height: var(--gh-header-min-height); }
+
+.gh-brand { display: flex; align-items: center; gap: 10px; }
+
+.gh-brand-logo {
     display: inline-flex;
     border-radius: 4px;
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.brand-logo:hover { opacity: 0.75; transform: translateY(-1px); }
-.brand-name {
-    font-weight: 700;
+.gh-brand-logo:hover { opacity: 0.75; transform: translateY(-1px); }
+.gh-brand-logo-img { height: 28px; width: auto; display: block; }
+
+.gh-brand-name {
     font-size: 1rem;
+    font-weight: 700;
     line-height: 1;
     white-space: nowrap;
-    color: var(--gh-gold);
+    color: var(--gh-brand-gold);
     text-decoration: none;
     border-bottom: 1px solid transparent;
-    transition: border-color 0.2s ease, color 0.2s ease;
+    transition: border-color 0.2s ease;
 }
-.brand-name:hover {
-    color: var(--gh-gold);
-    border-bottom-color: var(--gh-gold);
+.gh-brand-name:hover { color: var(--gh-brand-gold); border-bottom-color: currentColor; }
+
+/* Когда герб и название ведут в одно место (gateway) — это одна ссылка,
+   и подсвечивается она целиком. */
+.gh-brand-link { text-decoration: none; }
+.gh-brand-link:hover .gh-brand-logo-img { opacity: 0.75; }
+.gh-brand-link:hover .gh-brand-name { border-bottom-color: currentColor; }
+
+.gh-header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Кнопки действий одинаковы во всех сервисах. Цвета берутся от темы через
+   currentColor, поэтому блок не зависит от палитры конкретного сервиса. */
+.gh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.875rem;
+    line-height: 1;
+    color: inherit;
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    opacity: 0.7;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s ease, color 0.2s ease;
 }
-.header-user { display: inline-flex; align-items: center; gap: 0.35rem; }
-.header-user-name { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-btn:hover { opacity: 1; color: var(--gh-brand-gold); }
+
+.gh-user-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* На узких экранах имя прячем — остаётся иконка, шапка не растёт. */
-@media (max-width: 991.98px) {
-    .header-user-name { display: none; }
+@media (max-width: 991.98px) { .gh-user-name { display: none; } }
+/* ═══ КОНЕЦ ЕДИНОГО БЛОКА ШАПКИ ══════════════════════════════════════════ */
+
+/* Пункты меню не должны ломаться на две строки: это и растит шапку. */
+.app-navbar { --bs-navbar-padding-y: 0.25rem; }
+.app-navbar .nav-link {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    white-space: nowrap;
 }
 
 .nav-link {

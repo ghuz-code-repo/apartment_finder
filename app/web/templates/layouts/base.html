@@ -37,18 +37,18 @@
     {% block background_effects %}<div id="particles-js"></div>{% endblock %}
     <header class="header sticky-top border-bottom">
         <nav class="navbar navbar-expand-lg app-navbar">
-            <div class="container-fluid px-3 px-xl-4" style="min-height: 50px;">
+            <div class="container-fluid px-3 px-xl-4 gh-header">
                 {# Логотип и название ведут в РАЗНЫЕ места: логотип — в общее меню
                    сервисов gateway, название — на главную этого сервиса. Поэтому
                    это две отдельные ссылки, каждая со своей подсказкой. #}
-                <div class="navbar-brand d-flex align-items-center gap-2 me-3 mb-0 p-0">
-                    <a class="brand-logo" href="/menu" title="{{ _('К меню сервисов') }}" aria-label="{{ _('К меню сервисов') }}">
+                <div class="navbar-brand gh-brand me-3 mb-0 p-0">
+                    <a class="gh-brand-logo" href="/menu" title="{{ _('К меню сервисов') }}" aria-label="{{ _('К меню сервисов') }}">
                         {# Только герб, без словесной части: она дублировала бы
                            название сервиса рядом. Герб золотой в обеих темах,
                            поэтому вариант всего один. #}
-                        <img class="brand-logo-img" src="{{ url_for('static', filename='logo-mark.svg') }}" alt="Golden House">
+                        <img class="gh-brand-logo-img" src="{{ url_for('static', filename='logo-mark.svg') }}" alt="Golden House">
                     </a>
-                    <a class="brand-name" href="{{ url_for('main.index') }}" title="{{ _('На главную сервиса') }}">ApartmentFinder</a>
+                    <a class="gh-brand-name" href="{{ url_for('main.index') }}" title="{{ _('На главную сервиса') }}">ApartmentFinder</a>
                 </div>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -190,15 +190,15 @@
                             {% endif %}
                         {% endif %}
                     </ul>
-                    {# Справа: язык, тема, пользователь. Вместо выпадающего меню
-                       пользователя — прямые кнопки, как в gateway: «Меню сервисов»
-                       переехало на логотип, «Профиль» стал самой кнопкой. #}
-                    <div class="d-flex align-items-center gap-2 header-actions">
+                    {# Единый для всех сервисов набор действий: тема и пользователь.
+                       «Выход» живёт только в gateway, «Меню сервисов» — на гербе.
+                       Язык здесь дополнительно: из сервисов i18n только у этого. #}
+                    <div class="gh-header-actions">
                         {% if current_user.is_authenticated %}
                             {# Языков больше двух, поэтому список строится из
                                config.LANGUAGES: новый язык подхватится сам. #}
                             <div class="dropdown">
-                                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                                <button class="gh-btn" type="button"
                                         data-bs-toggle="dropdown" aria-expanded="false" title="{{ _('Язык') }}">
                                     {{ config.LANGUAGES.get(g.lang, g.lang) }}
                                 </button>
@@ -212,13 +212,13 @@
                                 </ul>
                             </div>
                         {% endif %}
-                        <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" title="{{ _('Сменить тему') }}">
+                        <button id="theme-switcher-btn" class="gh-btn" title="{{ _('Сменить тему') }}">
                             <i class="bi" id="theme-icon"></i>
                         </button>
                         {% if current_user.is_authenticated %}
-                            <a class="btn btn-outline-secondary btn-sm header-user" href="/profile" title="{{ _('Личный кабинет') }}">
+                            <a class="gh-btn" href="/profile" title="{{ _('Личный кабинет') }}">
                                 <i class="bi bi-person-circle"></i>
-                                <span class="header-user-name">{{ current_user.username }}</span>
+                                <span class="gh-user-name">{{ current_user.username }}</span>
                             </a>
                         {% endif %}
                     </div>
