@@ -63,6 +63,7 @@ body {
     /* Цвет герба: название сервиса красится в него же, чтобы бренд читался
        как одно целое независимо от палитры конкретного сервиса. */
     --gh-brand-gold: #D29F66;
+    --gh-brand-gold-rgb: 210, 159, 102;
 }
 
 .gh-header { min-height: var(--gh-header-min-height); }
@@ -86,15 +87,16 @@ body {
     color: var(--gh-brand-gold);
     text-decoration: none;
     border-bottom: 1px solid transparent;
-    transition: border-color 0.2s ease;
+    display: inline-block;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
-.gh-brand-name:hover { color: var(--gh-brand-gold); border-bottom-color: currentColor; }
+.gh-brand-name:hover { color: var(--gh-brand-gold); border-bottom-color: currentColor; transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(var(--gh-brand-gold-rgb), 0.9); }
 
 /* Когда герб и название ведут в одно место (gateway) — это одна ссылка,
    и подсвечивается она целиком. */
 .gh-brand-link { text-decoration: none; }
 .gh-brand-link:hover .gh-brand-logo-img { opacity: 0.75; }
-.gh-brand-link:hover .gh-brand-name { border-bottom-color: currentColor; }
+.gh-brand-link:hover .gh-brand-name { border-bottom-color: currentColor; transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(var(--gh-brand-gold-rgb), 0.9); }
 
 .gh-header-actions { display: flex; align-items: center; gap: 8px; }
 
