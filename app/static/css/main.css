@@ -78,6 +78,7 @@ body {
 .gh-brand-logo-img { height: 28px; width: auto; display: block; }
 
 .gh-brand-name {
+    font-family: 'Montserrat', sans-serif;
     font-size: 1rem;
     font-weight: 700;
     line-height: 1;
