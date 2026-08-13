@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ApartmentFinder VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-12 09:28+0500\n"
+"POT-Creation-Date: 2026-08-13 14:14+0500\n"
 "PO-Revision-Date: 2026-08-11 17:34+0500\n"
 "Last-Translator: Machine translation (Claude), needs review by a native "
 "speaker\n"
@@ -1213,7 +1213,7 @@ msgid "Вычет"
 msgstr "Ushlab qolish"
 
 #: app/web/templates/main/apartment_details.html:34
-#: app/web/templates/main/commercial_offer.html:261
+#: app/web/templates/main/commercial_offer.html:268
 msgid "Скидка"
 msgstr "Chegirma"
 
@@ -1273,8 +1273,8 @@ msgid "Тип объекта"
 msgstr "Obyekt turi"
 
 #: app/web/templates/main/apartment_details.html:117
-#: app/web/templates/main/commercial_offer.html:312
-#: app/web/templates/main/commercial_offer.html:317
+#: app/web/templates/main/commercial_offer.html:313
+#: app/web/templates/main/commercial_offer.html:318
 #: app/web/templates/reports/project_dashboard.html:120
 msgid "Планировка"
 msgstr "Planirovka"
@@ -1288,101 +1288,97 @@ msgid "Варианты оплаты"
 msgstr "To'lov variantlari"
 
 #: app/web/templates/main/apartment_details.html:150
-#: app/web/templates/main/commercial_offer.html:298
+#: app/web/templates/main/commercial_offer.html:299
 msgid "Не удалось рассчитать варианты оплаты."
 msgstr "To'lov variantlarini hisoblab bo'lmadi."
 
 #: app/web/templates/main/commercial_offer.html:8
-#: app/web/templates/main/commercial_offer.html:230
+#: app/web/templates/main/commercial_offer.html:236
 #: app/web/templates/main/commercial_offer_complex.html:30
 msgid "Коммерческое предложение"
 msgstr "Tijorat taklifi"
 
-#: app/web/templates/main/commercial_offer.html:221
+#: app/web/templates/main/commercial_offer.html:227
 #: app/web/templates/reports/hall_of_fame.html:33
 msgid "Показать в USD"
 msgstr "USD da ko'rsatish"
 
-#: app/web/templates/main/commercial_offer.html:225
+#: app/web/templates/main/commercial_offer.html:231
 #: app/web/templates/main/commercial_offer_complex.html:24
 msgid "Печать"
 msgstr "Chop etish"
 
-#: app/web/templates/main/commercial_offer.html:229
-#: app/web/templates/main/commercial_offer.html:311
+#: app/web/templates/main/commercial_offer.html:235
+#: app/web/templates/main/commercial_offer.html:312
 msgid "Логотип"
 msgstr "Logotip"
 
-#: app/web/templates/main/commercial_offer.html:231
-#: app/web/templates/main/commercial_offer.html:313
+#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:314
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Жилая недвижимость"
 msgstr "Turar-joy ko'chmas mulki"
 
-#: app/web/templates/main/commercial_offer.html:231
-#: app/web/templates/main/commercial_offer.html:313
+#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:314
 #: app/web/templates/main/commercial_offer_complex.html:31
 msgid "Дата"
 msgstr "Sana"
 
-#: app/web/templates/main/commercial_offer.html:234
+#: app/web/templates/main/commercial_offer.html:240
 #: app/web/templates/main/commercial_offer_complex.html:36
 msgid "Информация об объекте"
 msgstr "Obyekt haqida ma'lumot"
 
-#: app/web/templates/main/commercial_offer.html:236
+#: app/web/templates/main/commercial_offer.html:242
 msgid "Жилой комплекс:"
 msgstr "Turar-joy majmuasi:"
 
-#: app/web/templates/main/commercial_offer.html:237
+#: app/web/templates/main/commercial_offer.html:243
 msgid "Номер дома:"
 msgstr "Uy raqami:"
 
-#: app/web/templates/main/commercial_offer.html:238
+#: app/web/templates/main/commercial_offer.html:244
 msgid "Тип/Этаж/Комнат:"
 msgstr "Turi/Qavat/Xonalar:"
 
-#: app/web/templates/main/commercial_offer.html:239
+#: app/web/templates/main/commercial_offer.html:245
 msgid "Общая площадь:"
 msgstr "Umumiy maydon:"
 
-#: app/web/templates/main/commercial_offer.html:240
+#: app/web/templates/main/commercial_offer.html:246
 msgid "Цена за м² (Прайс):"
 msgstr "1 m² narxi (Narxlar ro'yxati):"
 
-#: app/web/templates/main/commercial_offer.html:241
-#: app/web/templates/main/commercial_offer.html:256
+#: app/web/templates/main/commercial_offer.html:247
+#: app/web/templates/main/commercial_offer.html:262
 msgid "Прайс:"
 msgstr "Narx:"
 
-#: app/web/templates/main/commercial_offer.html:244
+#: app/web/templates/main/commercial_offer.html:250
 msgid "Предлагаемые варианты оплаты"
 msgstr "Taklif etilayotgan to'lov variantlari"
 
-#: app/web/templates/main/commercial_offer.html:257
+#: app/web/templates/main/commercial_offer.html:263
 msgid "Вычет (бронирование):"
 msgstr "Ushlab qolish (band qilish):"
 
-#: app/web/templates/main/commercial_offer.html:267
-msgid "Ваша выгода"
-msgstr "Sizning foydangiz"
-
-#: app/web/templates/main/commercial_offer.html:274
+#: app/web/templates/main/commercial_offer.html:275
 msgid "Цена за м² (со скидкой):"
 msgstr "1 m² narxi (chegirma bilan):"
 
-#: app/web/templates/main/commercial_offer.html:283
+#: app/web/templates/main/commercial_offer.html:284
 #: app/web/templates/main/commercial_offer_complex.html:78
 #: app/web/templates/main/commercial_offer_complex.html:113
 msgid "Первоначальный взнос:"
 msgstr "Boshlang'ich to'lov:"
 
-#: app/web/templates/main/commercial_offer.html:285
-#: app/web/templates/main/commercial_offer.html:288
+#: app/web/templates/main/commercial_offer.html:286
+#: app/web/templates/main/commercial_offer.html:289
 msgid "Итоговая стоимость:"
 msgstr "Yakuniy qiymat:"
 
-#: app/web/templates/main/commercial_offer.html:302
+#: app/web/templates/main/commercial_offer.html:303
 #: app/web/templates/main/commercial_offer_complex.html:151
 msgid ""
 "Это коммерческое предложение не является публичной офертой. Актуальность "
@@ -1391,11 +1387,11 @@ msgstr ""
 "Ushbu tijorat taklifi ommaviy oferta hisoblanmaydi. Narxlar va "
 "shartlarning dolzarbligini Golden House menejerlaridan aniqlashtiring."
 
-#: app/web/templates/main/commercial_offer.html:329
+#: app/web/templates/main/commercial_offer.html:330
 msgid "Вариант"
 msgstr "Variant"
 
-#: app/web/templates/main/commercial_offer.html:336
+#: app/web/templates/main/commercial_offer.html:337
 msgid ""
 "Планировка приведена для ознакомления. Точные размеры уточняйте у "
 "менеджеров Golden House."
@@ -3094,4 +3090,7 @@ msgstr "Ro'yxatni saqlash"
 
 #~ msgid "Объект"
 #~ msgstr "Obyekt"
+
+#~ msgid "Ваша выгода"
+#~ msgstr "Sizning foydangiz"
 

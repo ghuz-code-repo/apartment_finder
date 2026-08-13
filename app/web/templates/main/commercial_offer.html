@@ -25,6 +25,12 @@
             display: flex;
             flex-direction: column;
         }
+        /* Тень только на экране. Bootstrap-класс .shadow-lg задавал её с
+           !important, поэтому сброс в @media print не срабатывал и внизу
+           каждого листа печаталась серая полоса. */
+        @media screen {
+            .page-container { box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15); }
+        }
         .header {
             text-align: center;
             margin-bottom: 0.5rem;
@@ -214,7 +220,7 @@
     </style>
 </head>
 <body>
-    <div class="page-container shadow-lg">
+    <div class="page-container">
         <div class="no-print d-flex justify-content-between mb-3">
             <div class="form-check form-switch fs-5">
                 <input class="form-check-input" type="checkbox" id="currencySwitch">
@@ -255,16 +261,11 @@
                                     <tbody>
                                         <tr><td>{{ _('Прайс:') }}</td><td class="text-end price-uzs" data-price="{{ option.base_price }}">{{ "{:,.0f}".format(option.base_price) }} UZS</td></tr>
                                         <tr class="text-danger"><td>{{ _('Вычет (бронирование):') }}</td><td class="text-end price-uzs" data-price="{{ option.deduction }}">- {{ "{:,.0f}".format(option.deduction) }} UZS</td></tr>
-                                        {# Расшифровка скидок, выставленных менеджером на карточке. #}
-                                        {% for discount in option.applied_discounts %}
-                                        <tr class="text-danger">
-                                            <td>{{ _('Скидка') }} {{ _(discount.name) }} ({{ discount.percent }}%):</td>
-                                            <td class="text-end price-uzs" data-price="{{ discount.amount }}">- {{ "{:,.0f}".format(discount.amount) }} UZS</td>
-                                        </tr>
-                                        {% endfor %}
+                                        {# Отдельные скидки (МПП, РОП, КД и прочие) — внутренняя кухня,
+                                           в документ для клиента идёт только их сумма. #}
                                         {% if option.total_discount_amount > 0 %}
                                         <tr class="benefit-row">
-                                            <td>{{ _('Ваша выгода') }} ({{ option.total_discount_percent }}%):</td>
+                                            <td>{{ _('Скидка') }} ({{ option.total_discount_percent }}%):</td>
                                             <td class="text-end price-uzs" data-price="{{ option.total_discount_amount }}">- {{ "{:,.0f}".format(option.total_discount_amount) }} UZS</td>
                                         </tr>
                                         {% endif %}
@@ -306,7 +307,7 @@
     {# Отдельный лист с планировками. Файлы идут через наш прокси /plans/<id>/<index>,
        порядок и нумерация — как в ответе Macro. #}
     {% if flat_plans and flat_plans.files %}
-    <div class="page-container plans-page shadow-lg">
+    <div class="page-container plans-page">
         <div class="header">
             <img src="{{ url_for('static', filename='logo_light.svg') }}" alt="{{ _('Логотип') }}" class="header-logo">
             <h1>{{ _('Планировка') }}</h1>
