@@ -36,17 +36,24 @@
        главный поток, в котором Leaflet пересчитывает карту при зуме. #}
     {% block background_effects %}<div id="particles-js"></div>{% endblock %}
     <header class="header sticky-top border-bottom">
-        <nav class="navbar navbar-expand-lg">
-            <div class="container">
-                <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}" style="color: var(--gh-gold);">
-                    <i class="bi bi-building-check"></i>
-                    ApartmentFinder
-                </a>
+        <nav class="navbar navbar-expand-lg app-navbar">
+            <div class="container-fluid px-3 px-xl-4">
+                {# Логотип и название ведут в РАЗНЫЕ места: логотип — в общее меню
+                   сервисов gateway, название — на главную этого сервиса. Поэтому
+                   это две отдельные ссылки, каждая со своей подсказкой. #}
+                <div class="navbar-brand d-flex align-items-center gap-2 me-3 mb-0 p-0">
+                    <a class="brand-logo" href="/menu" title="{{ _('К меню сервисов') }}" aria-label="{{ _('К меню сервисов') }}">
+                        <img class="brand-logo-img brand-logo-on-light" src="{{ url_for('static', filename='logo_light.svg') }}" alt="Golden House">
+                        <img class="brand-logo-img brand-logo-on-dark" src="{{ url_for('static', filename='logo.svg') }}" alt="Golden House">
+                    </a>
+                    <a class="brand-name" href="{{ url_for('main.index') }}" title="{{ _('На главную сервиса') }}">ApartmentFinder</a>
+                </div>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="mainNav">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    {# mx-auto — меню по центру шапки, слева бренд, справа действия. #}
+                    <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                         {% if current_user.is_authenticated %}
                             {% if current_user.can('selection_view') %}
                             <li class="nav-item">
@@ -179,12 +186,20 @@
                                 </ul>
                             </li>
                             {% endif %}
+                        {% endif %}
+                    </ul>
+                    {# Справа: язык, тема, пользователь. Вместо выпадающего меню
+                       пользователя — прямые кнопки, как в gateway: «Меню сервисов»
+                       переехало на логотип, «Профиль» стал самой кнопкой. #}
+                    <div class="d-flex align-items-center gap-2 header-actions">
+                        {% if current_user.is_authenticated %}
                             {# Языков больше двух, поэтому список строится из
                                config.LANGUAGES: новый язык подхватится сам. #}
-                            <li class="nav-item dropdown ms-3">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                                        data-bs-toggle="dropdown" aria-expanded="false" title="{{ _('Язык') }}">
                                     {{ config.LANGUAGES.get(g.lang, g.lang) }}
-                                </a>
+                                </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     {% for code, title in config.LANGUAGES.items() %}
                                     <li>
@@ -193,27 +208,20 @@
                                     </li>
                                     {% endfor %}
                                 </ul>
-                            </li>
-                        {% endif %}
-                    </ul>
-                    <div class="d-flex align-items-center ms-lg-auto">
-                        {% if current_user.is_authenticated %}
-                            <div class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" id="navbarUserDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-person-circle me-1"></i>
-                                    {{ current_user.username }} ({{ current_user.role.name }})
-                                </a>
-                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
-                                    <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-fill me-2"></i>{{ _('Профиль') }}</a></li>
-                                    <li><a class="dropdown-item" href="/menu"><i class="bi bi-grid-fill me-2"></i>{{ _('Меню сервисов') }}</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>{{ _('Выйти') }}</a></li>
-                                </ul>
                             </div>
                         {% endif %}
-                        <div class="theme-switcher-container ms-2">
-                            <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm"><i class="bi" id="theme-icon"></i></button>
-                        </div>
+                        <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" title="{{ _('Сменить тему') }}">
+                            <i class="bi" id="theme-icon"></i>
+                        </button>
+                        {% if current_user.is_authenticated %}
+                            <a class="btn btn-outline-secondary btn-sm header-user" href="/profile" title="{{ _('Личный кабинет') }}">
+                                <i class="bi bi-person-circle"></i>
+                                <span class="header-user-name">{{ current_user.username }}</span>
+                            </a>
+                            <a class="btn btn-outline-secondary btn-sm" href="/logout" title="{{ _('Выйти') }}" aria-label="{{ _('Выйти') }}">
+                                <i class="bi bi-box-arrow-right"></i>
+                            </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
