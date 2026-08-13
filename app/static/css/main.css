@@ -73,9 +73,9 @@ body {
 .gh-brand-logo {
     display: inline-flex;
     border-radius: 4px;
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.gh-brand-logo:hover { opacity: 0.75; transform: translateY(-1px); }
+.gh-brand-logo:hover { transform: translateY(-1px); box-shadow: 0 0 10px 2px rgba(var(--gh-brand-gold-rgb), 0.55); }
 .gh-brand-logo-img { height: 28px; width: auto; display: block; }
 
 .gh-brand-name {
@@ -95,7 +95,7 @@ body {
 /* Когда герб и название ведут в одно место (gateway) — это одна ссылка,
    и подсвечивается она целиком. */
 .gh-brand-link { text-decoration: none; }
-.gh-brand-link:hover .gh-brand-logo-img { opacity: 0.75; }
+.gh-brand-link:hover .gh-brand-logo-img { box-shadow: 0 0 10px 2px rgba(var(--gh-brand-gold-rgb), 0.55); }
 .gh-brand-link:hover .gh-brand-name { border-bottom-color: currentColor; transform: translateY(-1px); box-shadow: 0 6px 14px -6px rgba(var(--gh-brand-gold-rgb), 0.9); }
 
 .gh-header-actions { display: flex; align-items: center; gap: 8px; }
