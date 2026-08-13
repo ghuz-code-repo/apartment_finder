@@ -208,10 +208,23 @@
             font-size: 8pt;
             color: #888;
         }
+        /* Поля листа задаёт @page, а не паддинг контейнера: иначе к 10мм
+           контейнера прибавлялись поля браузера по умолчанию. */
+        @page { size: A4; margin: 10mm; }
         @media print {
             body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .no-print { display: none !important; }
-            .page-container { min-height: 0; box-shadow: none; border: none; }
+            /* Контейнер должен занимать лист целиком, иначе футеру с
+               margin-top:auto некуда опускаться и он прижимается к контенту.
+               277мм = 297 − 2×10 поля @page; берём на миллиметр меньше, чтобы
+               округление не выдавило пустой лист следом. */
+            .page-container {
+                width: auto;
+                min-height: 276mm;
+                padding: 0;
+                box-shadow: none;
+                border: none;
+            }
             .hide-for-print { display: none !important; }
             .plans-page { margin-top: 0; break-before: page; page-break-before: always; }
             /* Чертёж не должен разрываться между листами. */
