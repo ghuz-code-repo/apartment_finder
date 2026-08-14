@@ -212,15 +212,26 @@
                                 </ul>
                             </div>
                         {% endif %}
+                        {# Блок пользователя — как в gateway: аватар, «Фамилия И. О.»
+                           и логин в скобках. Кнопки выхода здесь нет. #}
+                        {% if current_user.is_authenticated %}
+                            <a class="gh-user" href="/profile" title="{{ _('Личный кабинет') }}">
+                                <span class="gh-avatar">
+                                    {% if current_user.avatar_url %}
+                                        <img src="{{ current_user.avatar_url }}" alt="">
+                                    {% else %}
+                                        <i class="bi bi-person-circle"></i>
+                                    {% endif %}
+                                </span>
+                                <span class="gh-user-info">
+                                    <span class="gh-user-fullname">{{ current_user.short_name }}</span>
+                                    <span class="gh-user-login">({{ current_user.username }})</span>
+                                </span>
+                            </a>
+                        {% endif %}
                         <button id="theme-switcher-btn" class="gh-btn" title="{{ _('Сменить тему') }}">
                             <i class="bi" id="theme-icon"></i>
                         </button>
-                        {% if current_user.is_authenticated %}
-                            <a class="gh-btn" href="/profile" title="{{ _('Личный кабинет') }}">
-                                <i class="bi bi-person-circle"></i>
-                                <span class="gh-user-name">{{ current_user.username }}</span>
-                            </a>
-                        {% endif %}
                     </div>
                 </div>
             </div>

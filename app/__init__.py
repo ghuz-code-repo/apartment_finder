@@ -82,6 +82,24 @@ class GatewayUserProxy:
         return self._user.get('full_name', self.username)
 
     @property
+    def short_name(self):
+        """Имя в виде «Фамилия И. О.» — как подписан пользователь в шапке
+        gateway. Если auth-connector прислал готовое short_name, берём его."""
+        explicit = self._user.get('short_name')
+        if explicit:
+            return explicit
+        parts = (self.full_name or '').split()
+        if len(parts) >= 2:
+            initials = ' '.join(p[0].upper() + '.' for p in parts[1:3])
+            return f'{parts[0]} {initials}'
+        return self.full_name or self.username
+
+    @property
+    def avatar_url(self):
+        """URL аватара из gateway. None — шаблон покажет иконку."""
+        return self._user.get('avatar_path') or self._user.get('avatar_url') or None
+
+    @property
     def role(self):
         roles = self._user.get('roles', [])
         role_name = self._user.get('role', roles[0] if roles else 'user')
