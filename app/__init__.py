@@ -3,7 +3,7 @@ import os
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from flask import Flask, request, g, session, current_app, abort
+from flask import Flask, request, g, session, current_app, abort, has_request_context
 from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
@@ -96,8 +96,19 @@ class GatewayUserProxy:
 
     @property
     def avatar_url(self):
-        """URL аватара из gateway. None — шаблон покажет иконку."""
-        return self._user.get('avatar_path') or self._user.get('avatar_url') or None
+        """URL аватара из gateway. None — шаблон покажет иконку.
+
+        auth-connector аватар не отдаёт: в UserContext такого поля нет, и
+        to_dict() его не возвращает. Поэтому берём путь прямо из заголовка
+        X-User-Avatar — так же, как это делают referal и client_service.
+        Путь абсолютный от корня домена, префикс /finder к нему не нужен.
+        """
+        explicit = self._user.get('avatar_path') or self._user.get('avatar_url')
+        if explicit:
+            return explicit
+        if has_request_context():
+            return request.headers.get('X-User-Avatar') or None
+        return None
 
     @property
     def role(self):
