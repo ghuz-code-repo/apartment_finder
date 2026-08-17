@@ -216,6 +216,10 @@ class CalculatorSettings(db.Model):
     time_value_rate_annual = db.Column(db.Float, default=16.5)
     standard_installment_min_dp_percent = db.Column(db.Float, default=15.0)
     zero_mortgage_whitelist = db.Column(db.Text, nullable=True)
+    # Условия стандартной ипотеки — нужны для расчета ежемесячного взноса в КП.
+    # Пока не заданы (срок = 0), взнос в документе не показывается.
+    mortgage_rate_annual = db.Column(db.Float, default=0.0)
+    mortgage_term_months = db.Column(db.Integer, default=0)
 
 class ManagerSalesPlan(db.Model):
     __bind_key__ = 'planning_db'
@@ -353,4 +357,118 @@ class ProjectConstructionStage(db.Model):
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'planned_end_date': self.planned_end_date.isoformat() if self.planned_end_date else None,
             'actual_end_date': self.actual_end_date.isoformat() if self.actual_end_date else None,
+        }
+
+
+class ProjectInfo(db.Model):
+    """
+    Маркетинговая карточка ЖК: описание концепции и характеристики проекта.
+    Заполняется вручную на странице "Настройки информации о проекте".
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'project_infos'
+
+    # Название ЖК является первичным ключом (как и в ProjectPassport)
+    complex_name = db.Column(db.String(255), primary_key=True)
+
+    # Общее
+    project_class = db.Column(db.String(100), nullable=True)  # Бизнес-класс, комфорт-класс и т.д.
+    developer = db.Column(db.String(255), nullable=True)  # Застройщик
+    architect_bureau = db.Column(db.String(255), nullable=True)  # Архитектурное бюро
+    location = db.Column(db.String(500), nullable=True)  # Район / расположение
+    website_url = db.Column(db.String(1000), nullable=True)  # Сайт проекта
+
+    # Характеристики застройки
+    buildings_count = db.Column(db.Integer, nullable=True)  # Количество корпусов
+    floors_min = db.Column(db.Integer, nullable=True)  # Этажность, от
+    floors_max = db.Column(db.Integer, nullable=True)  # Этажность, до
+    ceiling_height = db.Column(db.Float, nullable=True)  # Высота потолков, м
+    area_min = db.Column(db.Float, nullable=True)  # Площадь квартир, от м²
+    area_max = db.Column(db.Float, nullable=True)  # Площадь квартир, до м²
+
+    # Технические характеристики
+    construction_tech = db.Column(db.Text, nullable=True)  # Конструктив / технология строительства
+    facade_materials = db.Column(db.Text, nullable=True)  # Отделка фасадов
+    parking = db.Column(db.Text, nullable=True)  # Паркинг
+    infrastructure = db.Column(db.Text, nullable=True)  # Инфраструктура и благоустройство
+
+    # Тексты
+    concept = db.Column(db.Text, nullable=True)  # Краткая концепция / позиционирование
+    description = db.Column(db.Text, nullable=True)  # Полное описание проекта
+    usp = db.Column(db.Text, nullable=True)  # УТП проекта: по одному пункту на строку
+
+    renders = db.relationship('ProjectRender', backref='info', lazy='select',
+                              cascade='all, delete-orphan',
+                              order_by='ProjectRender.sort_order.asc(), ProjectRender.id.asc()')
+
+    # Системные поля
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<ProjectInfo {self.complex_name}>'
+
+    @property
+    def usp_items(self):
+        """УТП построчно: в КП каждый пункт выводится отдельным буллитом."""
+        if not self.usp:
+            return []
+        return [line.strip(' -•') for line in self.usp.splitlines() if line.strip(' -•')]
+
+    def to_dict(self):
+        """Возвращает данные в виде словаря для API."""
+        return {
+            'complex_name': self.complex_name,
+            'project_class': self.project_class,
+            'developer': self.developer,
+            'architect_bureau': self.architect_bureau,
+            'location': self.location,
+            'website_url': self.website_url,
+            'buildings_count': self.buildings_count,
+            'floors_min': self.floors_min,
+            'floors_max': self.floors_max,
+            'ceiling_height': self.ceiling_height,
+            'area_min': self.area_min,
+            'area_max': self.area_max,
+            'construction_tech': self.construction_tech,
+            'facade_materials': self.facade_materials,
+            'parking': self.parking,
+            'infrastructure': self.infrastructure,
+            'concept': self.concept,
+            'description': self.description,
+            'usp': self.usp,
+            'usp_items': self.usp_items,
+            'renders': [r.to_dict() for r in self.renders],
+        }
+
+
+class ProjectRender(db.Model):
+    """
+    Рендер (визуализация) ЖК. На один проект допускается не более 5 штук.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'project_renders'
+
+    id = db.Column(db.Integer, primary_key=True)
+    complex_name = db.Column(db.String(255),
+                             db.ForeignKey('project_infos.complex_name', ondelete='CASCADE'),
+                             nullable=False, index=True)
+
+    filename = db.Column(db.String(255), nullable=False)  # Имя файла внутри static/uploads/project_renders
+    title = db.Column(db.String(255), nullable=True)  # Подпись к рендеру
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<ProjectRender {self.id} for {self.complex_name}>'
+
+    def to_dict(self):
+        """Возвращает данные в виде словаря для API."""
+        return {
+            'id': self.id,
+            'complex_name': self.complex_name,
+            'filename': self.filename,
+            'title': self.title,
+            'sort_order': self.sort_order,
         }

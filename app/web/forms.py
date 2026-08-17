@@ -66,6 +66,17 @@ class CalculatorSettingsForm(FlaskForm):
     # --- НОВЫЕ ПОЛЯ ---
     zero_mortgage_whitelist = TextAreaField(_('ID квартир для "Ипотеки под 0%" (через запятую)'))
     excel_file = FileField(_('Загрузить новую матрицу для "Ипотеки под 0%" (Excel)'), validators=[Optional()])
+    # Условия стандартной ипотеки для расчета ежемесячного взноса в КП.
+    mortgage_rate_annual = FloatField(
+        _('Ставка стандартной ипотеки (%% годовых)'),
+        validators=[Optional(), NumberRange(min=0, max=100)],
+        default=0.0
+    )
+    mortgage_term_months = IntegerField(
+        _('Срок стандартной ипотеки (мес)'),
+        validators=[Optional(), NumberRange(min=0, max=480)],
+        default=0
+    )
 
     submit = SubmitField(_('Сохранить настройки'))
 class UploadManagerPlanForm(FlaskForm):

@@ -27,6 +27,12 @@
             </button>
         {% endif %}
 
+        {% if current_user.can('projects_info_update') %}
+            <a href="{{ url_for('report.project_info_settings', complex_name=data.complex_name) }}" class="btn btn-outline-warning">
+                <i class="bi bi-gear me-2"></i>{{ _('Настройки информации') }}
+            </a>
+        {% endif %}
+
         <a href="{{ url_for('report.download_project_passport_pptx', complex_name=data.complex_name) }}" class="btn btn-outline-primary">
             <i class="bi bi-file-earmark-slides me-2"></i>{{ _('Скачать .pptx') }}
         </a>

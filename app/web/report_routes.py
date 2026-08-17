@@ -25,6 +25,7 @@ from app.services import (
     funnel_service,
     obligation_service,
     project_dashboard_service,
+    project_info_service,
     pricelist_service,
     presentation_service
 )
@@ -541,6 +542,74 @@ def project_passport(complex_name):
         data=passport_full_data,
         static_data_json=json.dumps(passport_full_data.get('static_data', {})) ,
         usd_to_uzs_rate=usd_rate# Для JS
+    )
+
+
+@report_bp.route('/project-info/<path:complex_name>', methods=['GET', 'POST'])
+@login_required
+@permission_required('projects_info_update')
+def project_info_settings(complex_name):
+    """Страница "Настройки информации о проекте": рендеры и характеристики ЖК."""
+
+    # Проверяем, что такой ЖК вообще существует
+    complex_exists = get_mysql_session().query(EstateHouse.id).filter(
+        EstateHouse.complex_name == complex_name
+    ).first()
+    if not complex_exists:
+        flash(f"Проект с названием '{complex_name}' не найден.", "danger")
+        return redirect(url_for('report.plan_fact_report'))
+
+    if request.method == 'POST':
+        try:
+            # 1. Удаляем отмеченные рендеры (освобождаем слоты под новые)
+            deleted = project_info_service.delete_renders(
+                complex_name, request.form.getlist('delete_renders')
+            )
+
+            # 2. Загружаем новые рендеры
+            added, upload_errors = project_info_service.add_renders(
+                complex_name, request.files.getlist('renders')
+            )
+            for error in upload_errors:
+                flash(error, 'warning')
+
+            # 3. Обновляем подписи к оставшимся рендерам
+            titles = {}
+            for key, value in request.form.items():
+                if key.startswith('render_title_'):
+                    try:
+                        titles[int(key.rsplit('_', 1)[1])] = value
+                    except ValueError:
+                        continue
+            project_info_service.update_render_titles(complex_name, titles)
+
+            # 4. Сохраняем характеристики ЖК
+            project_info_service.save_project_info(complex_name, request.form)
+
+            message = "Информация о проекте сохранена."
+            if added:
+                message += f" Загружено рендеров: {added}."
+            if deleted:
+                message += f" Удалено рендеров: {deleted}."
+            flash(message, 'success')
+        except Exception as e:
+            get_planning_session().rollback()
+            current_app.logger.error(f"Ошибка сохранения информации о проекте {complex_name}: {e}")
+            flash(f"Не удалось сохранить информацию о проекте: {e}", 'danger')
+
+        return redirect(url_for('report.project_info_settings', complex_name=complex_name))
+
+    info = project_info_service.get_project_info(complex_name)
+    renders = project_info_service.get_renders(complex_name)
+
+    return render_template(
+        'reports/project_info_settings.html',
+        title=f"Настройки информации: {complex_name}",
+        complex_name=complex_name,
+        info=info,
+        renders=renders,
+        render_urls={r.id: project_info_service.get_render_url(r.filename) for r in renders},
+        max_renders=project_info_service.MAX_RENDERS
     )
 
 

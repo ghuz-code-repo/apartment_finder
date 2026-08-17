@@ -151,6 +151,48 @@ def recalculate(option, manual_percents):
     return option
 
 
+def monthly_annuity_payment(principal, annual_rate_percent, term_months):
+    """Ежемесячный аннуитетный платёж по телу кредита.
+
+    Возвращает None, если условий недостаточно (нет тела кредита или не задан
+    срок): в КП лучше не показать строку вообще, чем показать выдуманное число.
+    """
+    try:
+        principal = float(principal or 0)
+        term_months = int(term_months or 0)
+        annual_rate_percent = float(annual_rate_percent or 0)
+    except (TypeError, ValueError):
+        return None
+
+    if principal <= 0 or term_months <= 0:
+        return None
+
+    monthly_rate = annual_rate_percent / 100 / 12
+    if monthly_rate <= 0:
+        # Беспроцентная схема — тело делится на срок равными долями.
+        return principal / term_months
+
+    growth = (1 + monthly_rate) ** term_months
+    return principal * monthly_rate * growth / (growth - 1)
+
+
+def apply_mortgage_terms(options, annual_rate_percent, term_months):
+    """Дописывает в ипотечный вариант условия банка и ежемесячный платёж.
+
+    Вызывать после recalculate: платёж считается от тела кредита, а оно
+    зависит от выставленных менеджером скидок.
+    """
+    for option in options or []:
+        if option.get('type_key') != MORTGAGE_KEY:
+            continue
+        option['mortgage_rate_annual'] = annual_rate_percent
+        option['mortgage_term_months'] = term_months
+        option['monthly_payment'] = monthly_annuity_payment(
+            option.get('mortgage_body'), annual_rate_percent, term_months
+        )
+    return options
+
+
 def parse_manual_selections(raw_json):
     """Разбирает ?selections={"full_payment": {"kd": 3}} из адреса КП."""
     import json
