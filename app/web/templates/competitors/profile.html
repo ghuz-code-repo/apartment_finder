@@ -152,11 +152,11 @@
                                 </a>
                                 {% endif %}
                                 {% if item.media_type == 'image' %}
-                                <img src="{{ url_for('static', filename=item.file_path) }}" alt="Photo">
+                                <img src="{{ url_for('media.file', relpath=item.file_path) }}" alt="Photo">
                                 {% else %}
                                 <div class="d-flex flex-column align-items-center justify-content-center h-100 bg-light rounded">
                                     <i class="bi bi-file-earmark-pdf fs-1 text-danger"></i>
-                                    <a href="{{ url_for('static', filename=item.file_path) }}" target="_blank" class="small text-truncate w-75 text-center mt-2 text-decoration-none">Документ</a>
+                                    <a href="{{ url_for('media.file', relpath=item.file_path) }}" target="_blank" class="small text-truncate w-75 text-center mt-2 text-decoration-none">Документ</a>
                                 </div>
                                 {% endif %}
                             </div>

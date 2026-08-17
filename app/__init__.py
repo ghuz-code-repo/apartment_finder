@@ -8,7 +8,7 @@ from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
 from .core.extensions import db, migrate_default, migrate_planning
-from .core.decorators import _is_gateway_user, permission_granted, user_identity
+from .core.decorators import _is_gateway_user, permission_granted, user_permissions
 
 babel = Babel()
 
@@ -54,7 +54,6 @@ class GatewayUserProxy:
                 'full_name': getattr(user_data, 'full_name', ''),
                 'roles': getattr(user_data, 'roles', []),
                 'permissions': getattr(user_data, 'permissions', []),
-                'is_admin': getattr(user_data, 'is_admin', False),
             }
 
     @property
@@ -116,15 +115,8 @@ class GatewayUserProxy:
         role_name = self._user.get('role', roles[0] if roles else 'user')
         return _GatewayRole(role_name)
 
-    @property
-    def is_admin(self):
-        return user_identity(self._user)[1]
-
     def can(self, perm_name):
-        permissions, is_admin = user_identity(self._user)
-        if is_admin:
-            return True
-        return permission_granted(perm_name, permissions)
+        return permission_granted(perm_name, user_permissions(self._user))
 
     def get_id(self):
         return str(self.id)
@@ -205,6 +197,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.sync_routes import sync_bp
         from .web.tiles_routes import tiles_bp
         from .web.plans_routes import plans_bp
+        from .web.media_routes import media_bp
 
         # Регистрация Blueprints
         app.register_blueprint(report_bp, url_prefix='/reports')
@@ -226,6 +219,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(sync_bp, url_prefix='/api/sync')
         app.register_blueprint(tiles_bp)
         app.register_blueprint(plans_bp)
+        app.register_blueprint(media_bp)
 
     @app.before_request
     def before_request_tasks():

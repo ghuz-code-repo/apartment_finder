@@ -5,6 +5,7 @@ import shutil
 from werkzeug.utils import secure_filename
 from flask import current_app, request
 from app.core.extensions import db
+from app.core.media import media_dir, upload_root
 from app.models.news_models import News, NewsMedia
 
 
@@ -21,9 +22,8 @@ def save_news(title, description, files):
             parts = filename.rsplit('.', 1)
             ext = parts[1].lower() if len(parts) > 1 else ""
 
-            relative_path = f'uploads/news/{news_item.id}/{filename}'
-            upload_path = os.path.join(current_app.static_folder, 'uploads', 'news', str(news_item.id))
-            os.makedirs(upload_path, exist_ok=True)
+            relative_path = f'news/{news_item.id}/{filename}'
+            upload_path = media_dir('news', str(news_item.id))
 
             file.save(os.path.join(upload_path, filename))
 
@@ -94,7 +94,7 @@ def send_to_telegram(news_item):
 def delete_news(news_id):
     news = News.query.get(news_id)
     if news:
-        upload_path = os.path.join(current_app.static_folder, 'uploads', 'news', str(news_id))
+        upload_path = os.path.join(upload_root(), 'news', str(news_id))
         if os.path.exists(upload_path):
             shutil.rmtree(upload_path)
         db.session.delete(news)

@@ -8,6 +8,34 @@ try:
 except ImportError:
     _UserContext = None
 
+try:
+    from auth_connector.permission_utils import (any_permission_granted as _any_granted,
+                                                 extract_permissions as _extract_permissions,
+                                                 permission_granted as _granted)
+except ImportError:
+    # Локальный запуск без установленного auth-connector: те же правила,
+    # чтобы поведение проверок не расходилось с продом.
+    def _granted(permission_name, permissions):
+        if not permission_name:
+            return False
+        for perm in permissions or ():
+            if perm == permission_name or perm == '*':
+                return True
+            if perm.endswith('.*') and permission_name.startswith(perm[:-1]):
+                return True
+        return False
+
+    def _any_granted(permission_names, permissions):
+        permissions = list(permissions or ())
+        return any(_granted(name, permissions) for name in permission_names)
+
+    def _extract_permissions(user):
+        if user is None:
+            return []
+        if isinstance(user, dict):
+            return list(user.get('permissions') or ())
+        return list(getattr(user, 'permissions', None) or ())
+
 
 def _is_gateway_user(user):
     """Check if user is a gateway user (dict or UserContext)."""
@@ -31,44 +59,33 @@ def _get_current_user():
     return None
 
 
-def user_identity(user):
-    """Права и признак админа одинаково для dict и UserContext.
+def user_permissions(user):
+    """Права пользователя одинаково для dict и UserContext.
 
-    Формы пользователя разные: AuthMiddleware кладёт в g.user UserContext с
-    полями roles/is_admin, а to_dict() и служебные вызовы — словарь, где роль
-    может лежать и в 'role', и в 'roles'. Раньше каждая проверка разбирала это
-    по-своему, и словарь с is_admin=True проходил в шаблоне, но получал 403 на
-    самом роуте.
+    Формы пользователя разные: AuthMiddleware кладёт в g.user UserContext, а
+    to_dict() и служебные вызовы — словарь. Признака администратора здесь нет:
+    шлюз больше не шлёт X-User-Admin, и роль 'admin' сама по себе доступа не
+    даёт — админ носит обычное право 'finder.*'.
     """
-    if isinstance(user, dict):
-        permissions = user.get('permissions') or []
-        roles = user.get('roles') or []
-        is_admin = bool(user.get('is_admin')) or user.get('role') == 'admin'
-    else:
-        permissions = getattr(user, 'permissions', None) or []
-        roles = getattr(user, 'roles', None) or []
-        is_admin = bool(getattr(user, 'is_admin', False))
-    return permissions, is_admin or 'admin' in roles
+    return _extract_permissions(user)
 
 
 def permission_granted(permission_name, permissions):
-    """Проверяет право с учётом шаблонов, как это делает auth-connector.
+    """Проверяет локальное имя права по списку из шлюза, с учётом шаблонов.
 
-    Шлюз отдаёт роли как есть: если роли выдано 'finder.*', в заголовке
-    X-User-Service-Permissions придёт именно строка со звёздочкой, а не
-    развёрнутый список. Точное сравнение такое право не видит — пункт меню
-    пропадает, а роут отвечает 403.
+    Локальные имена ('projects_info_update') отличаются от шлюзовых
+    ('finder.projects_info_update') — переводим через PERMISSION_MAP, дальше
+    сравнение делает общая реализация auth-connector: точное совпадение,
+    голая '*' и префиксные шаблоны вида 'finder.*'.
     """
     gateway_perm = PERMISSION_MAP.get(permission_name, permission_name)
-    if gateway_perm in permissions:
-        return True
-    for perm in permissions:
-        if perm == '*':
-            return True
-        # 'finder.*' покрывает 'finder.projects_info_update'
-        if perm.endswith('.*') and gateway_perm.startswith(perm[:-1]):
-            return True
-    return False
+    return _granted(gateway_perm, permissions)
+
+
+def any_permission_granted(permission_names, permissions):
+    """Хватает любого права из списка."""
+    permissions = list(permissions or ())
+    return any(permission_granted(name, permissions) for name in permission_names)
 
 
 def login_required(f):
@@ -92,10 +109,7 @@ def permission_required(permission_name):
             if not user or not _is_gateway_user(user):
                 abort(401)
 
-            user_permissions, is_admin = user_identity(user)
-            if is_admin:
-                return fn(*args, **kwargs)
-            if permission_granted(permission_name, user_permissions):
+            if permission_granted(permission_name, user_permissions(user)):
                 return fn(*args, **kwargs)
             abort(403)
 

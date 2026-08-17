@@ -8,6 +8,7 @@ from flask import current_app
 from werkzeug.utils import secure_filename
 
 from app.core.extensions import db
+from app.core.media import media_dir
 from app.models.competitor_models import Competitor, CompetitorHistory  # Добавить импорт
 from app.models.competitor_models import CompetitorMedia
 from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
@@ -299,14 +300,13 @@ def update_competitor_info(comp_id, data):
 
 def save_media(comp_id, file):
     filename = secure_filename(file.filename)
-    upload_path = os.path.join(current_app.static_folder, 'uploads', 'competitors', str(comp_id))
-    os.makedirs(upload_path, exist_ok=True)
+    upload_path = media_dir('competitors', str(comp_id))
 
     file_path = os.path.join(upload_path, filename)
     file.save(file_path)
 
-    # Сохранение в БД (путь относительно static)
-    relative_path = f'uploads/competitors/{comp_id}/{filename}'
+    # Сохранение в БД (путь относительно UPLOAD_ROOT)
+    relative_path = f'competitors/{comp_id}/{filename}'
 
     ext = filename.rsplit('.', 1)[1].lower()
     media_type = 'image' if ext in ['jpg', 'jpeg', 'png', 'webp'] else 'document'

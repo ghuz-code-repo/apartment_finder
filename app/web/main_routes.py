@@ -88,10 +88,8 @@ def index():
         abort(401)
     user = GatewayUserProxy(raw_user)
 
-    # Admin — сразу на подбор
-    if hasattr(user, 'is_admin') and user.is_admin:
-        return redirect(url_for('main.selection'))
-
+    # Отдельной ветки для админа нет: право 'finder.*' покрывает первый же
+    # пункт списка, и админ приземляется на подбор так же, как раньше.
     # Ordered list: (permission, endpoint). First match wins.
     pages = [
         ('selection_view', 'main.selection'),

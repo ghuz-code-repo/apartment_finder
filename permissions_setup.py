@@ -10,6 +10,14 @@ from auth_connector import PermissionRegistry
 permissions_registry = PermissionRegistry('finder')
 
 # ============================================================
+# WILDCARD — все права сервиса одной строкой
+# ============================================================
+# Заменяет прежний обход по заголовку X-User-Admin: администратору выдаётся
+# это право, и оно проходит обычной проверкой шаблона в permission_granted().
+# Так в админке шлюза видно ровно то, что действует.
+permissions_registry.register('finder.*', 'Все права сервиса', 'Полный доступ ко всем функциям finder', 'manage')
+
+# ============================================================
 # SELECTION MODULE — apartment search, details, commercial offers
 # ============================================================
 permissions_registry.register('finder.selection_view', 'Подбор: просмотр', 'Доступ к странице подбора квартир и поиску', 'view')
