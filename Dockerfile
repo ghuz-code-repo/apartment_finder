@@ -53,6 +53,12 @@ RUN mkdir -p /app/instance /app/uploads
 ENV FLASK_APP=app_with_auth_connector.py
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
+# Без этого print() из app_with_auth_connector.py оседает в буфере stdout:
+# в контейнере stdout — пайп, а не терминал, поэтому Python буферизует его
+# блоками по ~8 КБ. Стартовых строк на такой объём не набирается, и логи
+# регистрации сервиса не доходили ни до docker logs, ни до Dozzle, хотя
+# строки самого gunicorn были видны — он пишет через logging, а тот флашит.
+ENV PYTHONUNBUFFERED=1
 
 # Открываем порт
 EXPOSE 80
