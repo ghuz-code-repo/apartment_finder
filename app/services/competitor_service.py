@@ -8,7 +8,7 @@ from flask import current_app
 from werkzeug.utils import secure_filename
 
 from app.core.extensions import db
-from app.core.media import media_dir
+from app.core.media import media_dir, resolve_media_path
 from app.models.competitor_models import Competitor, CompetitorHistory  # Добавить импорт
 from app.models.competitor_models import CompetitorMedia
 from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
@@ -78,11 +78,13 @@ def get_media_by_id(media_id):
 def delete_media(media_id):
     media = CompetitorMedia.query.get(media_id)
     if media:
-        # Формируем полный путь к файлу на диске
-        full_path = os.path.join(current_app.static_folder, media.file_path)
+        # Путь считаем от UPLOAD_ROOT, а не от static: медиа переехали из
+        # static, и склейка со static_folder указывала в пустоту — запись из
+        # БД удалялась, а файл молча оставался на диске.
+        full_path = resolve_media_path(media.file_path)
 
         # Удаляем физический файл
-        if os.path.exists(full_path):
+        if full_path and os.path.exists(full_path):
             try:
                 os.remove(full_path)
             except Exception as e:

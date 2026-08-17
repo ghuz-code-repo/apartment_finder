@@ -5,7 +5,7 @@ import shutil
 from werkzeug.utils import secure_filename
 from flask import current_app, request
 from app.core.extensions import db
-from app.core.media import media_dir, upload_root
+from app.core.media import media_dir, resolve_media_path, upload_root
 from app.models.news_models import News, NewsMedia
 
 
@@ -61,9 +61,12 @@ def send_to_telegram(news_item):
     files_to_send = {}
 
     for i, m in enumerate(news_item.media):
-        file_full_path = os.path.join(current_app.static_folder, m.file_path)
+        # Путь считаем от UPLOAD_ROOT, а не от static: медиа переехали из
+        # static, и склейка со static_folder не находила файл — новость
+        # уходила в Telegram без картинок, без единой ошибки в логе.
+        file_full_path = resolve_media_path(m.file_path)
 
-        if os.path.exists(file_full_path):
+        if file_full_path and os.path.exists(file_full_path):
             file_key = f"file_{i}"
             files_to_send[file_key] = open(file_full_path, 'rb')
 
