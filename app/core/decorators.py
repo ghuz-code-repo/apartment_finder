@@ -117,6 +117,37 @@ def permission_required(permission_name):
     return wrapper
 
 
+def permission_required_any(*permission_names):
+    """Пускает, если есть любое из перечисленных прав.
+
+    Нужен там, где страница открывается и на просмотр, и на редактирование:
+    право на правку подразумевает просмотр, но обратное неверно, а один
+    декоратор с правом на правку заставлял выдавать доступ к записи только
+    ради чтения. Саму запись роут проверяет отдельно — см. can_edit.
+    """
+    def wrapper(fn):
+        @wraps(fn)
+        def decorated_view(*args, **kwargs):
+            user = _get_current_user()
+            if not user or not _is_gateway_user(user):
+                abort(401)
+
+            if any_permission_granted(permission_names, user_permissions(user)):
+                return fn(*args, **kwargs)
+            abort(403)
+
+        return decorated_view
+    return wrapper
+
+
+def current_user_can(permission_name):
+    """Есть ли право у текущего пользователя. Для проверок внутри обработчика."""
+    user = _get_current_user()
+    if not user or not _is_gateway_user(user):
+        return False
+    return permission_granted(permission_name, user_permissions(user))
+
+
 def tma_auth_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):

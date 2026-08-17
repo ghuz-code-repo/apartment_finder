@@ -83,6 +83,7 @@ permissions_registry.register('finder.projects_pricelist_export', 'Проект�
 permissions_registry.register('finder.projects_passport_export', 'Проекты: экспорт паспорта', 'Экспорт паспорта проекта в PPTX', 'view')
 permissions_registry.register('finder.projects_competitor_import', 'Проекты: загрузка конкурентов', 'Загрузка данных конкурентов в паспорт', 'manage')
 permissions_registry.register('finder.projects_competitor_template_export', 'Проекты: шаблон конкурентов', 'Скачивание шаблона конкурентов', 'manage')
+permissions_registry.register('finder.projects_info_view', 'Проекты: информация о ЖК (просмотр)', 'Просмотр карточки ЖК, рендеров и характеристик — без изменения', 'view')
 permissions_registry.register('finder.projects_info_update', 'Проекты: информация о ЖК', 'Настройка рендеров и характеристик ЖК', 'manage')
 
 # ============================================================
@@ -225,6 +226,7 @@ PERMISSION_MAP = {
     'projects_passport_export': 'finder.projects_passport_export',
     'projects_competitor_import': 'finder.projects_competitor_import',
     'projects_competitor_template_export': 'finder.projects_competitor_template_export',
+    'projects_info_view': 'finder.projects_info_view',
     'projects_info_update': 'finder.projects_info_update',
     # Competitors
     'competitors_map_view': 'finder.competitors_map_view',

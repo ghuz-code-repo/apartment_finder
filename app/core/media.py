@@ -15,7 +15,8 @@ from flask import current_app, url_for
 # менеджер, который смотрит только КП, иначе получил бы вместо картинок дыры.
 MEDIA_PERMISSIONS = {
     'project_renders': ('projects_dashboard_view', 'projects_passport_view',
-                        'projects_info_update', 'selection_commercial_offer_view'),
+                        'projects_info_view', 'projects_info_update',
+                        'selection_commercial_offer_view'),
     'floor_plans': ('specials_view', 'specials_update', 'selection_specials_view',
                     'selection_commercial_offer_view'),
     'competitors': ('competitors_profile_view',),

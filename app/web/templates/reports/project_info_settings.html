@@ -59,7 +59,12 @@
             <i class="bi bi-arrow-left"></i> {{ _('Назад к дашборду') }}
         </a>
         <h1 class="gradient-heading mb-0">{{ complex_name }}</h1>
-        <p class="text-muted mb-0">{{ _('Настройки информации о проекте') }}</p>
+        <p class="text-muted mb-0">
+            {% if can_edit %}{{ _('Настройки информации о проекте') }}
+            {%- else %}{{ _('Информация о проекте') }}
+                <span class="badge bg-secondary ms-2">{{ _('только просмотр') }}</span>
+            {%- endif %}
+        </p>
     </div>
     <a href="{{ url_for('report.project_passport', complex_name=complex_name) }}" class="btn btn-outline-info">
         <i class="bi bi-file-earmark-text me-2"></i>{{ _('Паспорт проекта') }}
@@ -67,6 +72,10 @@
 </div>
 
 <form method="POST" enctype="multipart/form-data" id="project-info-form">
+{# У читателя (право projects_info_view без projects_info_update) поля видны,
+   но неактивны: fieldset[disabled] гасит все вложенные элементы разом и не
+   отправляет их значения. Сам POST роут всё равно отбивает по праву. #}
+<fieldset {% if not can_edit %}disabled{% endif %} class="border-0 p-0 m-0">
 
     <div class="card card-glass mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -294,12 +303,15 @@
 
     <div class="d-flex justify-content-end gap-2 mb-5">
         <a href="{{ url_for('report.project_dashboard', complex_name=complex_name) }}" class="btn btn-secondary">
-            {{ _('Отмена') }}
+            {% if can_edit %}{{ _('Отмена') }}{% else %}{{ _('Назад') }}{% endif %}
         </a>
+        {% if can_edit %}
         <button type="submit" class="btn btn-success">
             <i class="bi bi-save me-2"></i>{{ _('Сохранить') }}
         </button>
+        {% endif %}
     </div>
+</fieldset>
 </form>
 {% endblock %}
 
