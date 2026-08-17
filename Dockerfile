@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# Директива выше включает BuildKit-синтаксис: без неё не работает
+# --mount=type=cache в слое установки зависимостей.
+
 # Используем официальный образ Python
 FROM python:3.11-slim
 
@@ -15,7 +19,20 @@ RUN apt-get update && apt-get install -y \
 # Set timezone
 ENV TZ=Asia/Tashkent
 
-# Copy and install auth-connector first
+# Тяжёлые зависимости ставим ПЕРВЫМИ и отдельным слоем. auth-connector
+# меняется часто, requirements.txt — почти никогда; при обратном порядке
+# любая правка auth-connector сбрасывала кэш и тянула переустановку ~70
+# пакетов (scipy, numpy, pandas, scikit-learn, matplotlib, lxml).
+COPY apartment_finder/requirements.txt .
+
+# Кэш колёс переживает пересборки, поэтому --no-cache-dir здесь не нужен:
+# он бы отключил ровно тот кэш, который мы монтируем.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+# auth-connector — общий пакет из соседнего каталога, ставится после тяжёлого
+# слоя. --force-reinstall обязателен: версия пакета меняется не каждый раз,
+# и pip иначе счёл бы уже установленную достаточной.
 COPY auth-connector /tmp/auth-connector
 RUN pip install --no-cache-dir --force-reinstall /tmp/auth-connector && rm -rf /tmp/auth-connector
 
@@ -25,12 +42,6 @@ RUN pip install --no-cache-dir --force-reinstall /tmp/auth-connector && rm -rf /
 # сервис отдавал 502 целиком. Обычно означает, что сабмодуль auth-connector
 # остался на прежнем коммите: git -C auth-connector checkout master && git pull
 RUN python -c "import auth_connector as a, sys; v = a.__version__; sys.exit(0 if int(v.split('.')[0]) >= 2 else 'auth-connector %s < 2.0.0 — обновите сабмодуль auth-connector' % v)"
-
-# Копируем файл с зависимостями
-COPY apartment_finder/requirements.txt .
-
-# Устанавливаем Python зависимости
-RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем весь код приложения
 COPY apartment_finder/ .

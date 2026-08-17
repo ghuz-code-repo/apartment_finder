@@ -1,0 +1,49 @@
+# Контекст сборки — родительский каталог (context: .. в docker-compose.yml),
+# то есть весь AnalyticsRepo: 3.2 ГБ, из которых образу нужно 22 МБ. Обычный
+# .dockerignore здесь не работает — Docker читает его из корня контекста, а не
+# из каталога сервиса. BuildKit читает файл с этим именем рядом с Dockerfile и
+# отдаёт ему приоритет, поэтому сборки соседних сервисов правило не задевает.
+#
+# Схема — allowlist: сначала выкидываем всё, потом возвращаем только нужное.
+
+*
+
+# Единственные два каталога, из которых Dockerfile копирует
+!auth-connector
+!apartment_finder
+
+# --- Мусор внутри возвращённых каталогов ---
+**/__pycache__
+**/*.py[cod]
+**/.venv
+venv/
+**/node_modules
+**/.git
+**/*.egg-info
+
+# Данные и кэш: монтируются томом, в образе только раздувают слои.
+# migrations_* не трогаем — Flask-Migrate читает их внутри контейнера
+# при `flask db upgrade`.
+apartment_finder/instance
+apartment_finder/uploads
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+data/
+logs/
+
+# Инструменты и документация
+**/.vscode
+**/.idea
+**/*.swp
+**/*.md
+apartment_finder/Dockerfile
+apartment_finder/docker-compose*.yml
+apartment_finder/.dockerignore
+
+# Секреты: переменные приходят через env_file в docker-compose, копия внутри
+# образа только дублирует их в слоях. Заодно flask-cli не пытается её разобрать
+# (при не-UTF-8 байтах он падает ещё до старта команды).
+apartment_finder/.env
+apartment_finder/.env.*
+!apartment_finder/.env.example
