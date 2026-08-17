@@ -217,8 +217,11 @@ class CalculatorSettings(db.Model):
     standard_installment_min_dp_percent = db.Column(db.Float, default=15.0)
     zero_mortgage_whitelist = db.Column(db.Text, nullable=True)
     # Условия стандартной ипотеки — нужны для расчета ежемесячного взноса в КП.
-    # Пока не заданы (срок = 0), взнос в документе не показывается.
+    # Пока не задан срок, взнос в документе не показывается.
+    # mortgage_rate_annual — ставка до кадастра, после кадастра действует
+    # mortgage_rate_after_cadastre (если она не задана, ставка не меняется).
     mortgage_rate_annual = db.Column(db.Float, default=0.0)
+    mortgage_rate_after_cadastre = db.Column(db.Float, default=0.0)
     mortgage_term_months = db.Column(db.Integer, default=0)
 
 class ManagerSalesPlan(db.Model):
@@ -457,6 +460,9 @@ class ProjectRender(db.Model):
     filename = db.Column(db.String(255), nullable=False)  # Имя файла внутри static/uploads/project_renders
     title = db.Column(db.String(255), nullable=True)  # Подпись к рендеру
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+    # Размеры сохраненного файла: по ним проверяется пригодность рендера для КП.
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
 
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
@@ -471,4 +477,6 @@ class ProjectRender(db.Model):
             'filename': self.filename,
             'title': self.title,
             'sort_order': self.sort_order,
+            'width': self.width,
+            'height': self.height,
         }

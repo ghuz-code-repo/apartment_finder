@@ -68,7 +68,12 @@ class CalculatorSettingsForm(FlaskForm):
     excel_file = FileField(_('Загрузить новую матрицу для "Ипотеки под 0%" (Excel)'), validators=[Optional()])
     # Условия стандартной ипотеки для расчета ежемесячного взноса в КП.
     mortgage_rate_annual = FloatField(
-        _('Ставка стандартной ипотеки (%% годовых)'),
+        _('Ставка до кадастра (%% годовых)'),
+        validators=[Optional(), NumberRange(min=0, max=100)],
+        default=0.0
+    )
+    mortgage_rate_after_cadastre = FloatField(
+        _('Ставка после кадастра (%% годовых)'),
         validators=[Optional(), NumberRange(min=0, max=100)],
         default=0.0
     )
