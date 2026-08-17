@@ -12,6 +12,15 @@ except Exception:
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'a-very-secret-key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Корень загруженных файлов. Namely НЕ внутри static: nginx отдаёт
+    # {prefix}/static/ отдельным блоком без auth_request, поэтому всё, что
+    # лежало там, скачивалось без авторизации. Каталог совпадает с томом
+    # ./uploads:/app/uploads из docker-compose — заодно загрузки перестают
+    # пропадать при пересборке образа.
+    UPLOAD_ROOT = os.environ.get('UPLOAD_ROOT') or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'uploads')
+    )
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
     TELEGRAM_CHANNEL_ID = int(os.environ.get('TELEGRAM_CHANNEL_ID', '0'))
     SOURCE_MYSQL_URI = os.environ.get('SOURCE_MYSQL_URI', '')

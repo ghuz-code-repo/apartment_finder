@@ -3,16 +3,17 @@
 import os
 from werkzeug.utils import secure_filename
 from PIL import Image
-from flask import current_app, url_for
+from flask import current_app
 from app.models import planning_models
 from ..core.db_utils import get_planning_session, get_mysql_session
+from ..core.media import media_dir, media_url
 from app.models.special_offer_models import MonthlySpecial
 from app.models.estate_models import EstateSell, EstateHouse
 from datetime import date
 
 RESERVATION_FEE = 3_000_000
 # --- Константы для загрузки изображений ---
-UPLOAD_FOLDER = 'uploads/floor_plans'  # Путь внутри 'static'
+UPLOAD_FOLDER = 'floor_plans'  # Категория внутри UPLOAD_ROOT
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'svg'}
 MAX_IMAGE_WIDTH = 1200  # Максимальная ширина изображения в пикселях
 
@@ -32,7 +33,7 @@ def _optimize_and_save_image(image_file_storage):
     # Создаем уникальное имя файла, чтобы избежать перезаписи
     unique_filename = f"{os.path.splitext(filename)[0]}_{int(date.today().strftime('%Y%m%d%H%M%S'))}.webp"
 
-    upload_path = os.path.join(current_app.static_folder, UPLOAD_FOLDER)
+    upload_path = media_dir(UPLOAD_FOLDER)
     os.makedirs(upload_path, exist_ok=True)
 
     full_path = os.path.join(upload_path, unique_filename)
@@ -144,7 +145,7 @@ def get_active_special_offers():
         offers_list.append({
             'sell_id': sell.id,
             'usp_text': special.usp_text,
-            'image_url': url_for('static', filename=f'{UPLOAD_FOLDER}/{special.floor_plan_image_filename}'),
+            'image_url': media_url(f'{UPLOAD_FOLDER}/{special.floor_plan_image_filename}'),
             'complex_name': house.complex_name,
             'house_name': house.name,
             'rooms': sell.estate_rooms,
@@ -225,7 +226,7 @@ def get_special_offer_details_by_special_id(special_id: int):
         'special_id': special.id,
         'sell_id': sell.id,
         'usp_text': special.usp_text,
-        'image_url': url_for('static', filename=f'{UPLOAD_FOLDER}/{special.floor_plan_image_filename}'),
+        'image_url': media_url(f'{UPLOAD_FOLDER}/{special.floor_plan_image_filename}'),
         'extra_discount': special.extra_discount,
         'expires_at': special.expires_at.isoformat(),
         'is_active': special.is_active,
@@ -300,7 +301,7 @@ def update_special_offer(special_id, usp_text, extra_discount, image_file=None):
     # Если загружен новый файл, заменяем старый
     if image_file and image_file.filename != '':
         # Удаляем старый файл изображения, чтобы не копить мусор
-        old_image_path = os.path.join(current_app.static_folder, UPLOAD_FOLDER,
+        old_image_path = os.path.join(media_dir(UPLOAD_FOLDER),
                                       special_to_update.floor_plan_image_filename)
         if os.path.exists(old_image_path):
             os.remove(old_image_path)
@@ -319,7 +320,7 @@ def delete_special_offer(special_id):
     special_to_delete = planning_session.query(MonthlySpecial).get_or_404(special_id)  # <--- ИЗМЕНЕНО
 
     # Удаляем файл изображения с сервера
-    image_path = os.path.join(current_app.static_folder, UPLOAD_FOLDER, special_to_delete.floor_plan_image_filename)
+    image_path = os.path.join(media_dir(UPLOAD_FOLDER), special_to_delete.floor_plan_image_filename)
     if os.path.exists(image_path):
         os.remove(image_path)
 

@@ -9,7 +9,8 @@ from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file
 from flask import jsonify
-from ..core.decorators import permission_required, login_required
+from ..core.decorators import (current_user_can, login_required, permission_required,
+                               permission_required_any)
 from sqlalchemy import or_, extract, func
 from werkzeug.utils import secure_filename
 from app.models.planning_models import PropertyType
@@ -547,9 +548,23 @@ def project_passport(complex_name):
 
 @report_bp.route('/project-info/<path:complex_name>', methods=['GET', 'POST'])
 @login_required
-@permission_required('projects_info_update')
+@permission_required_any('projects_info_view', 'projects_info_update')
 def project_info_settings(complex_name):
-    """Страница "Настройки информации о проекте": рендеры и характеристики ЖК."""
+    """Страница "Настройки информации о проекте": рендеры и характеристики ЖК.
+
+    Просмотр и запись разведены: чтобы посмотреть карточку и рендеры, хватает
+    'projects_info_view'; менять что-либо разрешает только 'projects_info_update'.
+    Раньше страница целиком требовала право на правку, и ради чтения приходилось
+    выдавать доступ к записи.
+    """
+
+    # Право на запись проверяем до всего остального: решение о доступе не должно
+    # зависеть от того, существует ли объект, иначе на несуществующем ЖК читатель
+    # получал редирект вместо отказа. Заодно не ходим в MySQL ради чужого POST.
+    can_edit = current_user_can('projects_info_update')
+    if request.method == 'POST' and not can_edit:
+        # Форму читателю не показывают, но POST можно послать и в обход неё.
+        abort(403)
 
     # Проверяем, что такой ЖК вообще существует
     complex_exists = get_mysql_session().query(EstateHouse.id).filter(
@@ -607,8 +622,9 @@ def project_info_settings(complex_name):
 
     return render_template(
         'reports/project_info_settings.html',
-        title=f"Настройки информации: {complex_name}",
+        title=f"Настройки информации: {complex_name}" if can_edit else f"Информация о проекте: {complex_name}",
         complex_name=complex_name,
+        can_edit=can_edit,
         info=info,
         renders=renders,
         render_urls={r.id: project_info_service.get_render_url(r.filename) for r in renders},

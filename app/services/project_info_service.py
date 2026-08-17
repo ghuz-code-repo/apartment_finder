@@ -3,16 +3,17 @@
 import os
 import uuid
 
-from flask import current_app, url_for
+from flask import current_app
 from werkzeug.utils import secure_filename
 from PIL import Image
 
 from ..core.db_utils import get_planning_session
+from ..core.media import media_dir, media_url
 from app.models.planning_models import ProjectInfo, ProjectRender
 
 # --- Константы для загрузки рендеров ---
 MAX_RENDERS = 5  # Максимум рендеров на один ЖК
-UPLOAD_FOLDER = 'uploads/project_renders'  # Путь внутри 'static'
+UPLOAD_FOLDER = 'project_renders'  # Категория внутри UPLOAD_ROOT
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 MAX_IMAGE_WIDTH = 1920  # Максимальная ширина рендера в пикселях
 
@@ -46,12 +47,12 @@ def _allowed_file(filename):
 
 def _renders_path():
     """Абсолютный путь к папке с рендерами."""
-    return os.path.join(current_app.static_folder, UPLOAD_FOLDER)
+    return media_dir(UPLOAD_FOLDER)
 
 
 def get_render_url(filename):
-    """Публичная ссылка на файл рендера."""
-    return url_for('static', filename=f'{UPLOAD_FOLDER}/{filename}')
+    """Ссылка на файл рендера. Отдаётся под авторизацией через роут media."""
+    return media_url(f'{UPLOAD_FOLDER}/{filename}')
 
 
 def _optimize_and_save_image(image_file_storage):

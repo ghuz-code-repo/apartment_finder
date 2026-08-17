@@ -66,9 +66,9 @@
                                     {% for m in item.media %}
                                     <div class="carousel-item {{ 'active' if loop.first }} h-100">
                                         {% if m.media_type == 'image' %}
-                                            <img src="{{ url_for('static', filename=m.file_path) }}">
+                                            <img src="{{ url_for('media.file', relpath=m.file_path) }}">
                                         {% else %}
-                                            <video src="{{ url_for('static', filename=m.file_path) }}" controls></video>
+                                            <video src="{{ url_for('media.file', relpath=m.file_path) }}" controls></video>
                                         {% endif %}
                                     </div>
                                     {% endfor %}

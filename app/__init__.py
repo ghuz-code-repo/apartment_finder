@@ -3,12 +3,12 @@ import os
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from flask import Flask, request, g, session, current_app, abort
+from flask import Flask, request, g, session, current_app, abort, has_request_context
 from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
 from .core.extensions import db, migrate_default, migrate_planning
-from .core.decorators import PERMISSION_MAP, _is_gateway_user
+from .core.decorators import _is_gateway_user, permission_granted, user_permissions
 
 babel = Babel()
 
@@ -54,7 +54,6 @@ class GatewayUserProxy:
                 'full_name': getattr(user_data, 'full_name', ''),
                 'roles': getattr(user_data, 'roles', []),
                 'permissions': getattr(user_data, 'permissions', []),
-                'is_admin': getattr(user_data, 'is_admin', False),
             }
 
     @property
@@ -82,23 +81,42 @@ class GatewayUserProxy:
         return self._user.get('full_name', self.username)
 
     @property
+    def short_name(self):
+        """Имя в виде «Фамилия И. О.» — как подписан пользователь в шапке
+        gateway. Если auth-connector прислал готовое short_name, берём его."""
+        explicit = self._user.get('short_name')
+        if explicit:
+            return explicit
+        parts = (self.full_name or '').split()
+        if len(parts) >= 2:
+            initials = ' '.join(p[0].upper() + '.' for p in parts[1:3])
+            return f'{parts[0]} {initials}'
+        return self.full_name or self.username
+
+    @property
+    def avatar_url(self):
+        """URL аватара из gateway. None — шаблон покажет иконку.
+
+        auth-connector аватар не отдаёт: в UserContext такого поля нет, и
+        to_dict() его не возвращает. Поэтому берём путь прямо из заголовка
+        X-User-Avatar — так же, как это делают referal и client_service.
+        Путь абсолютный от корня домена, префикс /finder к нему не нужен.
+        """
+        explicit = self._user.get('avatar_path') or self._user.get('avatar_url')
+        if explicit:
+            return explicit
+        if has_request_context():
+            return request.headers.get('X-User-Avatar') or None
+        return None
+
+    @property
     def role(self):
         roles = self._user.get('roles', [])
         role_name = self._user.get('role', roles[0] if roles else 'user')
         return _GatewayRole(role_name)
 
-    @property
-    def is_admin(self):
-        if self._user.get('is_admin'):
-            return True
-        roles = self._user.get('roles', [])
-        return 'admin' in roles
-
     def can(self, perm_name):
-        if self.is_admin:
-            return True
-        gateway_perm = PERMISSION_MAP.get(perm_name, perm_name)
-        return gateway_perm in self._user.get('permissions', [])
+        return permission_granted(perm_name, user_permissions(self._user))
 
     def get_id(self):
         return str(self.id)
@@ -179,6 +197,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.sync_routes import sync_bp
         from .web.tiles_routes import tiles_bp
         from .web.plans_routes import plans_bp
+        from .web.media_routes import media_bp
 
         # Регистрация Blueprints
         app.register_blueprint(report_bp, url_prefix='/reports')
@@ -200,6 +219,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(sync_bp, url_prefix='/api/sync')
         app.register_blueprint(tiles_bp)
         app.register_blueprint(plans_bp)
+        app.register_blueprint(media_bp)
 
     @app.before_request
     def before_request_tasks():
