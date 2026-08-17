@@ -66,6 +66,8 @@ def update_calculator_settings(form_data):
     settings.time_value_rate_annual = float(form_data.get('time_value_rate_annual', 16.5))
     settings.standard_installment_min_dp_percent = float(form_data.get('standard_installment_min_dp_percent', 15.0))
     settings.zero_mortgage_whitelist = form_data.get('zero_mortgage_whitelist', '')
+    settings.mortgage_rate_annual = float(form_data.get('mortgage_rate_annual') or 0.0)
+    settings.mortgage_term_months = int(form_data.get('mortgage_term_months') or 0)
     planning_session = get_planning_session()
     planning_session.commit()
 def save_zero_mortgage_matrix(file_storage):

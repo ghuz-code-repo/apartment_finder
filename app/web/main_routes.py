@@ -14,7 +14,7 @@ from ..core.db_utils import get_default_session, get_mysql_session
 from ..models.estate_models import EstateHouse
 from ..models.exclusion_models import ExcludedSell
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-from ..services import currency_service, flat_plan_service, pricing_service
+from ..services import currency_service, flat_plan_service, pricing_service, project_info_service
 # Импортируем PropertyType и PaymentMethod из их нового местоположения
 from ..models.planning_models import PropertyType, PaymentMethod
 from ..services import settings_service
@@ -211,6 +211,23 @@ def generate_commercial_offer(sell_id):
     for option in card_data.get('pricing', []):
         pricing_service.recalculate(option, user_selections.get(option['type_key'], {}))
 
+    # Ежемесячный взнос по ипотеке считается от тела кредита, поэтому условия
+    # банка проставляются после пересчёта скидок.
+    calc_settings = settings_service.get_calculator_settings()
+    pricing_service.apply_mortgage_terms(
+        card_data.get('pricing', []),
+        calc_settings.mortgage_rate_annual,
+        calc_settings.mortgage_term_months
+    )
+
+    # Первая страница КП — о проекте: рендер, тексты и УТП из карточки ЖК,
+    # плюс УТП самой квартиры, если на неё заведено спецпредложение.
+    house = card_data.get('apartment', {}).get('house') or {}
+    project_info = project_info_service.get_project_info(house.get('complex_name')) if house.get('complex_name') else None
+    project_renders = project_info_service.get_renders(house['complex_name']) if project_info else []
+    special = special_offer_service.get_special_offer_details_by_sell_id(sell_id)
+    apartment_usp = (special or {}).get('usp_text')
+
     current_date = datetime.now().strftime("%d.%m.%Y %H:%M")
     usd_rate_from_cbu = currency_service.get_current_effective_rate()
     fallback_usd_rate = current_app.config.get('USD_TO_UZS_RATE', 12650.0)
@@ -220,6 +237,10 @@ def generate_commercial_offer(sell_id):
         'main/commercial_offer.html',
         data=card_data,
         flat_plans=flat_plan_service.get_flat_plans(sell_id),
+        project_info=project_info,
+        project_render_url=(project_info_service.get_render_url(project_renders[0].filename)
+                            if project_renders else None),
+        apartment_usp=apartment_usp,
         current_date=current_date,
         usd_to_uzs_rate=actual_usd_rate,
         title=f"КП по объекту ID {sell_id}"

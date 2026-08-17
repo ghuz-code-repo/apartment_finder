@@ -1,0 +1,276 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .render-card {
+        border: 1px solid rgba(255, 255, 255, .15);
+        border-radius: .75rem;
+        overflow: hidden;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .render-card img {
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        object-fit: cover;
+        background: rgba(0, 0, 0, .2);
+    }
+    .render-card .render-body {
+        padding: .75rem;
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+    }
+    .render-empty {
+        border: 1px dashed rgba(255, 255, 255, .25);
+        border-radius: .75rem;
+        aspect-ratio: 16 / 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--bs-secondary-color, #8a8a8a);
+        font-size: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <a href="{{ url_for('report.project_dashboard', complex_name=complex_name) }}"
+           class="text-muted text-decoration-none small mb-1 d-block">
+            <i class="bi bi-arrow-left"></i> {{ _('Назад к дашборду') }}
+        </a>
+        <h1 class="gradient-heading mb-0">{{ complex_name }}</h1>
+        <p class="text-muted mb-0">{{ _('Настройки информации о проекте') }}</p>
+    </div>
+    <a href="{{ url_for('report.project_passport', complex_name=complex_name) }}" class="btn btn-outline-info">
+        <i class="bi bi-file-earmark-text me-2"></i>{{ _('Паспорт проекта') }}
+    </a>
+</div>
+
+<form method="POST" enctype="multipart/form-data" id="project-info-form">
+
+    <div class="card card-glass mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-images me-2"></i>{{ _('Рендеры проекта') }}</h5>
+            <span class="badge bg-secondary">{{ renders|length }} / {{ max_renders }}</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                {% for render in renders %}
+                <div class="col-md-4 col-lg-3">
+                    <div class="render-card">
+                        <a href="{{ render_urls[render.id] }}" target="_blank">
+                            <img src="{{ render_urls[render.id] }}" alt="{{ render.title or complex_name }}">
+                        </a>
+                        <div class="render-body">
+                            <input type="text" class="form-control form-control-sm"
+                                   name="render_title_{{ render.id }}"
+                                   value="{{ render.title or '' }}"
+                                   placeholder="{{ _('Подпись к рендеру') }}">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       name="delete_renders" value="{{ render.id }}"
+                                       id="delete_render_{{ render.id }}">
+                                <label class="form-check-label text-danger small" for="delete_render_{{ render.id }}">
+                                    {{ _('Удалить при сохранении') }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for _slot in range(max_renders - renders|length) %}
+                <div class="col-md-4 col-lg-3">
+                    <div class="render-empty"><i class="bi bi-image"></i></div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% set free_slots = max_renders - renders|length %}
+            <label for="renders" class="form-label">{{ _('Загрузить рендеры') }}</label>
+            <input type="file" class="form-control" id="renders" name="renders" multiple
+                   accept=".png,.jpg,.jpeg,.webp"
+                   data-free-slots="{{ free_slots }}"
+                   {% if free_slots <= 0 %}disabled{% endif %}>
+            <div class="form-text">
+                {% if free_slots > 0 %}
+                    {{ _('Доступно слотов:') }} {{ free_slots }}.
+                    {{ _('Форматы: png, jpg, jpeg, webp. Изображения сжимаются в WebP автоматически.') }}
+                {% else %}
+                    {{ _('Достигнут лимит рендеров. Отметьте лишние на удаление и сохраните, чтобы освободить слоты.') }}
+                {% endif %}
+            </div>
+            <div id="renders-warning" class="text-warning small mt-1" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div class="card card-glass mb-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>{{ _('Общая информация') }}</h5></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="project_class" class="form-label">{{ _('Класс проекта') }}</label>
+                    <input type="text" class="form-control" id="project_class" name="project_class"
+                           value="{{ info.project_class if info and info.project_class else '' }}"
+                           placeholder="{{ _('Бизнес-класс') }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="developer" class="form-label">{{ _('Застройщик') }}</label>
+                    <input type="text" class="form-control" id="developer" name="developer"
+                           value="{{ info.developer if info and info.developer else '' }}"
+                           placeholder="Golden House">
+                </div>
+                <div class="col-md-4">
+                    <label for="architect_bureau" class="form-label">{{ _('Архитектурное бюро') }}</label>
+                    <input type="text" class="form-control" id="architect_bureau" name="architect_bureau"
+                           value="{{ info.architect_bureau if info and info.architect_bureau else '' }}"
+                           placeholder="INK Architects">
+                </div>
+                <div class="col-md-8">
+                    <label for="location" class="form-label">{{ _('Расположение (район, ориентиры)') }}</label>
+                    <input type="text" class="form-control" id="location" name="location"
+                           value="{{ info.location if info and info.location else '' }}"
+                           placeholder="{{ _('Яшнабадский район, вдоль набережной Корасув') }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="website_url" class="form-label">{{ _('Сайт проекта') }}</label>
+                    <input type="url" class="form-control" id="website_url" name="website_url"
+                           value="{{ info.website_url if info and info.website_url else '' }}"
+                           placeholder="https://">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-glass mb-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-buildings me-2"></i>{{ _('Характеристики застройки') }}</h5></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="buildings_count" class="form-label">{{ _('Количество корпусов') }}</label>
+                    <input type="number" min="0" step="1" class="form-control" id="buildings_count" name="buildings_count"
+                           value="{{ info.buildings_count if info and info.buildings_count is not none else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ _('Этажность') }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('от') }}</span>
+                        <input type="number" min="0" step="1" class="form-control" name="floors_min"
+                               value="{{ info.floors_min if info and info.floors_min is not none else '' }}">
+                        <span class="input-group-text">{{ _('до') }}</span>
+                        <input type="number" min="0" step="1" class="form-control" name="floors_max"
+                               value="{{ info.floors_max if info and info.floors_max is not none else '' }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label for="ceiling_height" class="form-label">{{ _('Высота потолков, м') }}</label>
+                    <input type="text" class="form-control" id="ceiling_height" name="ceiling_height"
+                           value="{{ info.ceiling_height if info and info.ceiling_height is not none else '' }}"
+                           placeholder="2.9">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ _('Площади квартир, м²') }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('от') }}</span>
+                        <input type="text" class="form-control" name="area_min"
+                               value="{{ info.area_min if info and info.area_min is not none else '' }}">
+                        <span class="input-group-text">{{ _('до') }}</span>
+                        <input type="text" class="form-control" name="area_max"
+                               value="{{ info.area_max if info and info.area_max is not none else '' }}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="parking" class="form-label">{{ _('Паркинг') }}</label>
+                    <input type="text" class="form-control" id="parking" name="parking"
+                           value="{{ info.parking if info and info.parking else '' }}"
+                           placeholder="{{ _('Подземный паркинг и наземные места по периметру') }}">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-glass mb-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-bricks me-2"></i>{{ _('Технические характеристики') }}</h5></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="construction_tech" class="form-label">{{ _('Конструктив и технология строительства') }}</label>
+                    <textarea class="form-control" id="construction_tech" name="construction_tech" rows="3"
+                              placeholder="{{ _('Монолитный железобетон, кирпич, газоблок') }}">{{ info.construction_tech if info and info.construction_tech else '' }}</textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="facade_materials" class="form-label">{{ _('Отделка фасадов') }}</label>
+                    <textarea class="form-control" id="facade_materials" name="facade_materials" rows="3"
+                              placeholder="{{ _('Керамогранит, клинкер, декоративная штукатурка') }}">{{ info.facade_materials if info and info.facade_materials else '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <label for="infrastructure" class="form-label">{{ _('Инфраструктура и благоустройство') }}</label>
+                    <textarea class="form-control" id="infrastructure" name="infrastructure" rows="3"
+                              placeholder="{{ _('Двор без машин, детские и спортивные площадки, BBQ-зона, коммерция на первых этажах') }}">{{ info.infrastructure if info and info.infrastructure else '' }}</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-glass mb-4">
+        <div class="card-header"><h5 class="mb-0"><i class="bi bi-card-text me-2"></i>{{ _('Описание проекта') }}</h5></div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="concept" class="form-label">{{ _('Концепция (краткое позиционирование)') }}</label>
+                <textarea class="form-control" id="concept" name="concept" rows="3"
+                          placeholder="{{ _('Новая махалля — переосмысление традиционного квартала в современном формате') }}">{{ info.concept if info and info.concept else '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="usp" class="form-label">{{ _('УТП проекта (по одному пункту на строку)') }}</label>
+                <textarea class="form-control" id="usp" name="usp" rows="5"
+                          placeholder="{{ _('Закрытая территория без машин&#10;Двор с ландшафтным дизайном&#10;Подземный паркинг') }}">{{ info.usp if info and info.usp else '' }}</textarea>
+                <div class="form-text">{{ _('Каждая строка попадёт в коммерческое предложение отдельным пунктом.') }}</div>
+            </div>
+            <div>
+                <label for="description" class="form-label">{{ _('Полное описание') }}</label>
+                <textarea class="form-control" id="description" name="description" rows="8">{{ info.description if info and info.description else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mb-5">
+        <a href="{{ url_for('report.project_dashboard', complex_name=complex_name) }}" class="btn btn-secondary">
+            {{ _('Отмена') }}
+        </a>
+        <button type="submit" class="btn btn-success">
+            <i class="bi bi-save me-2"></i>{{ _('Сохранить') }}
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const input = document.getElementById('renders');
+    const warning = document.getElementById('renders-warning');
+    if (!input || !warning) return;
+
+    const freeSlots = parseInt(input.dataset.freeSlots, 10) || 0;
+
+    input.addEventListener('change', function () {
+        if (input.files.length > freeSlots) {
+            warning.textContent = '{{ _("Выбрано файлов больше, чем свободных слотов") }}: '
+                + input.files.length + ' > ' + freeSlots + '. '
+                + '{{ _("Лишние файлы загружены не будут.") }}';
+            warning.style.display = 'block';
+        } else {
+            warning.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

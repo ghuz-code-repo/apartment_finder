@@ -171,10 +171,100 @@
             color: transparent;
         }
         .summary-value.blue { color: #0d6efd; }
-        /* Планировки уезжают на отдельный лист: на первой странице им остаётся
-           полоска в 70мм, где чертёж нечитаем, а вариантов планировки обычно
-           несколько (основная, с мебелью, обмерная). */
+        /* --- Первая страница: о проекте --- */
+        .project-render {
+            width: 100%;
+            height: 78mm;
+            object-fit: cover;
+            border-radius: 0.4rem;
+            display: block;
+        }
+        .project-title {
+            font-size: 14pt;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin: 0.6rem 0 0.1rem;
+        }
+        .project-subtitle {
+            font-size: 9pt;
+            color: #a87d44;
+            font-weight: 600;
+            margin: 0 0 0.5rem;
+        }
+        .project-text {
+            font-size: 8.5pt;
+            line-height: 1.45;
+            color: #333;
+            text-align: justify;
+            margin: 0 0 0.4rem;
+        }
+        .project-facts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .project-fact {
+            border: 1px solid #eee;
+            border-radius: 0.3rem;
+            background-color: #fcfcfc;
+            padding: 0.25rem 0.5rem;
+            font-size: 8pt;
+        }
+        .project-fact span {
+            color: #888;
+            margin-right: 0.25rem;
+        }
+        .usp-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            columns: 2;
+            column-gap: 1rem;
+        }
+        .usp-list li {
+            position: relative;
+            padding-left: 0.8rem;
+            margin-bottom: 0.3rem;
+            font-size: 8.5pt;
+            line-height: 1.35;
+            break-inside: avoid;
+        }
+        .usp-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.42em;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background-color: #c4a668;
+        }
+        .usp-apartment {
+            margin-top: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-left: 3px solid #c4a668;
+            background-color: #fffaf0;
+            font-size: 8.5pt;
+        }
+        /* --- Ипотека: ежемесячный взнос --- */
+        .monthly-payment {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed #ccc;
+            text-align: center;
+        }
+        .monthly-payment .summary-value { font-size: 13pt; }
+        .mortgage-terms {
+            font-size: 8pt;
+            color: #777;
+            text-align: center;
+            margin: 0.15rem 0 0;
+        }
+        /* Расчёты и планировки уезжают на отдельные листы: на первой странице им
+           остаётся полоска, где ни таблица, ни чертёж не читаются. */
         .plans-page { margin-top: 8mm; }
+        .offer-page { margin-top: 8mm; }
         .plan-grid {
             display: flex;
             flex-wrap: wrap;
@@ -226,7 +316,7 @@
                 border: none;
             }
             .hide-for-print { display: none !important; }
-            .plans-page { margin-top: 0; break-before: page; page-break-before: always; }
+            .plans-page, .offer-page { margin-top: 0; break-before: page; page-break-before: always; }
             /* Чертёж не должен разрываться между листами. */
             .plan-item { break-inside: avoid; page-break-inside: avoid; }
         }
@@ -250,7 +340,61 @@
             <p><strong>Golden House | {{ _('Жилая недвижимость') }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
         </div>
 
-        <div class="section-title">1. {{ _('Информация об объекте') }}</div>
+        {# Первый лист — о проекте. Всё, кроме характеристик квартиры, приходит
+           из карточки ЖК: если её не заполнили, блок просто не выводится. #}
+        {% if project_render_url or project_info %}
+        <div class="section-title">{{ _('О проекте') }}</div>
+
+        {% if project_render_url %}
+        <img src="{{ project_render_url }}" alt="{{ data.apartment.house.complex_name if data.apartment.house else '' }}" class="project-render">
+        {% endif %}
+
+        {% if data.apartment.house and data.apartment.house.complex_name %}
+        <h2 class="project-title">{{ data.apartment.house.complex_name }}</h2>
+        {% endif %}
+        {% if project_info and project_info.project_class %}
+        <p class="project-subtitle">{{ project_info.project_class }}{% if project_info.location %} · {{ project_info.location }}{% endif %}</p>
+        {% endif %}
+
+        {% if project_info and project_info.concept %}
+        <p class="project-text"><strong>{{ project_info.concept }}</strong></p>
+        {% endif %}
+        {% if project_info and project_info.description %}
+        <p class="project-text">{{ project_info.description }}</p>
+        {% endif %}
+
+        {% if project_info %}
+        <div class="project-facts">
+            {% if project_info.developer %}<div class="project-fact"><span>{{ _('Застройщик:') }}</span>{{ project_info.developer }}</div>{% endif %}
+            {% if project_info.architect_bureau %}<div class="project-fact"><span>{{ _('Архитектура:') }}</span>{{ project_info.architect_bureau }}</div>{% endif %}
+            {% if project_info.buildings_count %}<div class="project-fact"><span>{{ _('Корпусов:') }}</span>{{ project_info.buildings_count }}</div>{% endif %}
+            {% if project_info.floors_min or project_info.floors_max %}
+            <div class="project-fact"><span>{{ _('Этажность:') }}</span>{{ project_info.floors_min or '' }}{% if project_info.floors_min and project_info.floors_max %}–{% endif %}{{ project_info.floors_max or '' }}</div>
+            {% endif %}
+            {% if project_info.ceiling_height %}<div class="project-fact"><span>{{ _('Потолки:') }}</span>{{ project_info.ceiling_height }} м</div>{% endif %}
+            {% if project_info.parking %}<div class="project-fact"><span>{{ _('Паркинг:') }}</span>{{ project_info.parking }}</div>{% endif %}
+        </div>
+        {% endif %}
+
+        {% set project_usp = project_info.usp_items if project_info else [] %}
+        {% if project_usp or apartment_usp %}
+        <div class="section-title">{{ _('Преимущества') }}</div>
+        {% if project_usp %}
+        <ul class="usp-list">
+            {% for item in project_usp %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if apartment_usp %}
+        <div class="usp-apartment">
+            <strong>{{ _('Об этой квартире:') }}</strong> {{ apartment_usp }}
+        </div>
+        {% endif %}
+        {% endif %}
+        {% endif %}
+
+        <div class="section-title">{{ _('Информация об объекте') }}</div>
         <div class="info-block">
             <div class="info-item"><span class="info-label">{{ _('Жилой комплекс:') }}</span><span class="info-value">{{ data.apartment.house.complex_name if data.apartment.house else 'N/A' }}</span></div>
             <div class="info-item"><span class="info-label">{{ _('Номер дома:') }}</span><span class="info-value">{{ data.apartment.house.geo_house if data.apartment.house else 'N/A' }}</span></div>
@@ -260,7 +404,20 @@
             <div class="info-item"><span class="info-label">{{ _('Прайс:') }}</span><span class="info-value price-uzs" data-price="{{ data.apartment.estate_price }}">{{ "{:,.0f}".format(data.apartment.estate_price) }} UZS</span></div>
         </div>
 
-        <div class="section-title">2. {{ _('Предлагаемые варианты оплаты') }}</div>
+        <div class="footer">
+            <p>{% trans %}Это коммерческое предложение не является публичной офертой. Актуальность цен и условий уточняйте у менеджеров Golden House.{% endtrans %}</p>
+        </div>
+    </div>
+
+    {# Второй лист — расчёты: 100% оплата и ипотека с ежемесячным взносом. #}
+    <div class="page-container offer-page">
+        <div class="header">
+            <img src="{{ url_for('static', filename='logo_light.svg') }}" alt="{{ _('Логотип') }}" class="header-logo">
+            <h1>{{ _('Условия покупки') }}</h1>
+            <p><strong>Golden House | {{ _('Жилая недвижимость') }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
+        </div>
+
+        <div class="section-title">{{ _('Предлагаемые варианты оплаты') }}</div>
         {% if data.pricing %}
             <div class="row {% if data.pricing|length == 1 %}justify-content-center{% endif %}">
             {% for option in data.pricing %}
@@ -303,6 +460,19 @@
                                     <p class="summary-value gold price-uzs" data-price="{{ option.final_price }}">{{ "{:,.0f}".format(option.final_price) }} UZS</p>
                                 {% endif %}
                             </div>
+                            {# Ежемесячный взнос показываем только когда в настройках
+                               калькулятора заданы ставка и срок стандартной ипотеки. #}
+                            {% if option.monthly_payment %}
+                            <div class="monthly-payment">
+                                <p class="summary-label">{{ _('Ежемесячный взнос:') }}</p>
+                                <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment }}">{{ "{:,.0f}".format(option.monthly_payment) }} UZS</p>
+                                <p class="mortgage-terms">
+                                    {{ _('Кредит') }}: <span class="price-uzs" data-price="{{ option.mortgage_body }}">{{ "{:,.0f}".format(option.mortgage_body) }} UZS</span>
+                                    · {{ option.mortgage_term_months }} {{ _('мес.') }}
+                                    {%- if option.mortgage_rate_annual %} · {{ option.mortgage_rate_annual }}% {{ _('годовых') }}{% endif %}
+                                </p>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -328,7 +498,7 @@
         </div>
 
         <div class="section-title">
-            3. {{ _('Планировка') }}{% if flat_plans.plan_name %} — {{ flat_plans.plan_name }}{% endif %}
+            {{ _('Планировка') }}{% if flat_plans.plan_name %} — {{ flat_plans.plan_name }}{% endif %}
         </div>
 
         {% set multiple = flat_plans.files | length > 1 %}

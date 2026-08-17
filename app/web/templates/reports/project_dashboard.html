@@ -21,6 +21,12 @@
         <a href="{{ url_for('report.project_passport', complex_name=data.complex_name) }}" class="btn btn-outline-info">
             <i class="bi bi-file-earmark-text me-2"></i>{{ _('Паспорт проекта') }}
         </a>
+
+        {% if current_user.can('projects_info_update') %}
+        <a href="{{ url_for('report.project_info_settings', complex_name=data.complex_name) }}" class="btn btn-outline-warning">
+            <i class="bi bi-gear me-2"></i>{{ _('Настройки информации') }}
+        </a>
+        {% endif %}
         <div class="ms-4 text-center">
             <label class="form-label">{{ _('Валюта') }}</label>
             <div class="form-check form-switch fs-4">

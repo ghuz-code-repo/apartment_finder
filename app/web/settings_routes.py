@@ -91,6 +91,8 @@ def manage_settings():
         form.standard_installment_min_dp_percent.data = settings.standard_installment_min_dp_percent
     if hasattr(settings, 'zero_mortgage_whitelist'):
         form.zero_mortgage_whitelist.data = settings.zero_mortgage_whitelist
+    form.mortgage_rate_annual.data = settings.mortgage_rate_annual or 0.0
+    form.mortgage_term_months.data = settings.mortgage_term_months or 0
 
     return render_template('settings/calculator_settings.html', title="Настройки калькуляторов", form=form)
 
