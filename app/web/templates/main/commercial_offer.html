@@ -172,9 +172,12 @@
         }
         .summary-value.blue { color: #0d6efd; }
         /* --- Первая страница: о проекте --- */
+        /* Рендер требуется в 16:9 — при таком же соотношении рамки кадр уходит
+           в документ целиком. Картинку другого формата обрежет по центру, о чём
+           менеджера предупреждают ещё при загрузке. */
         .project-render {
             width: 100%;
-            height: 78mm;
+            aspect-ratio: 16 / 9;
             object-fit: cover;
             border-radius: 0.4rem;
             display: block;
@@ -464,12 +467,27 @@
                                калькулятора заданы ставка и срок стандартной ипотеки. #}
                             {% if option.monthly_payment %}
                             <div class="monthly-payment">
-                                <p class="summary-label">{{ _('Ежемесячный взнос:') }}</p>
-                                <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment }}">{{ "{:,.0f}".format(option.monthly_payment) }} UZS</p>
+                                {% if option.monthly_payment_after_cadastre %}
+                                    {# Ставка меняется на кадастре: показываем оба платежа
+                                       и сколько месяцев действует каждый. #}
+                                    <p class="summary-label">{{ _('Ежемесячный взнос до кадастра:') }}</p>
+                                    <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment }}">{{ "{:,.0f}".format(option.monthly_payment) }} UZS</p>
+                                    <p class="mortgage-terms">
+                                        {{ option.months_before_cadastre }} {{ _('мес.') }} · {{ option.mortgage_rate_annual }}% {{ _('годовых') }}
+                                    </p>
+                                    <p class="summary-label mt-2">{{ _('После кадастра:') }}</p>
+                                    <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment_after_cadastre }}">{{ "{:,.0f}".format(option.monthly_payment_after_cadastre) }} UZS</p>
+                                    <p class="mortgage-terms">
+                                        {{ option.months_after_cadastre }} {{ _('мес.') }} · {{ option.mortgage_rate_after_cadastre }}% {{ _('годовых') }}
+                                    </p>
+                                {% else %}
+                                    <p class="summary-label">{{ _('Ежемесячный взнос:') }}</p>
+                                    <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment }}">{{ "{:,.0f}".format(option.monthly_payment) }} UZS</p>
+                                {% endif %}
                                 <p class="mortgage-terms">
                                     {{ _('Кредит') }}: <span class="price-uzs" data-price="{{ option.mortgage_body }}">{{ "{:,.0f}".format(option.mortgage_body) }} UZS</span>
-                                    · {{ option.mortgage_term_months }} {{ _('мес.') }}
-                                    {%- if option.mortgage_rate_annual %} · {{ option.mortgage_rate_annual }}% {{ _('годовых') }}{% endif %}
+                                    · {{ _('срок') }} {{ option.mortgage_term_months }} {{ _('мес.') }}
+                                    {%- if not option.monthly_payment_after_cadastre and option.mortgage_rate_annual %} · {{ option.mortgage_rate_annual }}% {{ _('годовых') }}{% endif %}
                                 </p>
                             </div>
                             {% endif %}

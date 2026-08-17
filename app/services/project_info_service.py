@@ -17,6 +17,18 @@ UPLOAD_FOLDER = 'project_renders'  # Категория внутри UPLOAD_ROOT
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 MAX_IMAGE_WIDTH = 1920  # Максимальная ширина рендера в пикселях
 
+# --- Требования к рендеру для КП ---
+# На первой странице КП рендер занимает всю ширину листа в формате 16:9.
+# Картинка другого соотношения обрежется по центру, поэтому при загрузке
+# отклонение подсвечивается менеджеру.
+KP_RENDER_RATIO = 16 / 9
+KP_RENDER_RATIO_LABEL = '16:9'
+KP_RENDER_RATIO_TOLERANCE = 0.06  # Допуск: примерно от 1.72:1 до 1.84:1
+KP_RENDER_MIN_WIDTH = 1600  # Минимальная ширина, чтобы рендер не мылился в печати
+KP_RENDER_RECOMMENDED = '1920×1080'
+# Столько текста описания помещается на первую страницу КП рядом с рендером.
+KP_DESCRIPTION_SOFT_LIMIT = 900
+
 # Текстовые поля карточки проекта (заполняются как есть)
 TEXT_FIELDS = [
     'project_class', 'developer', 'architect_bureau', 'location', 'website_url',
@@ -44,7 +56,11 @@ def get_render_url(filename):
 
 
 def _optimize_and_save_image(image_file_storage):
-    """Оптимизирует и сохраняет рендер, возвращает имя файла."""
+    """Оптимизирует и сохраняет рендер.
+
+    Возвращает (имя файла, ширина, высота) уже сохраненного изображения:
+    размеры нужны, чтобы проверить пригодность рендера для первой страницы КП.
+    """
     if not image_file_storage or not image_file_storage.filename:
         raise ValueError("Файл не выбран.")
 
@@ -75,7 +91,7 @@ def _optimize_and_save_image(image_file_storage):
         img = img.resize((MAX_IMAGE_WIDTH, new_height), Image.LANCZOS)
 
     img.save(full_path, 'WEBP', quality=85)
-    return unique_filename
+    return unique_filename, img.width, img.height
 
 
 def _delete_render_file(filename):
@@ -161,6 +177,59 @@ def save_project_info(complex_name, form_data):
     return info
 
 
+def kp_requirements_problem(width, height):
+    """Что не так с рендером для первой страницы КП. None — всё в порядке."""
+    if not width or not height:
+        return None  # Размеры неизвестны (рендер загружен до появления проверки)
+
+    if width < KP_RENDER_MIN_WIDTH:
+        return (f"ширина {width}px меньше {KP_RENDER_MIN_WIDTH}px — "
+                f"в печати рендер будет мылить")
+
+    ratio = width / height
+    if abs(ratio - KP_RENDER_RATIO) > KP_RENDER_RATIO_TOLERANCE:
+        return (f"соотношение сторон {ratio:.2f}:1 вместо {KP_RENDER_RATIO_LABEL} — "
+                f"на первой странице КП рендер обрежется по центру")
+
+    return None
+
+
+def describe_render(render):
+    """Данные о рендере для страницы настроек: размер и пригодность для КП."""
+    problem = kp_requirements_problem(render.width, render.height)
+    return {
+        'size': f"{render.width}×{render.height}" if render.width and render.height else None,
+        'ratio': f"{render.width / render.height:.2f}:1" if render.width and render.height else None,
+        'problem': problem,
+        'ok': problem is None and bool(render.width),
+    }
+
+
+def set_cover_render(complex_name, render_id):
+    """Делает выбранный рендер первым — именно он уходит на первую страницу КП."""
+    if not render_id:
+        return False
+
+    try:
+        render_id = int(render_id)
+    except (TypeError, ValueError):
+        return False
+
+    renders = get_renders(complex_name)
+    if not any(r.id == render_id for r in renders):
+        return False
+
+    planning_session = get_planning_session()
+    order = 0
+    # Выбранный рендер получает нулевой порядок, остальные сохраняют относительный.
+    for render in sorted(renders, key=lambda r: (r.id != render_id, r.sort_order, r.id)):
+        render.sort_order = order
+        order += 1
+
+    planning_session.commit()
+    return True
+
+
 def add_renders(complex_name, files):
     """
     Добавляет рендеры к проекту (не больше MAX_RENDERS всего).
@@ -191,19 +260,28 @@ def add_renders(complex_name, files):
         files = files[:free_slots]
 
     for file_storage in files:
+        original_name = file_storage.filename
         try:
-            filename = _optimize_and_save_image(file_storage)
+            filename, width, height = _optimize_and_save_image(file_storage)
         except ValueError as e:
             errors.append(str(e))
             continue
         except Exception as e:
             current_app.logger.error(f"Ошибка обработки рендера для {complex_name}: {e}")
-            errors.append(f"Не удалось обработать файл '{file_storage.filename}'.")
+            errors.append(f"Не удалось обработать файл '{original_name}'.")
             continue
+
+        # Не блокируем загрузку: рендер может понадобиться и вне КП, но о том,
+        # что на первой странице он обрежется, менеджер должен узнать сразу.
+        problem = kp_requirements_problem(width, height)
+        if problem:
+            errors.append(f"«{original_name}»: {problem}")
 
         planning_session.add(ProjectRender(
             complex_name=complex_name,
             filename=filename,
+            width=width,
+            height=height,
             sort_order=next_order
         ))
         next_order += 1

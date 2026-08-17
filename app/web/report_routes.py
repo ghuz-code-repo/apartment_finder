@@ -583,7 +583,10 @@ def project_info_settings(complex_name):
                         continue
             project_info_service.update_render_titles(complex_name, titles)
 
-            # 4. Сохраняем характеристики ЖК
+            # 4. Обложка КП — рендер, который уходит на первую страницу
+            project_info_service.set_cover_render(complex_name, request.form.get('cover_render'))
+
+            # 5. Сохраняем характеристики ЖК
             project_info_service.save_project_info(complex_name, request.form)
 
             message = "Информация о проекте сохранена."
@@ -609,7 +612,12 @@ def project_info_settings(complex_name):
         info=info,
         renders=renders,
         render_urls={r.id: project_info_service.get_render_url(r.filename) for r in renders},
-        max_renders=project_info_service.MAX_RENDERS
+        render_meta={r.id: project_info_service.describe_render(r) for r in renders},
+        max_renders=project_info_service.MAX_RENDERS,
+        kp_render_ratio=project_info_service.KP_RENDER_RATIO_LABEL,
+        kp_render_recommended=project_info_service.KP_RENDER_RECOMMENDED,
+        kp_render_min_width=project_info_service.KP_RENDER_MIN_WIDTH,
+        kp_description_limit=project_info_service.KP_DESCRIPTION_SOFT_LIMIT
     )
 
 

@@ -44,16 +44,24 @@
             <h5 class="mt-4">{{ _('Стандартная ипотека (для КП)') }}</h5>
             <p class="text-muted small">
                 {{ _('Пока срок не задан, ежемесячный взнос в коммерческом предложении не показывается.') }}
+                {{ _('Дата кадастра берётся из матрицы скидок по каждому ЖК: до неё действует первая ставка, после — вторая. Если вторая ставка не задана, весь срок считается по первой.') }}
             </p>
             <div class="row g-3 mb-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     {{ form.mortgage_rate_annual.label(class="form-label") }}
                     {{ form.mortgage_rate_annual(class="form-control") }}
                     {% if form.mortgage_rate_annual.errors %}
                         <div class="text-danger small mt-1">{{ form.mortgage_rate_annual.errors[0] }}</div>
                     {% endif %}
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
+                    {{ form.mortgage_rate_after_cadastre.label(class="form-label") }}
+                    {{ form.mortgage_rate_after_cadastre(class="form-control") }}
+                    {% if form.mortgage_rate_after_cadastre.errors %}
+                        <div class="text-danger small mt-1">{{ form.mortgage_rate_after_cadastre.errors[0] }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
                     {{ form.mortgage_term_months.label(class="form-label") }}
                     {{ form.mortgage_term_months(class="form-control") }}
                     {% if form.mortgage_term_months.errors %}

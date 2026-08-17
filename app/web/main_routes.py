@@ -215,6 +215,7 @@ def generate_commercial_offer(sell_id):
     pricing_service.apply_mortgage_terms(
         card_data.get('pricing', []),
         calc_settings.mortgage_rate_annual,
+        calc_settings.mortgage_rate_after_cadastre,
         calc_settings.mortgage_term_months
     )
 

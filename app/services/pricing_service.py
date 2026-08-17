@@ -9,6 +9,8 @@ apartment_card_java.js — и расходилась: карточка скла�
 к цене после вычета. Так же считает система скидок и рыночная аналитика.
 """
 
+from datetime import date
+
 from ..models.planning_models import PaymentMethod
 
 # Бронирование: не участвует в скидках, вычитается из прайса до их применения.
@@ -98,6 +100,8 @@ def _new_option(type_key, title, base_price, price_after_deduction, discount_row
         ],
         # Тело кредита зависит от цены после скидок и считается в recalculate.
         'mortgage_body': None,
+        # Дата кадастра из матрицы скидок: на ней меняется ставка по ипотеке.
+        'cadastre_date': discount_row.get('cadastre_date'),
     }
     return recalculate(option, {})
 
@@ -176,19 +180,91 @@ def monthly_annuity_payment(principal, annual_rate_percent, term_months):
     return principal * monthly_rate * growth / (growth - 1)
 
 
-def apply_mortgage_terms(options, annual_rate_percent, term_months):
-    """Дописывает в ипотечный вариант условия банка и ежемесячный платёж.
+def _balance_after(principal, monthly_rate, payment, months):
+    """Остаток долга через months платежей по аннуитету."""
+    if months <= 0:
+        return principal
+    if monthly_rate <= 0:
+        return max(principal - payment * months, 0.0)
+
+    growth = (1 + monthly_rate) ** months
+    return max(principal * growth - payment * (growth - 1) / monthly_rate, 0.0)
+
+
+def months_until(target_date, today=None):
+    """Сколько полных месяцев осталось до даты. Прошедшая дата -> 0."""
+    if not target_date:
+        return None
+    if isinstance(target_date, str):
+        try:
+            target_date = date.fromisoformat(target_date)
+        except ValueError:
+            return None
+
+    today = today or date.today()
+    if target_date <= today:
+        return 0
+
+    months = (target_date.year - today.year) * 12 + (target_date.month - today.month)
+    if target_date.day < today.day:
+        months -= 1
+    return max(months, 0)
+
+
+def apply_mortgage_terms(options, rate_before_cadastre, rate_after_cadastre, term_months, today=None):
+    """Дописывает в ипотечный вариант условия банка и ежемесячные платежи.
+
+    До кадастра действует одна ставка, после — другая. На дату кадастра берётся
+    фактический остаток долга и заново раскидывается по второй ставке на
+    оставшийся срок, поэтому второй платёж обычно ниже первого.
 
     Вызывать после recalculate: платёж считается от тела кредита, а оно
     зависит от выставленных менеджером скидок.
     """
+    term_months = int(term_months or 0)
+
     for option in options or []:
         if option.get('type_key') != MORTGAGE_KEY:
             continue
-        option['mortgage_rate_annual'] = annual_rate_percent
+
+        body = option.get('mortgage_body')
+        months_before = months_until(option.get('cadastre_date'), today)
+
+        # Кадастр уже получен (или даты нет) — весь срок по одной ставке.
+        # После кадастра логично считать по второй ставке, если она задана.
+        if not months_before:
+            single_rate = rate_after_cadastre if (months_before == 0 and rate_after_cadastre) else rate_before_cadastre
+            option['mortgage_rate_annual'] = single_rate
+            option['mortgage_rate_after_cadastre'] = None
+            option['months_before_cadastre'] = None
+            option['months_after_cadastre'] = None
+            option['monthly_payment'] = monthly_annuity_payment(body, single_rate, term_months)
+            option['monthly_payment_after_cadastre'] = None
+            option['mortgage_term_months'] = term_months
+            continue
+
+        option['mortgage_rate_annual'] = rate_before_cadastre
         option['mortgage_term_months'] = term_months
-        option['monthly_payment'] = monthly_annuity_payment(
-            option.get('mortgage_body'), annual_rate_percent, term_months
+        payment_before = monthly_annuity_payment(body, rate_before_cadastre, term_months)
+        option['monthly_payment'] = payment_before
+
+        # Кадастр позже конца кредита либо вторая ставка не задана — делить нечего.
+        if not payment_before or months_before >= term_months or not rate_after_cadastre:
+            option['mortgage_rate_after_cadastre'] = None
+            option['months_before_cadastre'] = None
+            option['months_after_cadastre'] = None
+            option['monthly_payment_after_cadastre'] = None
+            continue
+
+        balance = _balance_after(float(body), float(rate_before_cadastre) / 100 / 12,
+                                 payment_before, months_before)
+        months_after = term_months - months_before
+
+        option['mortgage_rate_after_cadastre'] = rate_after_cadastre
+        option['months_before_cadastre'] = months_before
+        option['months_after_cadastre'] = months_after
+        option['monthly_payment_after_cadastre'] = monthly_annuity_payment(
+            balance, rate_after_cadastre, months_after
         )
     return options
 

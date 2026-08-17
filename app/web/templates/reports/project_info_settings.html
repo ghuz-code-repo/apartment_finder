@@ -13,11 +13,24 @@
         display: flex;
         flex-direction: column;
     }
+    /* Кадрирование то же, что на первой странице КП: менеджер сразу видит,
+       что попадёт в документ. */
     .render-card img {
         width: 100%;
-        aspect-ratio: 16 / 10;
+        aspect-ratio: 16 / 9;
         object-fit: cover;
         background: rgba(0, 0, 0, .2);
+    }
+    .render-card.is-cover {
+        border-color: #c4a668;
+        box-shadow: 0 0 0 1px #c4a668;
+    }
+    .render-badge {
+        font-size: .75rem;
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        flex-wrap: wrap;
     }
     .render-card .render-body {
         padding: .75rem;
@@ -28,7 +41,7 @@
     .render-empty {
         border: 1px dashed rgba(255, 255, 255, .25);
         border-radius: .75rem;
-        aspect-ratio: 16 / 10;
+        aspect-ratio: 16 / 9;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -61,14 +74,49 @@
             <span class="badge bg-secondary">{{ renders|length }} / {{ max_renders }}</span>
         </div>
         <div class="card-body">
+            <div class="alert alert-secondary py-2 small">
+                <div class="fw-semibold mb-1">
+                    <i class="bi bi-aspect-ratio me-1"></i>{{ _('Требования к рендеру для КП') }}
+                </div>
+                <ul class="mb-0 ps-3">
+                    <li>{{ _('Соотношение сторон') }} — <strong>{{ kp_render_ratio }}</strong> ({{ _('горизонтальный') }}),
+                        {{ _('рекомендуемый размер') }} <strong>{{ kp_render_recommended }}</strong>,
+                        {{ _('минимальная ширина') }} {{ kp_render_min_width }} px.</li>
+                    <li>{{ _('Форматы: png, jpg, jpeg, webp. При сохранении файл сжимается в WebP и уменьшается до 1920 px по ширине.') }}</li>
+                    <li>{{ _('Рендер другого соотношения обрежется по центру — верх и низ кадра в документ не попадут.') }}</li>
+                    <li>{{ _('На первую страницу КП идёт рендер, отмеченный как обложка. Остальные хранятся для других задач.') }}</li>
+                </ul>
+            </div>
+
             <div class="row g-3 mb-3">
                 {% for render in renders %}
+                {% set meta = render_meta[render.id] %}
                 <div class="col-md-4 col-lg-3">
-                    <div class="render-card">
+                    <div class="render-card {% if loop.first %}is-cover{% endif %}">
                         <a href="{{ render_urls[render.id] }}" target="_blank">
                             <img src="{{ render_urls[render.id] }}" alt="{{ render.title or complex_name }}">
                         </a>
                         <div class="render-body">
+                            <div class="render-badge">
+                                {% if meta.size %}
+                                    <span class="badge {{ 'bg-success' if meta.ok else 'bg-warning text-dark' }}">
+                                        {{ meta.size }} · {{ meta.ratio }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ _('размер неизвестен') }}</span>
+                                {% endif %}
+                            </div>
+                            {% if meta.problem %}
+                            <div class="text-warning" style="font-size: .75rem;">{{ meta.problem }}</div>
+                            {% endif %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cover_render"
+                                       value="{{ render.id }}" id="cover_render_{{ render.id }}"
+                                       {% if loop.first %}checked{% endif %}>
+                                <label class="form-check-label small" for="cover_render_{{ render.id }}">
+                                    {{ _('Обложка КП') }}
+                                </label>
+                            </div>
                             <input type="text" class="form-control form-control-sm"
                                    name="render_title_{{ render.id }}"
                                    value="{{ render.title or '' }}"
@@ -102,7 +150,7 @@
             <div class="form-text">
                 {% if free_slots > 0 %}
                     {{ _('Доступно слотов:') }} {{ free_slots }}.
-                    {{ _('Форматы: png, jpg, jpeg, webp. Изображения сжимаются в WebP автоматически.') }}
+                    {{ _('Формат для КП:') }} {{ kp_render_ratio }}, {{ kp_render_recommended }}.
                 {% else %}
                     {{ _('Достигнут лимит рендеров. Отметьте лишние на удаление и сохраните, чтобы освободить слоты.') }}
                 {% endif %}
@@ -235,7 +283,11 @@
             </div>
             <div>
                 <label for="description" class="form-label">{{ _('Полное описание') }}</label>
-                <textarea class="form-control" id="description" name="description" rows="8">{{ info.description if info and info.description else '' }}</textarea>
+                <textarea class="form-control" id="description" name="description" rows="8"
+                          data-soft-limit="{{ kp_description_limit }}">{{ info.description if info and info.description else '' }}</textarea>
+                <div class="form-text" id="description-counter">
+                    {{ _('Рекомендуется до') }} {{ kp_description_limit }} {{ _('знаков — столько помещается на первую страницу КП.') }}
+                </div>
             </div>
         </div>
     </div>
@@ -255,6 +307,22 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Счётчик описания: подсказывает, когда текст перестанет влезать на первую
+    // страницу КП. Жёстко не ограничиваем — длинное описание просто уедет ниже.
+    const description = document.getElementById('description');
+    const counter = document.getElementById('description-counter');
+    if (description && counter) {
+        const softLimit = parseInt(description.dataset.softLimit, 10) || 0;
+        const base = counter.textContent.trim();
+        const updateCounter = () => {
+            const length = description.value.length;
+            counter.textContent = length + ' / ' + softLimit + '. ' + base;
+            counter.classList.toggle('text-warning', softLimit > 0 && length > softLimit);
+        };
+        description.addEventListener('input', updateCounter);
+        updateCounter();
+    }
+
     const input = document.getElementById('renders');
     const warning = document.getElementById('renders-warning');
     if (!input || !warning) return;
