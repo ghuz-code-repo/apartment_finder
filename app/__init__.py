@@ -8,7 +8,7 @@ from flask_cors import CORS
 from flask_babel import Babel
 from .core.config import DevelopmentConfig
 from .core.extensions import db, migrate_default, migrate_planning
-from .core.decorators import PERMISSION_MAP, _is_gateway_user
+from .core.decorators import _is_gateway_user, permission_granted, user_identity
 
 babel = Babel()
 
@@ -118,16 +118,13 @@ class GatewayUserProxy:
 
     @property
     def is_admin(self):
-        if self._user.get('is_admin'):
-            return True
-        roles = self._user.get('roles', [])
-        return 'admin' in roles
+        return user_identity(self._user)[1]
 
     def can(self, perm_name):
-        if self.is_admin:
+        permissions, is_admin = user_identity(self._user)
+        if is_admin:
             return True
-        gateway_perm = PERMISSION_MAP.get(perm_name, perm_name)
-        return gateway_perm in self._user.get('permissions', [])
+        return permission_granted(perm_name, permissions)
 
     def get_id(self):
         return str(self.id)

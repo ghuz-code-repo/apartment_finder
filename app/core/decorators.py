@@ -31,6 +31,46 @@ def _get_current_user():
     return None
 
 
+def user_identity(user):
+    """Права и признак админа одинаково для dict и UserContext.
+
+    Формы пользователя разные: AuthMiddleware кладёт в g.user UserContext с
+    полями roles/is_admin, а to_dict() и служебные вызовы — словарь, где роль
+    может лежать и в 'role', и в 'roles'. Раньше каждая проверка разбирала это
+    по-своему, и словарь с is_admin=True проходил в шаблоне, но получал 403 на
+    самом роуте.
+    """
+    if isinstance(user, dict):
+        permissions = user.get('permissions') or []
+        roles = user.get('roles') or []
+        is_admin = bool(user.get('is_admin')) or user.get('role') == 'admin'
+    else:
+        permissions = getattr(user, 'permissions', None) or []
+        roles = getattr(user, 'roles', None) or []
+        is_admin = bool(getattr(user, 'is_admin', False))
+    return permissions, is_admin or 'admin' in roles
+
+
+def permission_granted(permission_name, permissions):
+    """Проверяет право с учётом шаблонов, как это делает auth-connector.
+
+    Шлюз отдаёт роли как есть: если роли выдано 'finder.*', в заголовке
+    X-User-Service-Permissions придёт именно строка со звёздочкой, а не
+    развёрнутый список. Точное сравнение такое право не видит — пункт меню
+    пропадает, а роут отвечает 403.
+    """
+    gateway_perm = PERMISSION_MAP.get(permission_name, permission_name)
+    if gateway_perm in permissions:
+        return True
+    for perm in permissions:
+        if perm == '*':
+            return True
+        # 'finder.*' покрывает 'finder.projects_info_update'
+        if perm.endswith('.*') and gateway_perm.startswith(perm[:-1]):
+            return True
+    return False
+
+
 def login_required(f):
     """Gateway-only login_required decorator."""
     @wraps(f)
@@ -52,17 +92,10 @@ def permission_required(permission_name):
             if not user or not _is_gateway_user(user):
                 abort(401)
 
-            gateway_perm = PERMISSION_MAP.get(permission_name, permission_name)
-            if isinstance(user, dict):
-                user_permissions = user.get('permissions', [])
-                user_role = user.get('role', '')
-                is_admin = user_role == 'admin'
-            else:
-                user_permissions = user.permissions
-                is_admin = user.is_admin or 'admin' in user.roles
+            user_permissions, is_admin = user_identity(user)
             if is_admin:
                 return fn(*args, **kwargs)
-            if gateway_perm in user_permissions:
+            if permission_granted(permission_name, user_permissions):
                 return fn(*args, **kwargs)
             abort(403)
 

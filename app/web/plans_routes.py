@@ -16,8 +16,8 @@ import requests
 from flask import Blueprint, Response, abort, current_app, send_file
 from requests.adapters import HTTPAdapter
 
-from ..core.decorators import (PERMISSION_MAP, _get_current_user, _is_gateway_user,
-                               login_required)
+from ..core.decorators import (_get_current_user, _is_gateway_user, login_required,
+                               permission_granted, user_identity)
 from ..services import flat_plan_service, macro_api_service
 
 logger = logging.getLogger(__name__)
@@ -131,16 +131,10 @@ def _can_view_plans():
     if not user or not _is_gateway_user(user):
         return False
 
-    if isinstance(user, dict):
-        permissions = user.get('permissions', [])
-        is_admin = bool(user.get('is_admin')) or user.get('role') == 'admin'
-    else:
-        permissions = user.permissions
-        is_admin = user.is_admin or 'admin' in user.roles
-
+    permissions, is_admin = user_identity(user)
     if is_admin:
         return True
-    return any(PERMISSION_MAP.get(name, name) in permissions for name in PLAN_PERMISSIONS)
+    return any(permission_granted(name, permissions) for name in PLAN_PERMISSIONS)
 
 
 @plans_bp.route('/plans/<int:sell_id>/<int:index>')
