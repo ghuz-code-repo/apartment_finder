@@ -93,6 +93,31 @@ def get_cancellations():
     return result
 
 
+def _find_duplicate(session, sell_id, deal_id, contract_num):
+    """Ищет уже внесённое расторжение того же события.
+
+    Событие определяет сделка. Если сделки нет, опереться не на что: тогда
+    отсекаем только точное совпадение по непустому номеру договора, а при
+    пустом разрешаем внести — лишнюю запись пользователь удалит сам, а вот
+    ложная блокировка не оставляет ему выхода.
+    """
+    query = session.query(CancellationRegistry).filter_by(estate_sell_id=sell_id)
+
+    if deal_id is not None:
+        exists = query.filter_by(estate_deal_id=deal_id).first()
+        if exists:
+            return exists
+        if contract_num:
+            # Записи, внесённые до появления estate_deal_id, ссылки на сделку
+            # не имеют — их узнаём по номеру договора.
+            return query.filter_by(estate_deal_id=None, contract_number=contract_num).first()
+        return None
+
+    if contract_num:
+        return query.filter_by(contract_number=contract_num).first()
+    return None
+
+
 def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = False, is_change_object: bool = False):
     default_session = get_default_session()
     mysql_session = get_mysql_session()
@@ -107,6 +132,7 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
         return False, f"Объект {sell_id} не найден в MySQL."
 
     # 2. Инициализируем переменные договора (всегда, чтобы избежать NameError)
+    deal_id = None
     contract_num = None
     contract_date_obj = None
     contract_sum = 0
@@ -114,22 +140,29 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
     if sell.deals:
         # Выбираем последнюю сделку по ID (самая актуальная)
         last_deal = max(sell.deals, key=lambda d: d.id)
-        contract_num = getattr(last_deal, 'agreement_number', getattr(last_deal, 'arles_agreement_num', None))
+        deal_id = last_deal.id
+        # Оба поля — колонки модели, атрибут есть всегда. getattr с запасным
+        # значением здесь не срабатывал и отдавал None, когда основной договор
+        # ещё не оформлен: нужен номер предварительного.
+        contract_num = last_deal.agreement_number or last_deal.arles_agreement_num
         contract_date_obj = last_deal.agreement_date or last_deal.preliminary_date
         contract_sum = last_deal.deal_sum or 0
 
-    # 3. Проверка на дубликат: разрешаем один ID, если номера договоров разные
-    exists = default_session.query(CancellationRegistry).filter_by(
-        estate_sell_id=sell_id,
-        contract_number=contract_num
-    ).first()
-
+    # 3. Проверка на дубликат. Один объект расторгается много раз, поэтому
+    # сравниваем не объект, а сделку: она и есть событие расторжения. Номер
+    # договора для этого не годился — у брони он пустой, и второе расторжение
+    # с пустым номером совпадало с первым.
+    exists = _find_duplicate(default_session, sell_id, deal_id, contract_num)
     if exists:
-        return False, f"Расторжение по договору {contract_num} уже внесено в реестр."
+        return False, (f"Это расторжение уже внесено в реестр "
+                       f"(запись №{exists.id} от {exists.created_at.strftime('%d.%m.%Y')}). "
+                       f"Чтобы внести повторное расторжение объекта, дождитесь "
+                       f"новой сделки по нему в MacroCRM.")
 
     # 4. Создаем запись со всеми заполненными полями
     new_cancellation = CancellationRegistry(
         estate_sell_id=sell_id,
+        estate_deal_id=deal_id,
         complex_name=sell.house.complex_name if sell.house else '-',
         house_name=sell.house.name if sell.house else '-',
         entrance=getattr(sell, 'geo_house_entrance', '-'),

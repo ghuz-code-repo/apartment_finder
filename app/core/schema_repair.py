@@ -48,8 +48,17 @@ def _rebuild_without_unique(engine):
     tmp_name = f'{_TABLE}__rebuild'
     tmp_table = table.to_metadata(staging, name=tmp_name)
     # Индексы модели носят имена итоговой таблицы и столкнулись бы с индексами
-    # ещё живого оригинала. Создаём их вручную после переименования.
+    # ещё живого оригинала. Создаём их все заново после переименования.
     tmp_table.indexes.clear()
+    index_ddl = [
+        'CREATE {unique}INDEX IF NOT EXISTS "{name}" ON "{table}" ({columns})'.format(
+            unique='UNIQUE ' if index.unique else '',
+            name=index.name,
+            table=_TABLE,
+            columns=', '.join(f'"{col.name}"' for col in index.columns),
+        )
+        for index in table.indexes
+    ]
 
     existing = {col['name'] for col in inspect(engine).get_columns(_TABLE)}
     carried = [col.name for col in table.columns if col.name in existing]
@@ -63,9 +72,45 @@ def _rebuild_without_unique(engine):
         ))
         conn.execute(text(f'DROP TABLE "{_TABLE}"'))
         conn.execute(text(f'ALTER TABLE "{tmp_name}" RENAME TO "{_TABLE}"'))
-        conn.execute(text(
-            f'CREATE INDEX IF NOT EXISTS "{_INDEX}" ON "{_TABLE}" ("{_COLUMN}")'
-        ))
+        for statement in index_ddl:
+            conn.execute(text(statement))
+
+
+def _add_missing_columns(engine, model):
+    """Дописывает в существующую таблицу колонки, появившиеся в модели.
+
+    Возвращает список добавленных имён. Данные не трогает: только ADD COLUMN,
+    новые значения остаются NULL.
+    """
+    table = model.__table__
+    inspector = inspect(engine)
+    if not inspector.has_table(table.name):
+        return []
+
+    existing = {col['name'] for col in inspector.get_columns(table.name)}
+    missing = [col for col in table.columns if col.name not in existing]
+    if not missing:
+        return []
+
+    added = {col.name for col in missing}
+    with engine.begin() as conn:
+        for column in missing:
+            column_type = column.type.compile(engine.dialect)
+            conn.execute(text(
+                f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column_type}'
+            ))
+        # ADD COLUMN индексы не создаёт, даже если в модели стоит index=True.
+        for index in table.indexes:
+            if not ({col.name for col in index.columns} & added):
+                continue
+            columns_sql = ', '.join(f'"{col.name}"' for col in index.columns)
+            unique = 'UNIQUE ' if index.unique else ''
+            conn.execute(text(
+                f'CREATE {unique}INDEX IF NOT EXISTS "{index.name}" '
+                f'ON "{table.name}" ({columns_sql})'
+            ))
+
+    return sorted(added)
 
 
 def repair_cancellation_registry(engine):
@@ -105,9 +150,16 @@ def repair_schema(db):
     Ошибки не пробрасываются: неудавшийся ремонт не должен ронять сервис —
     он лишь оставляет прежнее поведение, о котором сказано в логе.
     """
+    from app.models.registry_models import CancellationRegistry
+
     try:
         if repair_cancellation_registry(db.engine):
             print("[SETUP] Схема cancellation_registry обновлена: UNIQUE снят")
+        # После пересборки таблица уже построена по модели, здесь остаётся
+        # случай, когда UNIQUE не было, а колонки успели добавиться.
+        added = _add_missing_columns(db.engine, CancellationRegistry)
+        if added:
+            print(f"[SETUP] В cancellation_registry добавлены колонки: {', '.join(added)}")
     except Exception as exc:
         logger.warning("[SCHEMA] Не удалось починить %s: %s", _TABLE, exc)
         print(f"[SETUP] Warning: ремонт схемы {_TABLE} не выполнен: {exc}")

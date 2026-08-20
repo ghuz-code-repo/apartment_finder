@@ -36,6 +36,11 @@ class CancellationRegistry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # УБРАНО unique=True, так как один объект может расторгаться несколько раз
     estate_sell_id = db.Column(db.Integer, nullable=False, index=True)
+    # Сделка, по которой расторгались. Именно она отличает одно расторжение
+    # объекта от следующего: номер договора для этого не годится, у брони и
+    # предварительного договора он пустой. NULL — у записей, внесённых до
+    # появления поля.
+    estate_deal_id = db.Column(db.Integer, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
     comment = db.Column(db.String(255), nullable=True)
 
