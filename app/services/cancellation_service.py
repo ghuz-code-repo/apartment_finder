@@ -5,6 +5,7 @@ from app.core.db_utils import get_default_session, get_mysql_session
 from app.models.registry_models import CancellationRegistry
 from app.models.estate_models import EstateSell, EstateHouse, EstateDeal
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 import pandas as pd
 import io
@@ -149,6 +150,15 @@ def add_cancellation(sell_id: int, is_free: bool = False, is_no_money: bool = Fa
         default_session.add(new_cancellation)
         default_session.commit()
         return True, "Объект успешно добавлен в реестр расторжений."
+    except IntegrityError:
+        # Сюда приходит база со старым UNIQUE на estate_sell_id: в модели его
+        # нет, повторное расторжение одного объекта разрешено. Схему чинит
+        # repair_cancellation_registry() на старте, здесь — понятный текст
+        # вместо сырого 'UNIQUE constraint failed'.
+        default_session.rollback()
+        return False, (f"Объект {sell_id} уже есть в реестре, а база не принимает "
+                       f"повторное расторжение. Перезапустите сервис: схема "
+                       f"обновляется при старте.")
     except Exception as e:
         default_session.rollback()
         return False, f"Ошибка сохранения: {e}"

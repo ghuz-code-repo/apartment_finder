@@ -7,6 +7,7 @@ import time
 from app import create_app
 from app.core.config import DevelopmentConfig
 from app.core.extensions import db
+from app.core.schema_repair import repair_schema
 from werkzeug.middleware.proxy_fix import ProxyFix
 from prefix_middleware import PrefixMiddleware
 
@@ -101,6 +102,9 @@ def setup_database():
                                 special_offer_models)
         db.create_all()
         print("[SETUP] Database tables created")
+        # create_all() существующие таблицы не меняет, поэтому базы, созданные
+        # до правок моделей, чинятся отдельно.
+        repair_schema(db)
 
 
 # Данные из MySQL здесь больше не «обновляются»: модели estate_*/finance_*

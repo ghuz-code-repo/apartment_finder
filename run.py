@@ -2,6 +2,7 @@ import os
 from app import create_app
 from app.core.config import DevelopmentConfig
 from app.core.extensions import db
+from app.core.schema_repair import repair_schema
 from prefix_middleware import PrefixMiddleware
 
 # Создаем приложение Flask
@@ -26,6 +27,9 @@ def setup_database():
         print("--- [ОТЛАДКА] Вызов единого db.create_all() для всех баз... ---")
         db.create_all()
         print("--- [ОТЛАДКА] db.create_all() для всех баз завершен. ---")
+        # create_all() существующие таблицы не меняет, поэтому базы, созданные
+        # до правок моделей, чинятся отдельно.
+        repair_schema(db)
         print("--- [ОТЛАДКА] Функция setup_database завершена. ---\n")
 
 
