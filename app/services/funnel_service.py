@@ -28,6 +28,44 @@ def _filter_cohort_by_created_at(cohort_query, start_date_str: str, end_date_str
     return cohort_query
 
 
+def _filter_cohort_by_activity(cohort_query, start_date_str: str, end_date_str: str):
+    """Ограничивает когорту заявками, по которым в периоде была активность.
+
+    Активность — любая запись в логе статусов: заявка могла прийти год назад,
+    но если менеджер двигал её в этом месяце, она в когорту попадает. Такой
+    срез показывает работу за период, тогда как когорта по дате создания —
+    качество самих заявок этого периода.
+    """
+    mysql_session = get_mysql_session()
+    log_query = mysql_session.query(EstateBuysStatusLog.estate_buy_id)
+
+    try:
+        start_date = date.fromisoformat(start_date_str)
+        log_query = log_query.filter(EstateBuysStatusLog.log_date >= start_date)
+    except (ValueError, TypeError):
+        pass
+    try:
+        end_date = date.fromisoformat(end_date_str)
+        log_query = log_query.filter(EstateBuysStatusLog.log_date < end_date + timedelta(days=1))
+    except (ValueError, TypeError):
+        pass
+
+    return cohort_query.filter(EstateBuy.id.in_(log_query))
+
+
+# Как отбирается когорта заявок для метрик воронки.
+COHORT_MODES = (
+    ('created', 'Созданные за период'),
+    ('activity', 'Любая активность за период'),
+)
+
+
+def _filter_cohort(cohort_query, start_date_str, end_date_str, mode):
+    if mode == 'activity':
+        return _filter_cohort_by_activity(cohort_query, start_date_str, end_date_str)
+    return _filter_cohort_by_created_at(cohort_query, start_date_str, end_date_str)
+
+
 def _format_status(status, custom_status):
     status = (status or "").strip()
     custom_status = (custom_status or "").strip()
@@ -35,15 +73,18 @@ def _format_status(status, custom_status):
     return f"{status}: {custom_status}" if custom_status else status
 
 
-def get_target_funnel_metrics(start_date_str: str, end_date_str: str):
+def get_target_funnel_metrics(start_date_str: str, end_date_str: str, cohort_mode: str = 'created'):
     mysql_session = get_mysql_session()
     """
     Рассчитывает разделение на целевые/нецелевые и ключевые показатели конверсии.
     (С УТОЧНЕНИЕМ: Сделка = 'Сделка в работе' + 'Сделка проведена')
+
+    cohort_mode задаёт, какие заявки берём: созданные в периоде или те, по
+    которым в периоде была любая активность.
     """
-    # === Шаги 1-2: Сбор когорты и логов (без изменений) ===
-    cohort_query = _filter_cohort_by_created_at(
-        mysql_session.query(EstateBuy.id), start_date_str, end_date_str
+    # === Шаги 1-2: Сбор когорты и логов ===
+    cohort_query = _filter_cohort(
+        mysql_session.query(EstateBuy.id), start_date_str, end_date_str, cohort_mode
     )
 
     # --- ИЗМЕНЕНИЕ: Используем подзапрос ---
@@ -314,3 +355,79 @@ def get_leads_details_by_ids(lead_ids_str: str):
         }
         for lead in leads
     ]
+
+
+# Показатели, которые сравниваются между когортами. Пара (группа, ключ):
+# None в группе — показатель верхнего уровня, иначе конверсия внутри этапа.
+COMPARISON_SPEC = (
+    ('Заявки', None, 'total_leads', 'Всего заявок', None),
+    ('Заявки', None, 'target', 'Целевые', 'total_leads'),
+    ('Заявки', None, 'nontarget', 'Нецелевые', 'total_leads'),
+    ('Заявки', None, 'deals', 'Дошли до сделки', 'total_leads'),
+    ('Подбор', 'from_podbor', 'base_count', 'Заявок в подборе', None),
+    ('Подбор', 'from_podbor', 'to_vstrecha', 'в Назначенную встречу', 'base_count'),
+    ('Подбор', 'from_podbor', 'to_bron', 'в Бронь', 'base_count'),
+    ('Подбор', 'from_podbor', 'to_otkaz', 'в Отказ', 'base_count'),
+    ('Подбор', 'from_podbor', 'stuck', 'Остались в статусе', 'base_count'),
+    ('Назначенная встреча', 'from_vstrecha', 'base_count', 'Заявок с встречей', None),
+    ('Назначенная встреча', 'from_vstrecha', 'to_sostoyalas', 'в Визит состоялся', 'base_count'),
+    ('Назначенная встреча', 'from_vstrecha', 'to_nesostoyalas', 'в Визит не состоялся', 'base_count'),
+    ('Назначенная встреча', 'from_vstrecha', 'to_bron', 'в Бронь', 'base_count'),
+    ('Назначенная встреча', 'from_vstrecha', 'to_otkaz', 'в Отказ', 'base_count'),
+    ('Назначенная встреча', 'from_vstrecha', 'stuck', 'Остались в статусе', 'base_count'),
+    ('Визит состоялся', 'from_vizit', 'base_count', 'Заявок с визитом', None),
+    ('Визит состоялся', 'from_vizit', 'to_bron', 'в Бронь', 'base_count'),
+    ('Визит состоялся', 'from_vizit', 'to_otkaz', 'в Отказ', 'base_count'),
+    ('Визит состоялся', 'from_vizit', 'stuck', 'Остались в статусе', 'base_count'),
+    ('Бронь', 'from_bron', 'base_count', 'Заявок с бронью', None),
+    ('Бронь', 'from_bron', 'to_sdelka', 'в Сделку', 'base_count'),
+    ('Бронь', 'from_bron', 'to_otkaz', 'в Отказ', 'base_count'),
+    ('Бронь', 'from_bron', 'stuck', 'Остались в статусе', 'base_count'),
+)
+
+
+def _metric_value(metrics, group, key):
+    """Значение показателя в плоском виде — метрики лежат на разной глубине."""
+    if not metrics:
+        return 0
+    if group is None:
+        if key == 'total_leads':
+            return metrics.get('total_leads', 0)
+        return (metrics.get(f'{key}_leads') or metrics.get(key) or {}).get('count', 0)
+    return (metrics.get('metrics', {}).get(group, {}) or {}).get(key, 0)
+
+
+def _percent(value, base):
+    return round(value * 100 / base, 1) if base else None
+
+
+def get_funnel_comparison(start_date_str: str, end_date_str: str):
+    """Сравнивает ключевые показатели воронки по двум когортам.
+
+    Обе когорты считаются одной и той же функцией — иначе разница между
+    столбцами объяснялась бы разной методикой, а не поведением заявок.
+    """
+    cohorts = {
+        mode: get_target_funnel_metrics(start_date_str, end_date_str, mode)
+        for mode, _title in COHORT_MODES
+    }
+
+    rows = []
+    for group_title, group, key, label, base_key in COMPARISON_SPEC:
+        row = {'group': group_title, 'label': label, 'is_base': base_key is None}
+        for mode, _title in COHORT_MODES:
+            metrics = cohorts[mode]
+            value = _metric_value(metrics, group, key)
+            base = _metric_value(metrics, group, base_key) if base_key else None
+            row[mode] = {'value': value, 'percent': _percent(value, base) if base_key else None}
+
+        created, activity = row['created'], row['activity']
+        # Сравниваем доли, а не штуки: когорты разного размера, и разница в
+        # абсолютных числах говорила бы только об их объёме.
+        if created['percent'] is not None and activity['percent'] is not None:
+            row['delta'] = round(activity['percent'] - created['percent'], 1)
+        else:
+            row['delta'] = None
+        rows.append(row)
+
+    return {'cohorts': cohorts, 'rows': rows, 'modes': COHORT_MODES}

@@ -995,11 +995,18 @@ def sales_funnel():
     tree_data, _ = funnel_service.get_funnel_data(start_date_str, end_date_str)
     metrics_data = funnel_service.get_target_funnel_metrics(start_date_str, end_date_str)
 
+    # Сравнение когорт считает воронку дважды, поэтому собираем его только
+    # когда открыта соответствующая вкладка.
+    comparison = None
+    if view_mode == 'compare':
+        comparison = funnel_service.get_funnel_comparison(start_date_str, end_date_str)
+
     return render_template(
         'reports/sales_funnel.html',
         title="Анализ воронки продаж",
         tree_data=tree_data,
         metrics_data=metrics_data,
+        comparison=comparison,
         filters={'start_date': start_date_str, 'end_date': end_date_str},
         active_view=view_mode
     )
