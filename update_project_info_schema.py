@@ -17,7 +17,7 @@ from app.core.extensions import db
 
 try:
     from app.models.planning_models import (ProjectInfo, ProjectRender, CalculatorSettings,
-                                            ManagerUserLink, TelegramSubscription)
+                                            ManagerUserLink, DebtReminderSubscription)
 
     print("Модели успешно импортированы.")
 except ImportError as e:
@@ -25,7 +25,7 @@ except ImportError as e:
     sys.exit(1)
 
 MODELS = (ProjectInfo, ProjectRender, CalculatorSettings, ManagerUserLink,
-          TelegramSubscription)
+          DebtReminderSubscription)
 
 
 def _sync_table(engine, inspector, table):

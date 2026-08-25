@@ -42,10 +42,9 @@ class Config:
     # {deal_id} подставляется из данных; пустое значение просто убирает ссылки.
     CRM_DEAL_URL = os.environ.get('CRM_DEAL_URL', '')
 
-    # Бот-напоминалка о дебиторке. Логин нужен для ссылки-приглашения,
-    # час — время ежедневной рассылки по времени сервера.
-    TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', '')
-    TELEGRAM_REMINDER_HOUR = int(os.environ.get('TELEGRAM_REMINDER_HOUR', '9'))
+    # Час ежедневной рассылки напоминаний о дебиторке (время сервера).
+    # Само сообщение уходит через бота-нотификатора шлюза.
+    DEBT_REMINDER_HOUR = int(os.environ.get('DEBT_REMINDER_HOUR', '9'))
 
     # --- Macro API v2 (планировки квартир) ---
     # Базовый адрес заканчивается версией: https://<ваш-сервер>/v2

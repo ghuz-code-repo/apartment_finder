@@ -29,7 +29,7 @@ from app.services import (
     project_info_service,
     manager_link_service,
     receivables_service,
-    telegram_reminder_service,
+    debt_reminder_service,
     pricelist_service,
     presentation_service
 )
@@ -824,7 +824,7 @@ def manager_performance_report():
     notifications = None
     if current_user_can('managers_receivables_view'):
         username, _full_name = current_user_identity()
-        notifications = telegram_reminder_service.subscription_status(
+        notifications = debt_reminder_service.subscription_status(
             username, receivables_manager_id if receivables else None)
 
     return render_template(
@@ -1126,17 +1126,16 @@ def download_project_passport_pptx(complex_name):
 @login_required
 @permission_required('managers_receivables_view')
 def connect_debt_notifications():
-    """Выдаёт персональную ссылку на бота. Повторный вызов перевыпускает код."""
+    """Включает напоминания. Сообщения шлёт бот-нотификатор шлюза."""
     username, _full_name = current_user_identity()
-    subscription = telegram_reminder_service.issue_link_code(
-        username, manager_link_service.current_manager_id())
+    subscription = debt_reminder_service.set_active(
+        username, manager_link_service.current_manager_id(), active=True)
 
     if not subscription:
-        flash("Не удалось создать подписку: не распознан пользователь.", "danger")
-    elif not telegram_reminder_service.bot_link(subscription):
-        flash("Бот не настроен: администратору нужно задать TELEGRAM_BOT_USERNAME.", "warning")
+        flash("Не удалось включить напоминания: не распознан пользователь.", "danger")
     else:
-        flash("Ссылка готова — откройте бота и нажмите «Старт».", "success")
+        flash("Напоминания включены. Если бот молчит — проверьте, что Telegram "
+              "привязан в вашем профиле.", "success")
 
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
 
@@ -1145,11 +1144,11 @@ def connect_debt_notifications():
 @login_required
 @permission_required('managers_receivables_view')
 def disconnect_debt_notifications():
-    """Отключает напоминания, не удаляя подписку."""
+    """Выключает напоминания, не удаляя подписку."""
     username, _full_name = current_user_identity()
-    if telegram_reminder_service.deactivate(username=username):
+    if debt_reminder_service.set_active(username, active=False):
         flash("Напоминания отключены.", "info")
     else:
-        flash("Активной подписки не найдено.", "warning")
+        flash("Не удалось отключить: не распознан пользователь.", "warning")
 
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))

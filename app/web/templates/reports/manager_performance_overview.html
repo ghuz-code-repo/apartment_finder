@@ -198,25 +198,20 @@
 <div class="tab-pane fade" id="notifications-pane" role="tabpanel">
     <div class="card card-glass">
         <div class="card-body">
-            <h5 class="mb-1"><i class="bi bi-robot me-2"></i>{{ _('Напоминания о дебиторке в Telegram') }}</h5>
+            <h5 class="mb-1"><i class="bi bi-bell me-2"></i>{{ _('Напоминания о дебиторке') }}</h5>
             <p class="text-muted">
-                {{ _('Бот раз в день присылает просроченную и ближайшую дебиторку по вашим сделкам.') }}
+                {{ _('Раз в день бот-нотификатор пришлёт в Telegram просроченную и ближайшую дебиторку по вашим сделкам.') }}
+                {{ _('Время отправки:') }} {{ '%02d:00'|format(notifications.notify_hour) }}.
             </p>
 
-            {% if not notifications.bot_configured %}
-            <div class="alert alert-warning mb-0">
-                {{ _('Бот пока не настроен администратором. Как только появятся токен и логин бота, подписка заработает.') }}
-            </div>
-            {% elif not notifications.manager_linked %}
+            {% if not notifications.manager_linked %}
             <div class="alert alert-warning mb-0">
                 {{ _('Ваша учётная запись не сопоставлена с менеджером в CRM — напоминать будет не о чем. Обратитесь к администратору.') }}
             </div>
             {% elif notifications.connected %}
             <div class="alert alert-success">
-                <i class="bi bi-check-circle me-2"></i>{{ _('Напоминания подключены.') }}
-                {% if notifications.subscription.notify_hour is not none %}
-                {{ _('Время отправки:') }} {{ '%02d:00'|format(notifications.subscription.notify_hour) }}.
-                {% endif %}
+                <i class="bi bi-check-circle me-2"></i>{{ _('Напоминания включены.') }}
+                {{ _('Сообщения приходят от бота-нотификатора — Telegram должен быть привязан в вашем профиле.') }}
             </div>
             <form method="POST" action="{{ url_for('report.disconnect_debt_notifications') }}">
                 <button type="submit" class="btn btn-outline-danger">
@@ -224,22 +219,12 @@
                 </button>
             </form>
             {% else %}
-            {% if notifications.link %}
-            <ol class="mb-3">
-                <li>{{ _('Откройте бота по кнопке ниже.') }}</li>
-                <li>{{ _('Нажмите в Telegram «Старт» — этого достаточно, код подставится сам.') }}</li>
-            </ol>
-            <a href="{{ notifications.link }}" target="_blank" rel="noopener" class="btn btn-primary mb-3">
-                <i class="bi bi-telegram me-2"></i>{{ _('Открыть бота и подключить') }}
-            </a>
-            <div class="text-muted small mb-3">
-                {{ _('Ссылка персональная — не пересылайте её другим.') }}
-            </div>
-            {% endif %}
+            <p class="text-muted">
+                {{ _('Отдельного бота подключать не нужно — сообщения придут от того же бота, что и остальные уведомления.') }}
+            </p>
             <form method="POST" action="{{ url_for('report.connect_debt_notifications') }}">
-                <button type="submit" class="btn {{ 'btn-outline-secondary' if notifications.link else 'btn-primary' }}">
-                    <i class="bi bi-arrow-repeat me-2"></i>
-                    {% if notifications.link %}{{ _('Перевыпустить ссылку') }}{% else %}{{ _('Получить ссылку') }}{% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-bell me-2"></i>{{ _('Включить напоминания') }}
                 </button>
             </form>
             {% endif %}
