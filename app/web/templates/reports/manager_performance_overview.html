@@ -25,7 +25,7 @@
             <i class="bi bi-bar-chart me-2"></i>{{ _('Планы') }}
         </button>
     </li>
-    {% if receivables is not none %}
+    {% if receivables %}
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="receivables-tab" data-bs-toggle="tab" data-bs-target="#receivables-pane"
                 type="button" role="tab">
@@ -36,7 +36,7 @@
         </button>
     </li>
     {% endif %}
-    {% if notifications is not none %}
+    {% if notifications %}
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications-pane"
                 type="button" role="tab">
@@ -94,7 +94,7 @@
 </div>
 </div>{# /plans-pane #}
 
-{% if receivables is not none %}
+{% if receivables %}
 <div class="tab-pane fade" id="receivables-pane" role="tabpanel">
     {% if not receivables.manager_linked %}
     <div class="alert alert-warning">
@@ -194,7 +194,7 @@
 </div>
 {% endif %}
 
-{% if notifications is not none %}
+{% if notifications %}
 <div class="tab-pane fade" id="notifications-pane" role="tabpanel">
     <div class="card card-glass">
         <div class="card-body">
