@@ -63,6 +63,30 @@ class NotificationServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def send_telegram(self, recipient: str, content: str) -> dict:
+        """Отправляет сообщение в Telegram через бота шлюза.
+
+        recipient — логин пользователя: привязку логина к чату держит шлюз,
+        своей подписки и chat_id у нас нет.
+        """
+        payload = {
+            'type': 'telegram',
+            'recipient': recipient,
+            'content': content,
+            'content_type': 'text/html',
+        }
+
+        logger.info("Отправка telegram через notification-service: recipient=%s", recipient)
+
+        response = requests.post(
+            f"{self.base_url}/api/v1/notifications",
+            json=payload,
+            timeout=self.timeout,
+            headers=self._headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
     def send_email_batch(
         self,
         recipients: Iterable[str],
