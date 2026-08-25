@@ -1,0 +1,231 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ _('Контрактация и поступления') }}</h1>
+        <p class="text-muted mb-0">
+            {{ _('Контрактация — сделки в работе и проведённые, по дате договора. Поступления — проведённые операции без возвратов и брони.') }}
+        </p>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form method="GET" id="report-filters">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="start_date" class="form-label">{{ _('Начало периода') }}</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date"
+                           value="{{ start_date.isoformat() }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="end_date" class="form-label">{{ _('Конец периода') }}</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date"
+                           value="{{ end_date.isoformat() }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="granularity" class="form-label">{{ _('Детализация') }}</label>
+                    <select class="form-select" id="granularity" name="granularity">
+                        {% for code, name in granularities %}
+                        <option value="{{ code }}" {% if code == data.granularity %}selected{% endif %}>{{ _(name) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">{{ _('Вид') }}</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="view" id="view-chart" value="chart"
+                               autocomplete="off" {% if view_mode == 'chart' %}checked{% endif %}>
+                        <label class="btn btn-outline-secondary" for="view-chart">
+                            <i class="bi bi-bar-chart me-1"></i>{{ _('График') }}
+                        </label>
+                        <input type="radio" class="btn-check" name="view" id="view-table" value="table"
+                               autocomplete="off" {% if view_mode == 'table' %}checked{% endif %}>
+                        <label class="btn btn-outline-secondary" for="view-table">
+                            <i class="bi bi-table me-1"></i>{{ _('Таблица') }}
+                        </label>
+                    </div>
+                </div>
+
+                {# Пустой выбор = все: так фильтр не нужно чистить вручную, а
+                   кнопка «Все» просто снимает выделение. #}
+                <div class="col-md-6">
+                    <label for="complexes" class="form-label d-flex justify-content-between align-items-center">
+                        <span>{{ _('Жилые комплексы') }}</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 select-all" data-target="complexes">
+                            {{ _('Все') }}
+                        </button>
+                    </label>
+                    <select class="form-select" id="complexes" name="complexes" multiple size="6">
+                        {% for name in options.complexes %}
+                        <option value="{{ name }}" {% if name in selected_complexes %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">{{ _('Ничего не выбрано — считаются все ЖК.') }}</div>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="managers" class="form-label d-flex justify-content-between align-items-center">
+                        <span>{{ _('Менеджеры') }}</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 select-all" data-target="managers">
+                            {{ _('Все') }}
+                        </button>
+                    </label>
+                    <select class="form-select" id="managers" name="managers" multiple size="6">
+                        {% for manager in options.managers %}
+                        <option value="{{ manager.id }}" {% if manager.id in selected_managers %}selected{% endif %}>
+                            {{ manager.full_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">{{ _('Ничего не выбрано — считаются все менеджеры.') }}</div>
+                </div>
+
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search me-2"></i>{{ _('Построить') }}
+                    </button>
+                    <a href="{{ url_for('report.contracting_income_report') }}" class="btn btn-outline-secondary">
+                        {{ _('Сбросить') }}
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Контрактация за период') }}</div>
+            <div class="kpi-value">{{ "{:,.0f}".format(data.totals.contracting_sum) }}</div>
+            <div class="kpi-sub-value">{{ data.totals.contracting_count }} {{ _('сделок') }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Поступления за период') }}</div>
+            <div class="kpi-value">{{ "{:,.0f}".format(data.totals.income_sum) }}</div>
+            <div class="kpi-sub-value">UZS</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Поступления к контрактации') }}</div>
+            <div class="kpi-value">
+                {% if data.totals.contracting_sum %}
+                    {{ "{:,.1f}".format(data.totals.income_sum / data.totals.contracting_sum * 100) }}%
+                {% else %}—{% endif %}
+            </div>
+            <div class="kpi-sub-value">{{ _('за выбранный интервал') }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body">
+        {% if not data.rows %}
+        <div class="text-center text-muted py-4">{{ _('За выбранный интервал данных нет.') }}</div>
+        {% elif view_mode == 'chart' %}
+        <div style="height: 420px;">
+            <canvas id="contractingChart"></canvas>
+        </div>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table modern-table mb-0">
+                <thead>
+                    <tr>
+                        <th>{{ _('Период') }}</th>
+                        <th class="text-end">{{ _('Контрактация, UZS') }}</th>
+                        <th class="text-end">{{ _('Сделок') }}</th>
+                        <th class="text-end">{{ _('Поступления, UZS') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data.rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(row.contracting_sum) }}</td>
+                        <td class="text-end">{{ row.contracting_count }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(row.income_sum) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="fw-bold">
+                        <td>{{ _('Итого') }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(data.totals.contracting_sum) }}</td>
+                        <td class="text-end">{{ data.totals.contracting_count }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(data.totals.income_sum) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // «Все» — это пустой выбор: снимаем выделение и отправляем форму.
+    document.querySelectorAll('.select-all').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const select = document.getElementById(button.dataset.target);
+            if (!select) return;
+            Array.from(select.options).forEach(function (option) { option.selected = false; });
+        });
+    });
+
+    const canvas = document.getElementById('contractingChart');
+    if (!canvas) return;
+
+    const rows = {{ data.rows|tojson|safe }};
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: rows.map(function (r) { return r.label; }),
+            datasets: [
+                {
+                    label: '{{ _("Контрактация") }}',
+                    data: rows.map(function (r) { return r.contracting_sum; }),
+                    backgroundColor: 'rgba(196, 166, 104, 0.75)',
+                },
+                {
+                    label: '{{ _("Поступления") }}',
+                    data: rows.map(function (r) { return r.income_sum; }),
+                    backgroundColor: 'rgba(13, 110, 253, 0.65)',
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {mode: 'index', intersect: false},
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) { return value.toLocaleString('ru-RU'); },
+                    },
+                },
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            return context.dataset.label + ': ' +
+                                Math.round(context.parsed.y).toLocaleString('ru-RU') + ' UZS';
+                        },
+                    },
+                },
+            },
+        },
+    });
+});
+</script>
+{% endblock %}

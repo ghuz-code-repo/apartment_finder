@@ -68,7 +68,7 @@
                             </li>
                             {% endif %}
 
-                            {% if current_user.can('reports_plan_fact_view') or current_user.can('reports_sales_funnel_view') or current_user.can('reports_financial_model_view') or current_user.can('reports_inventory_view') or current_user.can('reports_deal_registry_view') or current_user.can('reports_quarterly_view') or current_user.can('reports_refund_view') or current_user.can('reports_sales_pace_view') or current_user.can('ai_forecast_view') or current_user.can('registry_view') or current_user.can('cancellations_view') or current_user.can('managers_performance_view') or current_user.can('managers_analytics_view') or current_user.can('managers_obligations_view') %}
+                            {% if current_user.can('reports_plan_fact_view') or current_user.can('reports_contracting_income_view') or current_user.can('reports_sales_funnel_view') or current_user.can('reports_financial_model_view') or current_user.can('reports_inventory_view') or current_user.can('reports_deal_registry_view') or current_user.can('reports_quarterly_view') or current_user.can('reports_refund_view') or current_user.can('reports_sales_pace_view') or current_user.can('ai_forecast_view') or current_user.can('registry_view') or current_user.can('cancellations_view') or current_user.can('managers_performance_view') or current_user.can('managers_analytics_view') or current_user.can('managers_obligations_view') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle {% if request.blueprint == 'report' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {{ _('Отчетность') }}
@@ -76,6 +76,9 @@
                                 <ul class="dropdown-menu">
                                     {% if current_user.can('reports_plan_fact_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.plan_fact_report') }}">{{ _('План-факт отчет') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('reports_contracting_income_view') %}
+                                    <li><a class="dropdown-item" href="{{ url_for('report.contracting_income_report') }}">{{ _('Контрактация и поступления') }}</a></li>
                                     {% endif %}
                                     {% if current_user.can('reports_sales_funnel_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.sales_funnel') }}">{{ _('Воронка продаж') }}</a></li>
