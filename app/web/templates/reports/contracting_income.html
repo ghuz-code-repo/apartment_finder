@@ -1,5 +1,19 @@
 {% extends "layouts/base.html" %}
 
+{% block styles %}
+{{ super() }}
+<style>
+    /* Список длинный — прокручиваем его, а не всю страницу. */
+    .filter-multi .dropdown-menu { max-height: 320px; overflow-y: auto; }
+    .filter-multi .filter-option { cursor: pointer; white-space: normal; }
+    /* Поиск прячет строки атрибутом hidden, но 'display: flex' из d-flex его
+       перебивает — без этого правила отфильтрованные варианты остаются видны. */
+    .filter-multi .filter-option[hidden] { display: none !important; }
+    .filter-multi .filter-option:hover { background-color: rgba(var(--bs-emphasis-color-rgb), .08); }
+    .filter-multi .dropdown-toggle::after { margin-left: auto; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
@@ -48,38 +62,66 @@
                     </div>
                 </div>
 
-                {# Пустой выбор = все: так фильтр не нужно чистить вручную, а
-                   кнопка «Все» просто снимает выделение. #}
+                {# Раньше здесь стоял select multiple: на тёмной теме выбранные
+                   строки почти не отличались от невыбранных, а множественный выбор
+                   требовал Ctrl. Галочки видно сразу, и счётчик в заголовке говорит,
+                   что попадёт в отчёт. Пустой выбор по-прежнему означает «все». #}
                 <div class="col-md-6">
-                    <label for="complexes" class="form-label d-flex justify-content-between align-items-center">
-                        <span>{{ _('Жилые комплексы') }}</span>
-                        <button type="button" class="btn btn-sm btn-link p-0 select-all" data-target="complexes">
-                            {{ _('Все') }}
+                    <label class="form-label">{{ _('Жилые комплексы') }}</label>
+                    <div class="dropdown filter-multi" data-filter="complexes">
+                        <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center"
+                                type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span class="filter-summary">{{ _('Все ЖК') }}</span>
                         </button>
-                    </label>
-                    <select class="form-select" id="complexes" name="complexes" multiple size="6">
-                        {% for name in options.complexes %}
-                        <option value="{{ name }}" {% if name in selected_complexes %}selected{% endif %}>{{ name }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text">{{ _('Ничего не выбрано — считаются все ЖК.') }}</div>
+                        <div class="dropdown-menu w-100 p-2">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search"
+                                   placeholder="{{ _('Поиск...') }}" autocomplete="off">
+                            <div class="d-flex gap-3 px-1 pb-2 border-bottom mb-2">
+                                <button type="button" class="btn btn-sm btn-link p-0 filter-all">{{ _('Выбрать все') }}</button>
+                                <button type="button" class="btn btn-sm btn-link p-0 filter-none">{{ _('Снять все') }}</button>
+                            </div>
+                            <div class="filter-options">
+                                {% for name in options.complexes %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 filter-option">
+                                    <input class="form-check-input m-0 flex-shrink-0" type="checkbox"
+                                           name="complexes" value="{{ name }}"
+                                           {% if name in selected_complexes %}checked{% endif %}>
+                                    <span class="text-wrap">{{ name }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text">{{ _('Ничего не отмечено — считаются все ЖК.') }}</div>
                 </div>
 
                 <div class="col-md-6">
-                    <label for="managers" class="form-label d-flex justify-content-between align-items-center">
-                        <span>{{ _('Менеджеры') }}</span>
-                        <button type="button" class="btn btn-sm btn-link p-0 select-all" data-target="managers">
-                            {{ _('Все') }}
+                    <label class="form-label">{{ _('Менеджеры') }}</label>
+                    <div class="dropdown filter-multi" data-filter="managers">
+                        <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center"
+                                type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span class="filter-summary">{{ _('Все менеджеры') }}</span>
                         </button>
-                    </label>
-                    <select class="form-select" id="managers" name="managers" multiple size="6">
-                        {% for manager in options.managers %}
-                        <option value="{{ manager.id }}" {% if manager.id in selected_managers %}selected{% endif %}>
-                            {{ manager.full_name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text">{{ _('Ничего не выбрано — считаются все менеджеры.') }}</div>
+                        <div class="dropdown-menu w-100 p-2">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search"
+                                   placeholder="{{ _('Поиск...') }}" autocomplete="off">
+                            <div class="d-flex gap-3 px-1 pb-2 border-bottom mb-2">
+                                <button type="button" class="btn btn-sm btn-link p-0 filter-all">{{ _('Выбрать все') }}</button>
+                                <button type="button" class="btn btn-sm btn-link p-0 filter-none">{{ _('Снять все') }}</button>
+                            </div>
+                            <div class="filter-options">
+                                {% for manager in options.managers %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 filter-option">
+                                    <input class="form-check-input m-0 flex-shrink-0" type="checkbox"
+                                           name="managers" value="{{ manager.id }}"
+                                           {% if manager.id in selected_managers %}checked{% endif %}>
+                                    <span class="text-wrap">{{ manager.full_name }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text">{{ _('Ничего не отмечено — считаются все менеджеры.') }}</div>
                 </div>
 
                 <div class="col-12 d-flex gap-2">
@@ -172,13 +214,52 @@
 <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // «Все» — это пустой выбор: снимаем выделение и отправляем форму.
-    document.querySelectorAll('.select-all').forEach(function (button) {
-        button.addEventListener('click', function () {
-            const select = document.getElementById(button.dataset.target);
-            if (!select) return;
-            Array.from(select.options).forEach(function (option) { option.selected = false; });
+    // Фильтры с галочками: заголовок кнопки всегда показывает, что выбрано,
+    // иначе непонятно, отмечено что-нибудь или нет — список-то свёрнут.
+    document.querySelectorAll('.filter-multi').forEach(function (filter) {
+        const boxes = Array.from(filter.querySelectorAll('input[type="checkbox"]'));
+        const summary = filter.querySelector('.filter-summary');
+        const search = filter.querySelector('.filter-search');
+        const allLabel = summary.textContent.trim();
+
+        function updateSummary() {
+            const checked = boxes.filter(function (box) { return box.checked; });
+            if (checked.length === 0) {
+                summary.textContent = allLabel;
+            } else if (checked.length === 1) {
+                summary.textContent = checked[0].parentElement.textContent.trim();
+            } else {
+                summary.textContent = 'Выбрано: ' + checked.length + ' из ' + boxes.length;
+            }
+        }
+
+        boxes.forEach(function (box) { box.addEventListener('change', updateSummary); });
+
+        filter.querySelector('.filter-all').addEventListener('click', function () {
+            // Отмечаем только то, что видно после поиска — иначе кнопка внутри
+            // отфильтрованного списка вела бы себя неожиданно.
+            boxes.forEach(function (box) {
+                if (!box.closest('.filter-option').hidden) box.checked = true;
+            });
+            updateSummary();
         });
+
+        filter.querySelector('.filter-none').addEventListener('click', function () {
+            boxes.forEach(function (box) { box.checked = false; });
+            updateSummary();
+        });
+
+        if (search) {
+            search.addEventListener('input', function () {
+                const needle = search.value.trim().toLowerCase();
+                boxes.forEach(function (box) {
+                    const option = box.closest('.filter-option');
+                    option.hidden = needle && !option.textContent.toLowerCase().includes(needle);
+                });
+            });
+        }
+
+        updateSummary();
     });
 
     const canvas = document.getElementById('contractingChart');
