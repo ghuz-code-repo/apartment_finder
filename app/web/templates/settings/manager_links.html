@@ -1,0 +1,90 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ _('Связка менеджеров с пользователями') }}</h1>
+        <p class="text-muted mb-0">
+            {{ _('По умолчанию пользователь сопоставляется с менеджером CRM по ФИО. Здесь связку можно задать вручную — она сильнее автоматической.') }}
+        </p>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-6">
+                <label for="q" class="form-label">{{ _('Поиск по ФИО менеджера') }}</label>
+                <input type="text" class="form-control" id="q" name="q" value="{{ search_query or '' }}"
+                       placeholder="{{ _('Фамилия или часть имени') }}">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-secondary">
+                    <i class="bi bi-search me-1"></i>{{ _('Найти') }}
+                </button>
+            </div>
+            {% if search_query %}
+            <div class="col-auto">
+                <a href="{{ url_for('settings.manage_manager_links') }}" class="btn btn-link">{{ _('Сбросить') }}</a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card card-glass">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table modern-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>{{ _('Менеджер в CRM') }}</th>
+                        <th>{{ _('Связанные логины') }}</th>
+                        <th style="width: 320px;">{{ _('Добавить логин') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ row.manager.full_name }}</div>
+                            <div class="text-muted small">ID {{ row.manager.id }}{% if row.manager.post_title %} · {{ row.manager.post_title }}{% endif %}</div>
+                        </td>
+                        <td>
+                            {% for username in row.usernames %}
+                            <form method="POST" class="d-inline-block me-2 mb-1">
+                                <input type="hidden" name="action" value="unlink">
+                                <input type="hidden" name="username" value="{{ username }}">
+                                <span class="badge bg-secondary">
+                                    {{ username }}
+                                    <button type="submit" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none"
+                                            title="{{ _('Убрать связку') }}">&times;</button>
+                                </span>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small">{{ _('нет — сопоставляется по ФИО') }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            <form method="POST" class="d-flex gap-2">
+                                <input type="hidden" name="action" value="link">
+                                <input type="hidden" name="manager_id" value="{{ row.manager.id }}">
+                                <input type="text" class="form-control form-control-sm" name="username"
+                                       placeholder="{{ _('логин в системе') }}" required>
+                                <button type="submit" class="btn btn-sm btn-golden-outline">
+                                    <i class="bi bi-link-45deg"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-4">{{ _('Менеджеры не найдены.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

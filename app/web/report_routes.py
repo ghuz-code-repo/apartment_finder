@@ -27,6 +27,7 @@ from app.services import (
     obligation_service,
     project_dashboard_service,
     project_info_service,
+    manager_link_service,
     pricelist_service,
     presentation_service
 )
@@ -763,7 +764,7 @@ def export_plan_fact():
 
 @report_bp.route('/manager-performance-report', methods=['GET'])
 @login_required
-@permission_required('managers_performance_view')
+@permission_required_any('managers_performance_view', 'managers_performance_view_own')
 def manager_performance_report():
     # --- ИСПРАВЛЕНИЕ: Используем get_default_session() ---
     default_session = get_default_session()
@@ -773,10 +774,25 @@ def manager_performance_report():
     search_query = request.args.get('q', '')
     show_only_with_plan = request.args.get('with_plan', 'false').lower() == 'true'
 
+    # Менеджер с правом «только свои планы» видит одну строку — себя. Кто он в
+    # CRM, определяется связкой по логину, а при её отсутствии — по ФИО.
+    see_all = current_user_can('managers_performance_view')
+    own_manager_id = None
+    if not see_all:
+        own_manager_id = manager_link_service.current_manager_id()
+        if not own_manager_id:
+            flash("Ваша учётная запись не сопоставлена с менеджером в CRM. "
+                  "Обратитесь к администратору, чтобы связать их.", "warning")
+
     # --- ИСПРАВЛЕНИЕ: Запрос к default_session ---
     query = default_session.query(auth_models.SalesManager)
     if search_query:
         query = query.filter(auth_models.SalesManager.full_name.ilike(f'%{search_query}%'))
+
+    if not see_all:
+        # Фильтр по себе идёт запросом, а не отбором в шаблоне: иначе чужие
+        # фамилии уезжали бы в HTML и находились поиском по странице.
+        query = query.filter(auth_models.SalesManager.id == (own_manager_id or 0))
 
     managers = query.order_by(auth_models.SalesManager.full_name).all()
 
@@ -796,8 +812,9 @@ def manager_performance_report():
 
     return render_template(
         'reports/manager_performance_overview.html',
-        title="Выполнение планов менеджерами",
+        title="Выполнение планов менеджерами" if see_all else "Мои планы",
         managers=managers,
+        see_all=see_all,
         search_query=search_query,
         show_only_with_plan=show_only_with_plan,
         today=today,
@@ -836,6 +853,13 @@ def download_kpi_report():
 @login_required
 @permission_required('managers_performance_detail_view')
 def manager_performance_detail(manager_id):
+    # Право на детали само по себе не открывает чужие показатели: без права
+    # видеть всех менеджер проходит только к своей карточке. Проверяем здесь,
+    # а не в шаблоне, — адрес чужой детализации можно набрать руками.
+    if not current_user_can('managers_performance_view'):
+        if manager_id != manager_link_service.current_manager_id():
+            abort(403)
+
     current_year = date.today().year
     year = request.args.get('year', current_year, type=int)
 

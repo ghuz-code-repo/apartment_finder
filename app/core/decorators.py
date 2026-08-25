@@ -140,6 +140,21 @@ def permission_required_any(*permission_names):
     return wrapper
 
 
+def current_user_identity():
+    """Логин и ФИО текущего пользователя. Формы g.user разные, поле одно.
+
+    Нужно там, где данные фильтруются по конкретному человеку: сопоставление
+    с менеджером CRM идёт по логину, а при его отсутствии — по ФИО.
+    """
+    user = _get_current_user()
+    if not user or not _is_gateway_user(user):
+        return None, None
+
+    if isinstance(user, dict):
+        return user.get('username'), user.get('full_name')
+    return getattr(user, 'username', None), getattr(user, 'full_name', None)
+
+
 def current_user_can(permission_name):
     """Есть ли право у текущего пользователя. Для проверок внутри обработчика."""
     user = _get_current_user()

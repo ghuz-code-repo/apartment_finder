@@ -170,6 +170,9 @@
                                     {% if current_user.can('settings_currency_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('report.currency_settings') }}">{{ _('Настройки курса') }}</a></li>
                                     {% endif %}
+                                    {% if current_user.can('managers_links_manage') %}
+                                    <li><a class="dropdown-item" href="{{ url_for('settings.manage_manager_links') }}">{{ _('Связка менеджеров') }}</a></li>
+                                    {% endif %}
 
                                     {% if current_user.can('specials_create') %}
                                     <li><a class="dropdown-item" href="{{ url_for('special_offer.manage_specials') }}">{{ _('Настройки спец. предложений') }}</a></li>

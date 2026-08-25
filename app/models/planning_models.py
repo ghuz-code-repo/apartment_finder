@@ -379,6 +379,29 @@ PROJECT_INFO_TRANSLATABLE_FIELDS = (
 PROJECT_INFO_EXTRA_LANGS = ('uz', 'en')
 
 
+class ManagerUserLink(db.Model):
+    """Связка пользователя системы с менеджером в CRM.
+
+    Пользователи живут в шлюзе, менеджеры — в MySQL Macro, общего идентификатора
+    у них нет. По умолчанию сопоставляем по ФИО, а тёзок и расхождения в написании
+    админ разводит руками на странице связок — тогда запись появляется здесь.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'manager_user_links'
+
+    # Логин из шлюза — он же ключ: у одного пользователя один менеджер.
+    username = db.Column(db.String(255), primary_key=True)
+    manager_id = db.Column(db.Integer, nullable=False, index=True)
+    # ФИО на момент связывания — чтобы админ видел, кого связали, без похода в CRM.
+    full_name = db.Column(db.String(255), nullable=True)
+
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<ManagerUserLink {self.username} -> {self.manager_id}>'
+
+
 class ProjectInfo(db.Model):
     """
     Маркетинговая карточка ЖК: описание концепции и характеристики проекта.
