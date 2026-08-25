@@ -28,6 +28,7 @@ from app.services import (
     project_dashboard_service,
     project_info_service,
     manager_link_service,
+    receivables_service,
     pricelist_service,
     presentation_service
 )
@@ -810,11 +811,20 @@ def manager_performance_report():
     }
 
 
+    # Дебиторка всегда своя: и руководитель на этой вкладке видит свои сделки.
+    # Без связки с CRM показывать нечего — вкладка сама объяснит почему.
+    receivables = None
+    if current_user_can('managers_receivables_view'):
+        receivables_manager_id = own_manager_id if not see_all else manager_link_service.current_manager_id()
+        receivables = receivables_service.get_manager_receivables(receivables_manager_id)
+        receivables['manager_linked'] = bool(receivables_manager_id)
+
     return render_template(
         'reports/manager_performance_overview.html',
         title="Выполнение планов менеджерами" if see_all else "Мои планы",
         managers=managers,
         see_all=see_all,
+        receivables=receivables,
         search_query=search_query,
         show_only_with_plan=show_only_with_plan,
         today=today,

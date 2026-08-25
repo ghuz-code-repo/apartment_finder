@@ -2,8 +2,7 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    {# --- ИЗМЕНЕНИЕ 1 --- #}
-    <h1>{{ _('Выполнение планов менеджерами') }}</h1>
+    <h1>{% if see_all %}{{ _('Выполнение планов менеджерами') }}{% else %}{{ _('Мои планы') }}{% endif %}</h1>
     <div class="d-flex gap-2">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#kpiReportModal">
             {# --- ИЗМЕНЕНИЕ 2 --- #}
@@ -18,6 +17,29 @@
         {% endif %}
     </div>
 </div>
+
+<ul class="nav nav-tabs mb-4" id="managerReportTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="plans-tab" data-bs-toggle="tab" data-bs-target="#plans-pane"
+                type="button" role="tab">
+            <i class="bi bi-bar-chart me-2"></i>{{ _('Планы') }}
+        </button>
+    </li>
+    {% if receivables is not none %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="receivables-tab" data-bs-toggle="tab" data-bs-target="#receivables-pane"
+                type="button" role="tab">
+            <i class="bi bi-cash-coin me-2"></i>{{ _('Моя дебиторка') }}
+            {% if receivables.overdue %}
+            <span class="badge bg-danger ms-1">{{ receivables.overdue|length }}</span>
+            {% endif %}
+        </button>
+    </li>
+    {% endif %}
+</ul>
+
+<div class="tab-content" id="managerReportTabsContent">
+<div class="tab-pane fade show active" id="plans-pane" role="tabpanel">
 
 <div class="card card-glass mb-4">
     <div class="card-body">
@@ -59,6 +81,110 @@
         </div>
     </div>
 </div>
+</div>{# /plans-pane #}
+
+{% if receivables is not none %}
+<div class="tab-pane fade" id="receivables-pane" role="tabpanel">
+    {% if not receivables.manager_linked %}
+    <div class="alert alert-warning">
+        {{ _('Ваша учётная запись не сопоставлена с менеджером в CRM, поэтому дебиторку показать не получится. Обратитесь к администратору.') }}
+    </div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card card-glass h-100 border-danger">
+                <div class="card-body">
+                    <div class="text-muted small">{{ _('Просроченная дебиторка') }}</div>
+                    <div class="fs-3 fw-bold text-danger">{{ "{:,.0f}".format(receivables.totals.overdue) }} UZS</div>
+                    <div class="text-muted small">{{ receivables.overdue|length }} {{ _('платежей') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card card-glass h-100">
+                <div class="card-body">
+                    <div class="text-muted small">
+                        {{ _('Ближайшие платежи') }} ({{ _('до') }} {{ receivables.horizon_days }} {{ _('дней') }})
+                    </div>
+                    <div class="fs-3 fw-bold">{{ "{:,.0f}".format(receivables.totals.upcoming) }} UZS</div>
+                    <div class="text-muted small">{{ receivables.upcoming|length }} {{ _('платежей') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% macro receivables_table(rows, overdue) %}
+    <div class="table-responsive">
+        <table class="table modern-table mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>{{ _('Срок') }}</th>
+                    <th>{{ _('Объект') }}</th>
+                    <th>{{ _('Договор') }}</th>
+                    <th>{{ _('Назначение') }}</th>
+                    <th class="text-end">{{ _('Сумма') }}</th>
+                    <th class="text-end">{{ _('Сделка') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td class="text-nowrap">
+                        {{ row.due_date.strftime('%d.%m.%Y') if row.due_date else '—' }}
+                        {% if overdue %}
+                        <span class="badge bg-danger ms-1">+{{ row.days_overdue }} {{ _('дн.') }}</span>
+                        {% else %}
+                        <span class="text-muted small ms-1">{{ _('через') }} {{ row.days }} {{ _('дн.') }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ row.complex_name or '—' }}</div>
+                        <div class="text-muted small">
+                            {% if row.house %}{{ _('дом') }} {{ row.house }}{% endif %}
+                            {% if row.flat_number %} · №{{ row.flat_number }}{% endif %}
+                            {% if row.property_type %} · {{ _(row.property_type) }}{% endif %}
+                        </div>
+                    </td>
+                    <td>{{ row.agreement_number or '—' }}</td>
+                    <td class="text-muted small">{{ row.payment_type or '—' }}</td>
+                    <td class="text-end fw-bold">{{ "{:,.0f}".format(row.amount) }}</td>
+                    <td class="text-end">
+                        {% if row.crm_url %}
+                        <a href="{{ row.crm_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-box-arrow-up-right"></i> CRM
+                        </a>
+                        {% else %}
+                        <span class="text-muted small">ID {{ row.deal_id or '—' }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">{{ _('Платежей нет.') }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endmacro %}
+
+    <div class="card card-glass mb-4">
+        <div class="card-header">
+            <h5 class="mb-0 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>{{ _('Просрочено') }}</h5>
+        </div>
+        <div class="card-body p-0">{{ receivables_table(receivables.overdue, true) }}</div>
+    </div>
+
+    <div class="card card-glass">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>{{ _('Ближайшие платежи') }}</h5>
+        </div>
+        <div class="card-body p-0">{{ receivables_table(receivables.upcoming, false) }}</div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+</div>{# /tab-content #}
+
 {% if current_user.can('download_kpi_report') %}
 <div class="modal fade" id="kpiReportModal" tabindex="-1" aria-labelledby="kpiReportModalLabel" aria-hidden="true">
   <div class="modal-dialog">

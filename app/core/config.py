@@ -38,6 +38,10 @@ class Config:
     )
     USD_TO_UZS_RATE = 13050.0
 
+    # Ссылка на сделку в CRM для вкладки «Моя дебиторка».
+    # {deal_id} подставляется из данных; пустое значение просто убирает ссылки.
+    CRM_DEAL_URL = os.environ.get('CRM_DEAL_URL', '')
+
     # --- Macro API v2 (планировки квартир) ---
     # Базовый адрес заканчивается версией: https://<ваш-сервер>/v2
     MACRO_API_URL = os.environ.get('MACRO_API_URL', '')
