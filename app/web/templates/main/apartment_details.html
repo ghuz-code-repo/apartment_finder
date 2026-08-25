@@ -51,12 +51,23 @@
                 <div class="col-6">
                     <label class="form-label small mb-1 d-flex justify-content-between" for="{{ option.type_key }}-{{ limit.code }}">
                         <span>{{ _(limit.name) }}</span>
-                        <span><strong class="manual-discount-value">0</strong> / {{ limit.max_percent }}%</span>
+                        <span>{{ _('макс.') }} {{ limit.max_percent }}%</span>
                     </label>
-                    <input type="range" class="form-range manual-discount-input"
-                           id="{{ option.type_key }}-{{ limit.code }}"
-                           data-discount-code="{{ limit.code }}"
-                           min="0" max="{{ limit.max_percent }}" step="1" value="0">
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="range" class="form-range manual-discount-input flex-grow-1"
+                               id="{{ option.type_key }}-{{ limit.code }}"
+                               data-discount-code="{{ limit.code }}"
+                               min="0" max="{{ limit.max_percent }}" step="1" value="0">
+                        {# Ползунком удобно подбирать, числом — попасть в точное
+                           значение. Оба поля синхронизированы и обрезаются по максимуму. #}
+                        <div class="input-group input-group-sm manual-discount-number-group">
+                            <input type="number" class="form-control text-end manual-discount-number"
+                                   data-discount-code="{{ limit.code }}"
+                                   min="0" max="{{ limit.max_percent }}" step="1" value="0"
+                                   aria-label="{{ _(limit.name) }}">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -69,9 +80,22 @@
             <span class="price-final">{{ "{:,.0f}".format(option.final_price) }} UZS</span>
         </div>
         {% if option.initial_payment is not none %}
-        <div class="d-flex justify-content-between align-items-center mt-2 text-primary">
+        {# Первый взнос менеджер может поднять — тело кредита и платёж по ипотеке
+           пересчитаются. Ниже минимума банка поле не пускает. #}
+        <div class="d-flex justify-content-between align-items-center mt-2 text-primary gap-2">
             <span class="fs-6">{{ _('Первый взнос:') }}</span>
-            <span class="price-initial">{{ "{:,.0f}".format(option.initial_payment) }} UZS</span>
+            <div class="input-group input-group-sm initial-payment-group">
+                <input type="number" class="form-control text-end initial-payment-input"
+                       step="1000000"
+                       min="{{ option.min_initial_payment|round(0, 'ceil')|int }}"
+                       data-min-initial="{{ option.min_initial_payment }}"
+                       value="{{ option.initial_payment|round(0, 'ceil')|int }}">
+                <span class="input-group-text">UZS</span>
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center text-muted small initial-payment-hint">
+            <span>{{ _('Минимальный взнос:') }}</span>
+            <span class="min-initial-payment">{{ "{:,.0f}".format(option.min_initial_payment) }} UZS</span>
         </div>
         <div class="d-flex justify-content-between align-items-center text-muted small">
             <span>{{ _('Тело кредита:') }}</span>

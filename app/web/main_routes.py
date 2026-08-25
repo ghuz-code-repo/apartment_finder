@@ -207,8 +207,11 @@ def generate_commercial_offer(sell_id):
     # Скидки, выставленные менеджером на карточке. Пересчёт идёт той же функцией,
     # что и на странице объекта, поэтому цифры в КП совпадают с экраном.
     user_selections = pricing_service.parse_manual_selections(request.args.get('selections'))
+    # Первый взнос менеджер задаёт на карточке, в КП он приезжает в адресе.
+    manual_initial_payment = request.args.get('initial_payment')
     for option in card_data.get('pricing', []):
-        pricing_service.recalculate(option, user_selections.get(option['type_key'], {}))
+        pricing_service.recalculate(option, user_selections.get(option['type_key'], {}),
+                                    initial_payment=manual_initial_payment)
 
     # Ежемесячный взнос по ипотеке считается от тела кредита, поэтому условия
     # банка проставляются после пересчёта скидок.
