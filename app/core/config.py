@@ -42,6 +42,10 @@ class Config:
     # {deal_id} подставляется из данных; пустое значение просто убирает ссылки.
     CRM_DEAL_URL = os.environ.get('CRM_DEAL_URL', '')
 
+    # Публичный адрес портала для ссылок в уведомлениях. Сервис живёт за
+    # nginx под префиксом, и внутренние адреса из Telegram недоступны.
+    PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')
+
     # Час ежедневной рассылки напоминаний о дебиторке (время сервера).
     # Само сообщение уходит через бота-нотификатора шлюза.
     DEBT_REMINDER_HOUR = int(os.environ.get('DEBT_REMINDER_HOUR', '9'))
