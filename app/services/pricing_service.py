@@ -58,6 +58,17 @@ def _clean_percent(value):
     return max(0, int(percent))
 
 
+def _clean_amount(value):
+    """Сумма из формы или адреса КП. Мусор и отрицательные -> None."""
+    if value is None or value == '':
+        return None
+    try:
+        amount = float(str(value).replace(' ', '').replace('\u00a0', '').replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+    return amount if amount > 0 else None
+
+
 def build_payment_options(base_price, discount_by_method):
     """Собирает варианты оплаты для карточки квартиры.
 
@@ -106,12 +117,16 @@ def _new_option(type_key, title, base_price, price_after_deduction, discount_row
     return recalculate(option, {})
 
 
-def recalculate(option, manual_percents):
+def recalculate(option, manual_percents, initial_payment=None):
     """Пересчитывает вариант оплаты с учётом ручных скидок менеджера.
 
     manual_percents: {'kd': 3.0, ...} в процентах. Значение выше максимума из
     матрицы обрезается — менеджер не может выдать больше разрешённого, даже
     если подставит своё число в адрес КП.
+
+    initial_payment: первый взнос по ипотеке, если менеджер задал его руками.
+    Ниже минимума не опускаем по той же причине — цифру можно подставить в
+    адрес КП в обход интерфейса.
     """
     manual_percents = manual_percents or {}
     limits = {item['code']: item['max_percent'] for item in option.get('manual_discount_limits', [])}
@@ -138,16 +153,26 @@ def recalculate(option, manual_percents):
     option['price_after_discounts'] = price_after_discounts
 
     if option['type_key'] == MORTGAGE_KEY:
-        # Первый взнос — минимум 15% от стоимости сделки, остальное берёт на
+        # Минимальный первый взнос — 15% от стоимости сделки, остальное берёт на
         # себя банк, но не больше MAX_MORTGAGE_STANDARD. Если 85% цены выходят
         # за лимит, разницу добирает первый взнос.
-        initial_payment = max(price_after_discounts - MAX_MORTGAGE_STANDARD,
-                              price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_STANDARD)
-        option['initial_payment'] = initial_payment
-        option['mortgage_body'] = price_after_discounts - initial_payment
+        min_initial_payment = max(price_after_discounts - MAX_MORTGAGE_STANDARD,
+                                  price_after_discounts * MIN_INITIAL_PAYMENT_PERCENT_STANDARD)
+
+        # Менеджер может увеличить взнос — тело кредита и платёж уменьшатся.
+        # Меньше минимума банк не пропустит, больше стоимости сделки — бессмысленно.
+        chosen = _clean_amount(initial_payment)
+        if chosen is None or chosen < min_initial_payment:
+            chosen = min_initial_payment
+        chosen = min(chosen, price_after_discounts)
+
+        option['min_initial_payment'] = min_initial_payment
+        option['initial_payment'] = chosen
+        option['mortgage_body'] = price_after_discounts - chosen
         # Сумма договора — это цена сделки: взнос и тело кредита её делят.
         option['final_price'] = price_after_discounts
     else:
+        option['min_initial_payment'] = None
         option['initial_payment'] = None
         option['mortgage_body'] = None
         option['final_price'] = price_after_discounts

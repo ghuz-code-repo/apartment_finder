@@ -15,18 +15,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // {type_key: {код скидки: процент}} — то, что менеджер выставил ползунками.
     const manualDiscounts = {};
+    // Взнос, поднятый менеджером вручную. null — считаем по минимуму.
+    let manualInitialPayment = null;
 
     function formatCurrency(value) {
         return value.toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 0});
     }
 
+    // Ползунок и поле ввода — две ручки одного значения, поэтому при правке
+    // одной подтягиваем вторую. Число обрезаем по максимуму из матрицы скидок:
+    // ввести больше разрешённого нельзя ни ползунком, ни руками.
+    function syncDiscountPair(card, code, percent, source) {
+        card.querySelectorAll('[data-discount-code="' + code + '"]').forEach(function (el) {
+            if (el === source || el.tagName !== 'INPUT') return;
+            el.value = percent;
+        });
+    }
+
     function readManualPercents(card) {
         const percents = {};
-        card.querySelectorAll('.manual-discount-input').forEach(input => {
-            const percent = parseInt(input.value, 10) || 0;
-            const label = input.closest('.col-6');
-            const valueLabel = label && label.querySelector('.manual-discount-value');
-            if (valueLabel) valueLabel.textContent = percent;
+        card.querySelectorAll('.manual-discount-input').forEach(function (input) {
+            const max = parseInt(input.max, 10) || 0;
+            let percent = parseInt(input.value, 10) || 0;
+            percent = Math.min(Math.max(percent, 0), max);
+            if (String(percent) !== input.value) input.value = percent;
             if (percent > 0) percents[input.dataset.discountCode] = percent;
         });
         return percents;
@@ -40,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function () {
         manualDiscounts[typeKey] = manualPercents;
 
         let totalPercent = 0;
-        card.querySelectorAll('.manual-discount-row').forEach(row => {
+        card.querySelectorAll('.manual-discount-row').forEach(function (row) {
             const percent = manualPercents[row.dataset.discountCode] || 0;
             if (percent > 0) {
                 row.classList.remove('d-none');
@@ -59,15 +71,30 @@ document.addEventListener('DOMContentLoaded', function () {
         card.querySelector('.benefit-percent').textContent = totalPercent;
         card.querySelector('.benefit-amount').textContent = '- ' + formatCurrency(discountAmount);
 
-        const initialPaymentEl = card.querySelector('.price-initial');
-        if (initialPaymentEl) {
-            // Первый взнос — минимум 15% от стоимости сделки; всё сверх лимита
-            // банка тоже ложится на взнос. Остаток и есть тело кредита.
-            const initialPayment = Math.max(
+        const initialPaymentInput = card.querySelector('.initial-payment-input');
+        if (initialPaymentInput) {
+            // Минимум — 15% от стоимости сделки; всё сверх лимита банка тоже
+            // ложится на взнос. Скидки меняют цену, значит и минимум плавает:
+            // пересчитываем его и подтягиваем взнос, если он ушёл ниже.
+            const minInitialPayment = Math.max(
                 priceAfterDiscounts - MAX_MORTGAGE_BODY,
                 priceAfterDiscounts * MIN_INITIAL_PAYMENT_PERCENT
             );
-            initialPaymentEl.textContent = formatCurrency(initialPayment) + ' UZS';
+
+            let initialPayment = manualInitialPayment;
+            if (initialPayment === null || initialPayment < minInitialPayment) {
+                initialPayment = minInitialPayment;
+            }
+            initialPayment = Math.min(initialPayment, priceAfterDiscounts);
+
+            initialPaymentInput.min = Math.ceil(minInitialPayment);
+            initialPaymentInput.dataset.minInitial = minInitialPayment;
+            if (document.activeElement !== initialPaymentInput) {
+                initialPaymentInput.value = Math.round(initialPayment);
+            }
+
+            const minLabel = card.querySelector('.min-initial-payment');
+            if (minLabel) minLabel.textContent = formatCurrency(minInitialPayment) + ' UZS';
 
             const mortgageBodyEl = card.querySelector('.mortgage-body');
             if (mortgageBodyEl) {
@@ -97,20 +124,60 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        if (Object.keys(selections).length === 0) {
-            offerLink.setAttribute('href', offerBaseUrl);
-            return;
+        const params = new URLSearchParams();
+        if (Object.keys(selections).length > 0) {
+            params.set('selections', JSON.stringify(selections));
+        }
+        // Взнос по минимуму КП посчитает сам — в адрес пишем только поднятый.
+        const raised = document.querySelector('.initial-payment-input');
+        if (raised && manualInitialPayment !== null) {
+            const min = parseFloat(raised.dataset.minInitial) || 0;
+            if (manualInitialPayment > min) {
+                params.set('initial_payment', Math.round(manualInitialPayment));
+            }
         }
 
-        const params = new URLSearchParams({selections: JSON.stringify(selections)});
-        offerLink.setAttribute('href', `${offerBaseUrl}?${params.toString()}`);
+        const query = params.toString();
+        offerLink.setAttribute('href', query ? offerBaseUrl + '?' + query : offerBaseUrl);
     }
 
-    document.querySelectorAll('.payment-option-card').forEach(card => {
-        card.querySelectorAll('.manual-discount-input').forEach(input => {
-            input.addEventListener('input', () => updateCard(card));
-            input.addEventListener('change', () => updateCard(card));
+    document.querySelectorAll('.payment-option-card').forEach(function (card) {
+        card.querySelectorAll('.manual-discount-input, .manual-discount-number').forEach(function (input) {
+            const handler = function () {
+                const max = parseInt(input.max, 10) || 0;
+                let percent = parseInt(input.value, 10);
+                if (isNaN(percent)) percent = 0;
+                percent = Math.min(Math.max(percent, 0), max);
+                syncDiscountPair(card, input.dataset.discountCode, percent, input);
+                updateCard(card);
+            };
+            input.addEventListener('input', handler);
+            input.addEventListener('change', handler);
         });
+
+        const initialPaymentInput = card.querySelector('.initial-payment-input');
+        if (initialPaymentInput) {
+            initialPaymentInput.addEventListener('input', function () {
+                const value = parseFloat(initialPaymentInput.value);
+                manualInitialPayment = isNaN(value) ? null : value;
+                updateCard(card);
+            });
+            // Проверку минимума делаем на blur: пока менеджер набирает сумму,
+            // промежуточные цифры почти всегда меньше минимума, и подтягивать
+            // поле под курсором — значит мешать вводу.
+            initialPaymentInput.addEventListener('change', function () {
+                const min = parseFloat(initialPaymentInput.dataset.minInitial) || 0;
+                const value = parseFloat(initialPaymentInput.value);
+                if (isNaN(value) || value < min) {
+                    manualInitialPayment = null;
+                    initialPaymentInput.value = Math.ceil(min);
+                } else {
+                    manualInitialPayment = value;
+                }
+                updateCard(card);
+            });
+        }
+
         updateCard(card);
     });
 });
