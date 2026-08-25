@@ -9,7 +9,8 @@ from PIL import Image
 
 from ..core.db_utils import get_planning_session
 from ..core.media import media_dir, media_url
-from app.models.planning_models import ProjectInfo, ProjectRender
+from app.models.planning_models import (ProjectInfo, ProjectRender,
+                                        PROJECT_INFO_TRANSLATABLE_FIELDS, PROJECT_INFO_EXTRA_LANGS)
 
 # --- Константы для загрузки рендеров ---
 MAX_RENDERS = 5  # Максимум рендеров на один ЖК
@@ -35,6 +36,10 @@ TEXT_FIELDS = [
     'construction_tech', 'facade_materials', 'parking', 'infrastructure',
     'concept', 'description', 'usp',
 ]
+# Переводы приходят из формы теми же полями с суффиксом языка: concept_uz и т.д.
+TEXT_FIELDS += [f'{field}_{lang}'
+                for field in PROJECT_INFO_TRANSLATABLE_FIELDS
+                for lang in PROJECT_INFO_EXTRA_LANGS]
 INT_FIELDS = ['buildings_count', 'floors_min', 'floors_max']
 FLOAT_FIELDS = ['ceiling_height', 'area_min', 'area_max']
 

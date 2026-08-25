@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ kp_lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -348,9 +348,21 @@
 <body>
     <div class="page-container">
         <div class="no-print d-flex justify-content-between mb-3">
-            <div class="form-check form-switch fs-5">
-                <input class="form-check-input" type="checkbox" id="currencySwitch">
-                <label class="form-check-label text-muted" for="currencySwitch" style="font-size: 1rem;">{{ _('Показать в USD') }}</label>
+            <div class="d-flex align-items-center gap-4">
+                <div class="form-check form-switch fs-5">
+                    <input class="form-check-input" type="checkbox" id="currencySwitch">
+                    <label class="form-check-label text-muted" for="currencySwitch" style="font-size: 1rem;">{{ _('Показать в USD') }}</label>
+                </div>
+                {# Язык документа, а не интерфейса: перезагружаем КП с ?lang=,
+                   сохраняя выставленные менеджером скидки в адресе. #}
+                <div class="btn-group btn-group-sm" role="group">
+                    {% for code in kp_languages %}
+                    <a class="btn {{ 'btn-secondary' if code == kp_lang else 'btn-outline-secondary' }}"
+                       href="{{ url_for(request.endpoint, **dict(request.view_args, **dict(request.args.to_dict(), lang=code))) }}">
+                        {{ code|upper }}
+                    </a>
+                    {% endfor %}
+                </div>
             </div>
             <button class="btn btn-secondary" type="button" id="printBtn">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-printer-fill" viewBox="0 0 16 16"><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zM12 7H4a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1m-1 4H5a.5.5 0 0 1 0-1h6a.5.5 0 0 1 0 1m-1-2H6a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1"/></svg>
@@ -377,8 +389,10 @@
                 {% if data.apartment.house and data.apartment.house.complex_name %}
                 <h2 class="project-title">{{ data.apartment.house.complex_name }}</h2>
                 {% endif %}
-                {% if project_info and project_info.project_class %}
-                <p class="project-subtitle">{{ project_info.project_class }}{% if project_info.location %} · {{ project_info.location }}{% endif %}</p>
+                {% set kp_class = project_info.localized('project_class', kp_lang) if project_info else None %}
+                {% set kp_location = project_info.localized('location', kp_lang) if project_info else None %}
+                {% if kp_class %}
+                <p class="project-subtitle">{{ kp_class }}{% if kp_location %} · {{ kp_location }}{% endif %}</p>
                 {% endif %}
 
                 {% if project_info %}
@@ -390,20 +404,23 @@
                     <div class="project-fact"><span>{{ _('Этажность:') }}</span>{{ project_info.floors_min or '' }}{% if project_info.floors_min and project_info.floors_max %}–{% endif %}{{ project_info.floors_max or '' }}</div>
                     {% endif %}
                     {% if project_info.ceiling_height %}<div class="project-fact"><span>{{ _('Потолки:') }}</span>{{ project_info.ceiling_height }} м</div>{% endif %}
-                    {% if project_info.parking %}<div class="project-fact"><span>{{ _('Паркинг:') }}</span>{{ project_info.parking }}</div>{% endif %}
+                    {% set kp_parking = project_info.localized('parking', kp_lang) %}
+                    {% if kp_parking %}<div class="project-fact"><span>{{ _('Паркинг:') }}</span>{{ kp_parking }}</div>{% endif %}
                 </div>
                 {% endif %}
             </div>
         </div>
 
-        {% if project_info and project_info.concept %}
-        <p class="project-text"><strong>{{ project_info.concept }}</strong></p>
+        {% set kp_concept = project_info.localized('concept', kp_lang) if project_info else None %}
+        {% if kp_concept %}
+        <p class="project-text"><strong>{{ kp_concept }}</strong></p>
         {% endif %}
-        {% if project_info and project_info.description %}
-        <p class="project-text">{{ project_info.description }}</p>
+        {% set kp_description = project_info.localized('description', kp_lang) if project_info else None %}
+        {% if kp_description %}
+        <p class="project-text">{{ kp_description }}</p>
         {% endif %}
 
-        {% set project_usp = project_info.usp_items if project_info else [] %}
+        {% set project_usp = project_info.usp_items_for(kp_lang) if project_info else [] %}
         {% if project_usp or apartment_usp %}
         <div class="section-title">{{ _('Преимущества') }}</div>
         {% if project_usp %}

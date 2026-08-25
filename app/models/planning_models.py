@@ -363,6 +363,22 @@ class ProjectConstructionStage(db.Model):
         }
 
 
+# Поля карточки ЖК, у которых есть переводы. Имена собственные (застройщик,
+# бюро) и числа не переводятся, поэтому в список не входят.
+PROJECT_INFO_TRANSLATABLE_FIELDS = (
+    'project_class',
+    'location',
+    'construction_tech',
+    'facade_materials',
+    'parking',
+    'infrastructure',
+    'concept',
+    'description',
+    'usp',
+)
+PROJECT_INFO_EXTRA_LANGS = ('uz', 'en')
+
+
 class ProjectInfo(db.Model):
     """
     Маркетинговая карточка ЖК: описание концепции и характеристики проекта.
@@ -400,6 +416,28 @@ class ProjectInfo(db.Model):
     description = db.Column(db.Text, nullable=True)  # Полное описание проекта
     usp = db.Column(db.Text, nullable=True)  # УТП проекта: по одному пункту на строку
 
+    # --- Переводы для КП ---
+    # Русский текст лежит в основных полях выше, здесь узбекский и английский.
+    # Незаполненный перевод в документе подменяется русским, чтобы КП не зияло дырами.
+    project_class_uz = db.Column(db.String(100), nullable=True)
+    project_class_en = db.Column(db.String(100), nullable=True)
+    location_uz = db.Column(db.String(500), nullable=True)
+    location_en = db.Column(db.String(500), nullable=True)
+    construction_tech_uz = db.Column(db.Text, nullable=True)
+    construction_tech_en = db.Column(db.Text, nullable=True)
+    facade_materials_uz = db.Column(db.Text, nullable=True)
+    facade_materials_en = db.Column(db.Text, nullable=True)
+    parking_uz = db.Column(db.Text, nullable=True)
+    parking_en = db.Column(db.Text, nullable=True)
+    infrastructure_uz = db.Column(db.Text, nullable=True)
+    infrastructure_en = db.Column(db.Text, nullable=True)
+    concept_uz = db.Column(db.Text, nullable=True)
+    concept_en = db.Column(db.Text, nullable=True)
+    description_uz = db.Column(db.Text, nullable=True)
+    description_en = db.Column(db.Text, nullable=True)
+    usp_uz = db.Column(db.Text, nullable=True)
+    usp_en = db.Column(db.Text, nullable=True)
+
     renders = db.relationship('ProjectRender', backref='info', lazy='select',
                               cascade='all, delete-orphan',
                               order_by='ProjectRender.sort_order.asc(), ProjectRender.id.asc()')
@@ -411,12 +449,31 @@ class ProjectInfo(db.Model):
     def __repr__(self):
         return f'<ProjectInfo {self.complex_name}>'
 
+    def localized(self, field, lang=None):
+        """Значение поля на нужном языке с откатом на русский.
+
+        Русский — базовый: менеджер обязан заполнить его, переводы
+        необязательны, и пустой перевод не должен оставлять в КП пустое место.
+        """
+        base = getattr(self, field, None)
+        if not lang or lang == 'ru' or field not in PROJECT_INFO_TRANSLATABLE_FIELDS:
+            return base
+        return getattr(self, f'{field}_{lang}', None) or base
+
+    @staticmethod
+    def _split_usp(text):
+        if not text:
+            return []
+        return [line.strip(' -•') for line in text.splitlines() if line.strip(' -•')]
+
+    def usp_items_for(self, lang=None):
+        """УТП построчно на нужном языке: в КП каждый пункт идёт буллитом."""
+        return self._split_usp(self.localized('usp', lang))
+
     @property
     def usp_items(self):
-        """УТП построчно: в КП каждый пункт выводится отдельным буллитом."""
-        if not self.usp:
-            return []
-        return [line.strip(' -•') for line in self.usp.splitlines() if line.strip(' -•')]
+        """УТП на русском — язык по умолчанию."""
+        return self._split_usp(self.usp)
 
     def to_dict(self):
         """Возвращает данные в виде словаря для API."""
