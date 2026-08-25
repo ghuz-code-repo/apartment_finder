@@ -402,6 +402,36 @@ class ManagerUserLink(db.Model):
         return f'<ManagerUserLink {self.username} -> {self.manager_id}>'
 
 
+class TelegramSubscription(db.Model):
+    """Подписка менеджера на напоминания о дебиторке в Telegram.
+
+    Логин из шлюза с чатом Telegram не связан никак, поэтому подписка идёт
+    через одноразовый код: менеджер жмёт кнопку в отчёте, открывает бота по
+    ссылке с кодом, и бот при /start подставляет к коду свой chat_id.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'telegram_subscriptions'
+
+    username = db.Column(db.String(255), primary_key=True)
+    manager_id = db.Column(db.Integer, nullable=True, index=True)
+    # Код живёт до подтверждения: после привязки чата он больше не нужен,
+    # но храним — по нему удобно перевыпустить ссылку.
+    link_code = db.Column(db.String(64), nullable=True, unique=True, index=True)
+    chat_id = db.Column(db.String(64), nullable=True, index=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=False)
+    # Час отправки напоминания по времени сервера.
+    notify_hour = db.Column(db.Integer, nullable=False, default=9)
+    # Когда последний раз отправляли — чтобы не слать по второму разу за день.
+    last_sent_date = db.Column(db.Date, nullable=True)
+
+    confirmed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<TelegramSubscription {self.username} chat={self.chat_id}>'
+
+
 class ProjectInfo(db.Model):
     """
     Маркетинговая карточка ЖК: описание концепции и характеристики проекта.

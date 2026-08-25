@@ -9,8 +9,8 @@ from datetime import datetime
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app, abort, send_file
 from flask import jsonify
-from ..core.decorators import (current_user_can, login_required, permission_required,
-                               permission_required_any)
+from ..core.decorators import (current_user_can, current_user_identity, login_required,
+                               permission_required, permission_required_any)
 from sqlalchemy import or_, extract, func
 from werkzeug.utils import secure_filename
 from app.models.planning_models import PropertyType
@@ -29,6 +29,7 @@ from app.services import (
     project_info_service,
     manager_link_service,
     receivables_service,
+    telegram_reminder_service,
     pricelist_service,
     presentation_service
 )
@@ -819,12 +820,20 @@ def manager_performance_report():
         receivables = receivables_service.get_manager_receivables(receivables_manager_id)
         receivables['manager_linked'] = bool(receivables_manager_id)
 
+    # Подписка на бота живёт рядом с дебиторкой: напоминает он именно о ней.
+    notifications = None
+    if current_user_can('managers_receivables_view'):
+        username, _full_name = current_user_identity()
+        notifications = telegram_reminder_service.subscription_status(
+            username, receivables_manager_id if receivables else None)
+
     return render_template(
         'reports/manager_performance_overview.html',
         title="Выполнение планов менеджерами" if see_all else "Мои планы",
         managers=managers,
         see_all=see_all,
         receivables=receivables,
+        notifications=notifications,
         search_query=search_query,
         show_only_with_plan=show_only_with_plan,
         today=today,
@@ -1111,3 +1120,36 @@ def download_project_passport_pptx(complex_name):
         current_app.logger.error(f"Ошибка генерации PPTX для {complex_name}: {e}")
         flash(f"Произошла внутренняя ошибка при создании файла: {e}", "danger")
         return redirect(url_for('report.project_passport', complex_name=complex_name))
+
+
+@report_bp.route('/manager-notifications/connect', methods=['POST'])
+@login_required
+@permission_required('managers_receivables_view')
+def connect_debt_notifications():
+    """Выдаёт персональную ссылку на бота. Повторный вызов перевыпускает код."""
+    username, _full_name = current_user_identity()
+    subscription = telegram_reminder_service.issue_link_code(
+        username, manager_link_service.current_manager_id())
+
+    if not subscription:
+        flash("Не удалось создать подписку: не распознан пользователь.", "danger")
+    elif not telegram_reminder_service.bot_link(subscription):
+        flash("Бот не настроен: администратору нужно задать TELEGRAM_BOT_USERNAME.", "warning")
+    else:
+        flash("Ссылка готова — откройте бота и нажмите «Старт».", "success")
+
+    return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
+
+
+@report_bp.route('/manager-notifications/disconnect', methods=['POST'])
+@login_required
+@permission_required('managers_receivables_view')
+def disconnect_debt_notifications():
+    """Отключает напоминания, не удаляя подписку."""
+    username, _full_name = current_user_identity()
+    if telegram_reminder_service.deactivate(username=username):
+        flash("Напоминания отключены.", "info")
+    else:
+        flash("Активной подписки не найдено.", "warning")
+
+    return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
