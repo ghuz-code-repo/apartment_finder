@@ -62,6 +62,9 @@
     <li class="nav-item">
         <a class="nav-link {% if active_view == 'metrics' %}active{% endif %}" href="?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}&view_mode=metrics">Ключевые метрики</a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_view == 'compare' %}active{% endif %}" href="?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}&view_mode=compare">Best practice</a>
+    </li>
 </ul>
 
 
@@ -135,6 +138,90 @@
             </div>
         {% else %}
             <div class="card card-glass"><div class="card-body text-center text-muted p-5">Нет данных для построения отчета по метрикам.</div></div>
+        {% endif %}
+    </div>
+
+    {# --- ВКЛАДКА 3: СРАВНЕНИЕ КОГОРТ --- #}
+    <div class="tab-pane fade {% if active_view == 'compare' %}show active{% endif %}" id="compare-view">
+        {% if comparison %}
+        <div class="card card-glass mb-4">
+            <div class="card-body">
+                <h5 class="mb-2">Сравнение условий отбора заявок</h5>
+                <p class="text-muted mb-0">
+                    <strong>Созданные за период</strong> — заявки, пришедшие в выбранном интервале: показывает качество самих заявок.
+                    <strong>Любая активность за период</strong> — заявки, по которым в интервале был любой шаг в логе статусов,
+                    независимо от даты создания: показывает работу за период, включая старые заявки.
+                    Разница в долях подсказывает, что сработало — действия отдела или сам поток заявок.
+                </p>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            {% for mode, title in comparison.modes %}
+            <div class="col-md-6">
+                <div class="card card-glass h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">{{ title }}</h6>
+                        <h2 class="fw-bold mb-0">{{ comparison.cohorts[mode].total_leads or 0 }}</h2>
+                        <div class="text-muted small">заявок в когорте</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="card card-glass">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table modern-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Показатель</th>
+                                {% for mode, title in comparison.modes %}
+                                <th class="text-end">{{ title }}</th>
+                                {% endfor %}
+                                <th class="text-end">Разница долей</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set ns = namespace(group='') %}
+                            {% for row in comparison.rows %}
+                            {% if row.group != ns.group %}
+                            {% set ns.group = row.group %}
+                            <tr class="table-active">
+                                <td colspan="4" class="fw-bold">{{ row.group }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <td class="{% if row.is_base %}fw-semibold{% else %}ps-4{% endif %}">{{ row.label }}</td>
+                                {% for mode, title in comparison.modes %}
+                                <td class="text-end">
+                                    {{ row[mode].value }}
+                                    {% if row[mode].percent is not none %}
+                                    <span class="text-muted small">({{ row[mode].percent }}%)</span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                                <td class="text-end">
+                                    {% if row.delta is none %}
+                                    <span class="text-muted">—</span>
+                                    {% elif row.delta > 0 %}
+                                    <span class="text-success">+{{ row.delta }} п.п.</span>
+                                    {% elif row.delta < 0 %}
+                                    <span class="text-danger">{{ row.delta }} п.п.</span>
+                                    {% else %}
+                                    <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card card-glass"><div class="card-body text-center text-muted p-5">Откройте вкладку, чтобы построить сравнение.</div></div>
         {% endif %}
     </div>
 </div>
