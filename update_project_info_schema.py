@@ -17,14 +17,15 @@ from app.core.extensions import db
 
 try:
     from app.models.planning_models import (ProjectInfo, ProjectRender, CalculatorSettings,
-                                            ManagerUserLink)
+                                            ManagerUserLink, TelegramSubscription)
 
     print("Модели успешно импортированы.")
 except ImportError as e:
     print(f"ОШИБКА: Не удалось импортировать модели. Проверьте app/models/planning_models.py.\nДетали: {e}")
     sys.exit(1)
 
-MODELS = (ProjectInfo, ProjectRender, CalculatorSettings, ManagerUserLink)
+MODELS = (ProjectInfo, ProjectRender, CalculatorSettings, ManagerUserLink,
+          TelegramSubscription)
 
 
 def _sync_table(engine, inspector, table):
