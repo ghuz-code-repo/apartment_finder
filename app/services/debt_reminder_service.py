@@ -202,9 +202,10 @@ def send_reminder(recipient, text):
 def due_subscriptions(now=None):
     """Кому пора отправлять напоминание прямо сейчас.
 
-    Отбираем по часу отправки и по тому, что сегодня ещё не отправляли:
-    планировщик просыпается чаще раза в день, и без этой отметки менеджер
-    получал бы напоминание на каждом круге.
+    notify_hour — это «не раньше», а не «ровно в». Планировщик спит 75 минут,
+    это дольше часа, и при точном сравнении часа его круги могли перешагнуть
+    назначенный час целиком (например, 08:50 и 10:05) — тогда напоминание за
+    день не уходило вовсе. Раз в день его удерживает отметка last_sent_date.
     """
     now = now or datetime.now()
     planning_session = get_planning_session()
@@ -213,7 +214,7 @@ def due_subscriptions(now=None):
         for subscription in planning_session.query(DebtReminderSubscription).filter_by(is_active=True).all()
         # Без получателя слать некуда: уведомление ушло бы в failed.
         if subscription.telegram_recipient
-        and subscription.notify_hour == now.hour
+        and now.hour >= subscription.notify_hour
         and subscription.last_sent_date != now.date()
     ]
 
