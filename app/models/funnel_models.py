@@ -1,6 +1,8 @@
 # app/models/funnel_models.py
 from app.core.extensions import db
 
+from . import auth_models
+
 
 class EstateBuy(db.Model):
     __tablename__ = 'estate_buys'
@@ -42,6 +44,15 @@ class EstateBuysStatusLog(db.Model):
     status_to_name = db.Column(db.String(32))
     status_custom_to_name = db.Column(db.String(255))
 
-    # Это правильная строка, которая соответствует 'users_id' в MySQL
-    manager_id = db.Column('users_id', db.Integer, db.ForeignKey('sales_managers.id'), nullable=True)
+    # Столбец 'users_id' в MySQL ссылается на таблицу 'users' — её занимает
+    # модель SalesManager. Ключ по имени 'sales_managers' указывал на таблицу,
+    # которой нет ни в одной модели: SQLAlchemy не могла его разрешить и роняла
+    # NoReferencedTableError на create_all и на любой записи через ORM.
+    manager_id = db.Column(
+        'users_id',
+        db.Integer,
+        db.ForeignKey(auth_models.SalesManager.id),
+        nullable=True,
+        index=True
+    )
     __bind_key__ = 'mysql_source'
