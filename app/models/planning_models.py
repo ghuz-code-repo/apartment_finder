@@ -405,14 +405,19 @@ class ManagerUserLink(db.Model):
 class DebtReminderSubscription(db.Model):
     """Подписка менеджера на напоминания о дебиторке.
 
-    Само сообщение отправляет бот-нотификатор шлюза, привязку логина к чату
-    Telegram держит тоже он — здесь только галочка «напоминать» и время.
+    Само сообщение отправляет бот-нотификатор портала. Резолв получателя идёт
+    по telegram-нику, а не по логину на портале, поэтому ник менеджер указывает
+    здесь сам; сам чат привязывается в личном кабинете портала.
     """
     __bind_key__ = 'planning_db'
     __tablename__ = 'debt_reminder_subscriptions'
 
     username = db.Column(db.String(255), primary_key=True)
     manager_id = db.Column(db.Integer, nullable=True, index=True)
+    # Кому слать: telegram-ник или готовый chat_id. Портал резолвит именно ник
+    # (поле telegram_username в auth-service), а не логин, поэтому храним его
+    # у себя — как справочник получателей рядом с email-рассылкой.
+    telegram_recipient = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     # Час отправки напоминания по времени сервера.
     notify_hour = db.Column(db.Integer, nullable=False, default=9)

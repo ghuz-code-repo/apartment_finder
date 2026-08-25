@@ -63,18 +63,22 @@ class NotificationServiceClient:
         response.raise_for_status()
         return response.json()
 
-    def send_telegram(self, recipient: str, content: str) -> dict:
-        """Отправляет сообщение в Telegram через бота шлюза.
+    def send_telegram(self, recipient: str, content: str, subject: Optional[str] = None) -> dict:
+        """Отправляет сообщение в Telegram через бота портала.
 
-        recipient — логин пользователя: привязку логина к чату держит шлюз,
-        своей подписки и chat_id у нас нет.
+        recipient — либо готовый chat_id (число), либо telegram-ник: ник
+        notification-service резолвит через auth-service, и это именно ник, а
+        не логин на портале. content_type не передаём: бот жёстко разбирает
+        текст как Markdown.
         """
         payload = {
             'type': 'telegram',
             'recipient': recipient,
             'content': content,
-            'content_type': 'text/html',
         }
+        if subject:
+            # Заголовок бот выводит жирной первой строкой.
+            payload['subject'] = subject
 
         logger.info("Отправка telegram через notification-service: recipient=%s", recipient)
 
