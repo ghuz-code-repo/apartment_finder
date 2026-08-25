@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask import abort
 from flask import g
 from flask_babel import gettext as _
+from flask_babel import force_locale
 from ..core.decorators import permission_required, login_required
 from app.services import special_offer_service
 from ..core.db_utils import get_default_session, get_mysql_session
@@ -232,18 +233,28 @@ def generate_commercial_offer(sell_id):
     fallback_usd_rate = current_app.config.get('USD_TO_UZS_RATE', 12650.0)
     actual_usd_rate = usd_rate_from_cbu if usd_rate_from_cbu is not None else fallback_usd_rate
 
-    return render_template(
-        'main/commercial_offer.html',
-        data=card_data,
-        flat_plans=flat_plan_service.get_flat_plans(sell_id),
-        project_info=project_info,
-        project_render_url=(project_info_service.get_render_url(project_renders[0].filename)
-                            if project_renders else None),
-        apartment_usp=apartment_usp,
-        current_date=current_date,
-        usd_to_uzs_rate=actual_usd_rate,
-        title=f"КП по объекту ID {sell_id}"
-    )
+    # Язык документа задаётся ?lang= и отделён от языка интерфейса: менеджер
+    # печатает КП клиенту на узбекском, оставаясь в русской панели. force_locale
+    # переводит и подписи документа, а тексты ЖК берутся из своих переводов.
+    kp_lang = request.args.get('lang') or g.get('lang') or 'ru'
+    if kp_lang not in current_app.config['LANGUAGES']:
+        kp_lang = 'ru'
+
+    with force_locale(kp_lang):
+        return render_template(
+            'main/commercial_offer.html',
+            data=card_data,
+            flat_plans=flat_plan_service.get_flat_plans(sell_id),
+            project_info=project_info,
+            project_render_url=(project_info_service.get_render_url(project_renders[0].filename)
+                                if project_renders else None),
+            apartment_usp=apartment_usp,
+            current_date=current_date,
+            usd_to_uzs_rate=actual_usd_rate,
+            kp_lang=kp_lang,
+            kp_languages=current_app.config['LANGUAGES'],
+            title=f"КП по объекту ID {sell_id}"
+        )
 
 
 @main_bp.route('/exclusions', methods=['GET', 'POST'])

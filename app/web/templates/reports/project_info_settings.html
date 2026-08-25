@@ -52,6 +52,42 @@
 {% endblock %}
 
 {% block content %}
+{# Поля с переводами рендерятся тремя вариантами сразу: видно только активный
+   язык, но в POST уходят все три — скрытые input'ы тоже отправляются. #}
+{% set kp_langs = [('ru', 'RU'), ('uz', 'UZ'), ('en', 'EN')] %}
+
+{% macro lang_input(field, label, placeholder='') %}
+    {% for code, badge in kp_langs %}
+    {% set name = field if code == 'ru' else field ~ '_' ~ code %}
+    <div class="lang-field" data-lang="{{ code }}"{% if code != 'ru' %} hidden{% endif %}>
+        <label for="{{ name }}" class="form-label">
+            {{ label }} <span class="badge bg-secondary ms-1">{{ badge }}</span>
+        </label>
+        <input type="text" class="form-control" id="{{ name }}" name="{{ name }}"
+               value="{{ (info|attr(name)) or '' if info else '' }}"
+               placeholder="{{ placeholder }}">
+    </div>
+    {% endfor %}
+{% endmacro %}
+
+{% macro lang_textarea(field, label, rows=3, placeholder='', hint='', soft_limit=0) %}
+    {% for code, badge in kp_langs %}
+    {% set name = field if code == 'ru' else field ~ '_' ~ code %}
+    <div class="lang-field" data-lang="{{ code }}"{% if code != 'ru' %} hidden{% endif %}>
+        <label for="{{ name }}" class="form-label">
+            {{ label }} <span class="badge bg-secondary ms-1">{{ badge }}</span>
+        </label>
+        <textarea class="form-control" id="{{ name }}" name="{{ name }}" rows="{{ rows }}"
+                  {% if soft_limit %}data-soft-limit="{{ soft_limit }}"{% endif %}
+                  placeholder="{{ placeholder }}">{{ (info|attr(name)) or '' if info else '' }}</textarea>
+        {% if hint %}
+        <div class="form-text{% if soft_limit %} description-counter{% endif %}">{{ hint }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% endmacro %}
+
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <a href="{{ url_for('report.project_dashboard', complex_name=complex_name) }}"
@@ -72,6 +108,23 @@
 </div>
 
 <form method="POST" enctype="multipart/form-data" id="project-info-form">
+
+<div class="card card-glass mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <div>
+            <div class="fw-semibold"><i class="bi bi-translate me-2"></i>{{ _('Язык описания') }}</div>
+            <div class="text-muted small">
+                {{ _('Тексты заполняются на трёх языках, КП печатается на выбранном. Пустой перевод заменяется русским.') }}
+            </div>
+        </div>
+        <div class="btn-group ms-auto" role="group" id="lang-switch">
+            {% for code, badge in kp_langs %}
+            <button type="button" class="btn btn-sm {{ 'btn-golden-outline active' if code == 'ru' else 'btn-outline-secondary' }}"
+                    data-lang-btn="{{ code }}">{{ badge }}</button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 {# У читателя (право projects_info_view без projects_info_update) поля видны,
    но неактивны: fieldset[disabled] гасит все вложенные элементы разом и не
    отправляет их значения. Сам POST роут всё равно отбивает по праву. #}
@@ -173,10 +226,7 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-4">
-                    <label for="project_class" class="form-label">{{ _('Класс проекта') }}</label>
-                    <input type="text" class="form-control" id="project_class" name="project_class"
-                           value="{{ info.project_class if info and info.project_class else '' }}"
-                           placeholder="{{ _('Бизнес-класс') }}">
+                    {{ lang_input('project_class', _('Класс проекта'), _('Бизнес-класс')) }}
                 </div>
                 <div class="col-md-4">
                     <label for="developer" class="form-label">{{ _('Застройщик') }}</label>
@@ -191,10 +241,7 @@
                            placeholder="INK Architects">
                 </div>
                 <div class="col-md-8">
-                    <label for="location" class="form-label">{{ _('Расположение (район, ориентиры)') }}</label>
-                    <input type="text" class="form-control" id="location" name="location"
-                           value="{{ info.location if info and info.location else '' }}"
-                           placeholder="{{ _('Яшнабадский район, вдоль набережной Корасув') }}">
+                    {{ lang_input('location', _('Расположение (район, ориентиры)'), _('Яшнабадский район, вдоль набережной Корасув')) }}
                 </div>
                 <div class="col-md-4">
                     <label for="website_url" class="form-label">{{ _('Сайт проекта') }}</label>
@@ -244,10 +291,7 @@
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <label for="parking" class="form-label">{{ _('Паркинг') }}</label>
-                    <input type="text" class="form-control" id="parking" name="parking"
-                           value="{{ info.parking if info and info.parking else '' }}"
-                           placeholder="{{ _('Подземный паркинг и наземные места по периметру') }}">
+                    {{ lang_input('parking', _('Паркинг'), _('Подземный паркинг и наземные места по периметру')) }}
                 </div>
             </div>
         </div>
@@ -258,19 +302,13 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label for="construction_tech" class="form-label">{{ _('Конструктив и технология строительства') }}</label>
-                    <textarea class="form-control" id="construction_tech" name="construction_tech" rows="3"
-                              placeholder="{{ _('Монолитный железобетон, кирпич, газоблок') }}">{{ info.construction_tech if info and info.construction_tech else '' }}</textarea>
+                    {{ lang_textarea('construction_tech', _('Конструктив и технология строительства'), 3, _('Монолитный железобетон, кирпич, газоблок')) }}
                 </div>
                 <div class="col-md-6">
-                    <label for="facade_materials" class="form-label">{{ _('Отделка фасадов') }}</label>
-                    <textarea class="form-control" id="facade_materials" name="facade_materials" rows="3"
-                              placeholder="{{ _('Керамогранит, клинкер, декоративная штукатурка') }}">{{ info.facade_materials if info and info.facade_materials else '' }}</textarea>
+                    {{ lang_textarea('facade_materials', _('Отделка фасадов'), 3, _('Керамогранит, клинкер, декоративная штукатурка')) }}
                 </div>
                 <div class="col-12">
-                    <label for="infrastructure" class="form-label">{{ _('Инфраструктура и благоустройство') }}</label>
-                    <textarea class="form-control" id="infrastructure" name="infrastructure" rows="3"
-                              placeholder="{{ _('Двор без машин, детские и спортивные площадки, BBQ-зона, коммерция на первых этажах') }}">{{ info.infrastructure if info and info.infrastructure else '' }}</textarea>
+                    {{ lang_textarea('infrastructure', _('Инфраструктура и благоустройство'), 3, _('Двор без машин, детские и спортивные площадки, BBQ-зона, коммерция на первых этажах')) }}
                 </div>
             </div>
         </div>
@@ -280,23 +318,17 @@
         <div class="card-header"><h5 class="mb-0"><i class="bi bi-card-text me-2"></i>{{ _('Описание проекта') }}</h5></div>
         <div class="card-body">
             <div class="mb-3">
-                <label for="concept" class="form-label">{{ _('Концепция (краткое позиционирование)') }}</label>
-                <textarea class="form-control" id="concept" name="concept" rows="3"
-                          placeholder="{{ _('Новая махалля — переосмысление традиционного квартала в современном формате') }}">{{ info.concept if info and info.concept else '' }}</textarea>
+                {{ lang_textarea('concept', _('Концепция (краткое позиционирование)'), 3, _('Новая махалля — переосмысление традиционного квартала в современном формате')) }}
             </div>
             <div class="mb-3">
-                <label for="usp" class="form-label">{{ _('УТП проекта (по одному пункту на строку)') }}</label>
-                <textarea class="form-control" id="usp" name="usp" rows="5"
-                          placeholder="{{ _('Закрытая территория без машин&#10;Двор с ландшафтным дизайном&#10;Подземный паркинг') }}">{{ info.usp if info and info.usp else '' }}</textarea>
-                <div class="form-text">{{ _('Каждая строка попадёт в коммерческое предложение отдельным пунктом.') }}</div>
+                {{ lang_textarea('usp', _('УТП проекта (по одному пункту на строку)'), 5,
+                                 _('Закрытая территория без машин'),
+                                 _('Каждая строка попадёт в коммерческое предложение отдельным пунктом.')) }}
             </div>
             <div>
-                <label for="description" class="form-label">{{ _('Полное описание') }}</label>
-                <textarea class="form-control" id="description" name="description" rows="8"
-                          data-soft-limit="{{ kp_description_limit }}">{{ info.description if info and info.description else '' }}</textarea>
-                <div class="form-text" id="description-counter">
-                    {{ _('Рекомендуется до') }} {{ kp_description_limit }} {{ _('знаков — столько помещается на первую страницу КП.') }}
-                </div>
+                {{ lang_textarea('description', _('Полное описание'), 8, '',
+                                 _('Рекомендуется до') ~ ' ' ~ kp_description_limit ~ ' ' ~ _('знаков — столько помещается на первую страницу КП.'),
+                                 kp_description_limit) }}
             </div>
         </div>
     </div>
@@ -319,21 +351,41 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // Переключение языка: поля всех трёх языков лежат в разметке рядом, видно
+    // только активный. Скрытые поля всё равно уходят в POST, поэтому сохранять
+    // отдельно каждый язык не нужно.
+    const langButtons = document.querySelectorAll('[data-lang-btn]');
+    const langFields = document.querySelectorAll('.lang-field');
+    langButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const lang = btn.dataset.langBtn;
+            langFields.forEach(function (field) {
+                field.hidden = field.dataset.lang !== lang;
+            });
+            langButtons.forEach(function (other) {
+                const isActive = other === btn;
+                other.classList.toggle('active', isActive);
+                other.classList.toggle('btn-golden-outline', isActive);
+                other.classList.toggle('btn-outline-secondary', !isActive);
+            });
+        });
+    });
+
     // Счётчик описания: подсказывает, когда текст перестанет влезать на первую
     // страницу КП. Жёстко не ограничиваем — длинное описание просто уедет ниже.
-    const description = document.getElementById('description');
-    const counter = document.getElementById('description-counter');
-    if (description && counter) {
-        const softLimit = parseInt(description.dataset.softLimit, 10) || 0;
+    document.querySelectorAll('textarea[data-soft-limit]').forEach(function (area) {
+        const counter = area.parentElement.querySelector('.description-counter');
+        if (!counter) return;
+        const softLimit = parseInt(area.dataset.softLimit, 10) || 0;
         const base = counter.textContent.trim();
-        const updateCounter = () => {
-            const length = description.value.length;
+        const updateCounter = function () {
+            const length = area.value.length;
             counter.textContent = length + ' / ' + softLimit + '. ' + base;
             counter.classList.toggle('text-warning', softLimit > 0 && length > softLimit);
         };
-        description.addEventListener('input', updateCounter);
+        area.addEventListener('input', updateCounter);
         updateCounter();
-    }
+    });
 
     const input = document.getElementById('renders');
     const warning = document.getElementById('renders-warning');
