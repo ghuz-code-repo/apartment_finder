@@ -4,7 +4,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file
 from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
-from app.services import settings_service, report_service
+from app.services import settings_service, report_service, manager_link_service
 from .forms import CalculatorSettingsForm
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from ..models.estate_models import EstateHouse
@@ -131,3 +131,39 @@ def manage_inventory_exclusions():
 def manage_email_recipients():
     """Email recipients are now managed via gateway notification service."""
     return redirect('/admin/notifications')
+
+
+@settings_bp.route('/manager-links', methods=['GET', 'POST'])
+@login_required
+@permission_required('managers_links_manage')
+def manage_manager_links():
+    """Ручное сопоставление логинов с менеджерами CRM.
+
+    Пользователей отдаёт шлюз, и списка их у нас нет — поэтому связка заводится
+    от менеджера: админ вписывает логин напротив нужного человека.
+    """
+    if request.method == 'POST':
+        action = request.form.get('action')
+        username = (request.form.get('username') or '').strip()
+
+        if action == 'link':
+            if manager_link_service.set_link(username, request.form.get('manager_id')):
+                flash(f"Логин '{username}' связан с менеджером.", "success")
+            else:
+                flash("Не удалось связать: проверьте логин и менеджера.", "danger")
+        elif action == 'unlink':
+            if manager_link_service.clear_link(username):
+                flash(f"Связка для '{username}' убрана — сопоставление снова по ФИО.", "info")
+            else:
+                flash("Связка не найдена.", "warning")
+
+        return redirect(url_for('settings.manage_manager_links',
+                                q=request.args.get('q') or None))
+
+    search_query = request.args.get('q', '')
+    return render_template(
+        'settings/manager_links.html',
+        title="Связка менеджеров с пользователями",
+        rows=manager_link_service.list_managers_with_links(search_query),
+        search_query=search_query
+    )

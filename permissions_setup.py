@@ -70,6 +70,8 @@ permissions_registry.register('finder.managers_yearly_view', 'Менеджеры
 permissions_registry.register('finder.managers_leads_view', 'Менеджеры: лиды', 'Просмотр списка лидов', 'view')
 permissions_registry.register('finder.managers_plan_import', 'Менеджеры: загрузка плана', 'Загрузка планов менеджеров из Excel', 'manage')
 permissions_registry.register('finder.managers_plan_template_export', 'Менеджеры: шаблон плана', 'Скачивание шаблона плана менеджеров', 'manage')
+permissions_registry.register('finder.managers_performance_view_own', 'Менеджеры: только свои планы', 'Просмотр плана и показателей только по себе', 'view')
+permissions_registry.register('finder.managers_links_manage', 'Менеджеры: связка с пользователями', 'Сопоставление пользователей системы с менеджерами CRM', 'manage')
 permissions_registry.register('finder.managers_hall_of_fame_view', 'Менеджеры: доска почета', 'Просмотр доски почета', 'view')
 permissions_registry.register('finder.managers_obligations_view', 'Менеджеры: обязательства', 'Просмотр контроля обязательств', 'view')
 
@@ -216,6 +218,8 @@ PERMISSION_MAP = {
     'managers_leads_view': 'finder.managers_leads_view',
     'managers_plan_import': 'finder.managers_plan_import',
     'managers_plan_template_export': 'finder.managers_plan_template_export',
+    'managers_performance_view_own': 'finder.managers_performance_view_own',
+    'managers_links_manage': 'finder.managers_links_manage',
     'managers_hall_of_fame_view': 'finder.managers_hall_of_fame_view',
     'managers_obligations_view': 'finder.managers_obligations_view',
     # Projects
