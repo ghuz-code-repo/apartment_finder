@@ -29,6 +29,7 @@ from app.services import (
     project_info_service,
     manager_link_service,
     receivables_service,
+    contracting_income_service,
     debt_reminder_service,
     pricelist_service,
     presentation_service
@@ -1152,3 +1153,58 @@ def disconnect_debt_notifications():
         flash("Не удалось отключить: не распознан пользователь.", "warning")
 
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
+
+
+@report_bp.route('/contracting-income')
+@login_required
+@permission_required('reports_contracting_income_view')
+def contracting_income_report():
+    """Контрактация и поступления в выбранной детализации.
+
+    Фильтры по ЖК и менеджерам мультивыборные, и пустой выбор означает «все»:
+    так кнопка «Все» — это просто снятие выделения, а не отдельное значение,
+    которое пришлось бы отличать от списка.
+    """
+    today = date.today()
+
+    def parse_date(value, fallback):
+        try:
+            return date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    # По умолчанию — полгода помесячно: интервал, на котором видно динамику.
+    default_start = (today.replace(day=1) - timedelta(days=150)).replace(day=1)
+    start_date = parse_date(request.args.get('start_date'), default_start)
+    end_date = parse_date(request.args.get('end_date'), today)
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    granularity = request.args.get('granularity', contracting_income_service.DEFAULT_GRANULARITY)
+    view_mode = 'table' if request.args.get('view') == 'table' else 'chart'
+
+    selected_complexes = request.args.getlist('complexes')
+    selected_managers = []
+    for raw in request.args.getlist('managers'):
+        try:
+            selected_managers.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    data = contracting_income_service.get_report_data(
+        start_date, end_date, granularity,
+        complexes=selected_complexes, manager_ids=selected_managers
+    )
+
+    return render_template(
+        'reports/contracting_income.html',
+        title="Контрактация и поступления",
+        data=data,
+        options=contracting_income_service.get_filter_options(),
+        granularities=contracting_income_service.GRANULARITIES,
+        start_date=start_date,
+        end_date=end_date,
+        view_mode=view_mode,
+        selected_complexes=selected_complexes,
+        selected_managers=selected_managers
+    )

@@ -55,6 +55,7 @@ permissions_registry.register('finder.reports_quarterly_view', 'Отчеты: к
 permissions_registry.register('finder.reports_refund_view', 'Отчеты: возвраты', 'Просмотр отчета по возвратам', 'view')
 permissions_registry.register('finder.reports_sales_pace_view', 'Отчеты: темпы продаж', 'Просмотр темпов продаж', 'view')
 permissions_registry.register('finder.reports_expected_income_export', 'Отчеты: экспорт ожид. дохода', 'Экспорт деталей ожидаемого дохода', 'view')
+permissions_registry.register('finder.reports_contracting_income_view', 'Отчеты: контрактация и поступления', 'Просмотр отчета по контрактации и поступлениям', 'view')
 permissions_registry.register('finder.reports_plan_import', 'Отчеты: загрузка плана', 'Загрузка плановых данных из Excel', 'manage')
 permissions_registry.register('finder.reports_plan_template_export', 'Отчеты: шаблон плана', 'Скачивание шаблона плана', 'manage')
 
@@ -207,6 +208,7 @@ PERMISSION_MAP = {
     'reports_refund_view': 'finder.reports_refund_view',
     'reports_sales_pace_view': 'finder.reports_sales_pace_view',
     'reports_expected_income_export': 'finder.reports_expected_income_export',
+    'reports_contracting_income_view': 'finder.reports_contracting_income_view',
     'reports_plan_import': 'finder.reports_plan_import',
     'reports_plan_template_export': 'finder.reports_plan_template_export',
     # Managers
