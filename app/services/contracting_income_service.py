@@ -14,6 +14,7 @@
 
 from datetime import date, timedelta
 
+from ..core.dates import to_date
 from ..core.db_utils import get_mysql_session
 from app.models.auth_models import SalesManager
 from app.models.estate_models import EstateDeal, EstateHouse, EstateSell
@@ -165,20 +166,6 @@ def _income_rows(start_date, end_date, complexes, manager_ids):
     return query.all()
 
 
-def _as_date(value):
-    """Из БД дата может прийти datetime или строкой — приводим к date."""
-    if value is None:
-        return None
-    if isinstance(value, date) and not hasattr(value, 'hour'):
-        return value
-    if hasattr(value, 'date'):
-        return value.date()
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except ValueError:
-        return None
-
-
 def get_report_data(start_date, end_date, granularity=DEFAULT_GRANULARITY,
                     complexes=None, manager_ids=None):
     """Ряды контрактации и поступлений по периодам интервала."""
@@ -192,7 +179,7 @@ def get_report_data(start_date, end_date, granularity=DEFAULT_GRANULARITY,
     }
 
     for day, deal_sum in _contracting_rows(start_date, end_date, complexes, manager_ids):
-        day = _as_date(day)
+        day = to_date(day)
         bucket = buckets.get(period_start(day, granularity)) if day else None
         if bucket is None:
             continue
@@ -200,7 +187,7 @@ def get_report_data(start_date, end_date, granularity=DEFAULT_GRANULARITY,
         bucket['contracting_count'] += 1
 
     for day, summa in _income_rows(start_date, end_date, complexes, manager_ids):
-        day = _as_date(day)
+        day = to_date(day)
         bucket = buckets.get(period_start(day, granularity)) if day else None
         if bucket is None:
             continue
