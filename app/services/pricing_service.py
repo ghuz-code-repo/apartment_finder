@@ -11,6 +11,7 @@ apartment_card_java.js — и расходилась: карточка скла�
 
 from datetime import date
 
+from ..core.dates import to_date
 from ..models.planning_models import PaymentMethod
 
 # Бронирование: не участвует в скидках, вычитается из прайса до их применения.
@@ -218,13 +219,9 @@ def _balance_after(principal, monthly_rate, payment, months):
 
 def months_until(target_date, today=None):
     """Сколько полных месяцев осталось до даты. Прошедшая дата -> 0."""
+    target_date = to_date(target_date)
     if not target_date:
         return None
-    if isinstance(target_date, str):
-        try:
-            target_date = date.fromisoformat(target_date)
-        except ValueError:
-            return None
 
     today = today or date.today()
     if target_date <= today:

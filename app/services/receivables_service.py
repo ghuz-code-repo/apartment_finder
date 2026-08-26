@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from flask import current_app
 from sqlalchemy.orm import joinedload
 
+from ..core.dates import to_date
 from ..core.db_utils import get_mysql_session
 from app.models.estate_models import EstateDeal, EstateHouse, EstateSell
 from app.models.finance_models import FinanceOperation
@@ -30,7 +31,10 @@ def deal_url(deal_id):
 
 
 def _row(operation, deal, sell, house, today):
-    days = (operation.date_to - today).days if operation.date_to else None
+    # date_to приходит из MySQL как datetime: без приведения вычитание из date
+    # роняет отчёт с TypeError.
+    due_date = to_date(operation.date_to)
+    days = (due_date - today).days if due_date else None
     return {
         'operation_id': operation.id,
         'deal_id': deal.id if deal else None,
@@ -40,7 +44,7 @@ def _row(operation, deal, sell, house, today):
         'flat_number': sell.geo_flatnum if sell else None,
         'property_type': sell.estate_sell_category if sell else None,
         'amount': operation.summa or 0.0,
-        'due_date': operation.date_to,
+        'due_date': due_date,
         'payment_type': operation.payment_type,
         # Отрицательное — просрочено на столько дней, положительное — осталось.
         'days': days,
@@ -73,14 +77,18 @@ def get_manager_receivables(manager_id, horizon_days=DEFAULT_HORIZON_DAYS, today
     ).filter(
         FinanceOperation.status_name == PENDING_STATUS,
         FinanceOperation.date_to.isnot(None),
-        FinanceOperation.date_to <= horizon,
+        # Граница — начало следующего дня: у датой-временем платёж последнего
+        # дня горизонта иначе отсекается по времени суток.
+        FinanceOperation.date_to < horizon + timedelta(days=1),
         EstateDeal.deal_manager_id == manager_id,
     ).order_by(FinanceOperation.date_to.asc()).all()
 
     overdue, upcoming = [], []
     for operation, deal, sell, house in rows:
         row = _row(operation, deal, sell, house, today)
-        (overdue if operation.date_to < today else upcoming).append(row)
+        # Считаем по уже приведённой дате из строки: сравнивать date_to с date
+        # напрямую нельзя по той же причине, что и вычитать.
+        (overdue if row['days'] is not None and row['days'] < 0 else upcoming).append(row)
 
     return {
         'overdue': overdue,
