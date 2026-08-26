@@ -1134,25 +1134,28 @@ def download_project_passport_pptx(complex_name):
 @login_required
 @permission_required('managers_receivables_view')
 def connect_debt_notifications():
-    """Включает напоминания. Сообщения шлёт бот портала через notification-service."""
+    """Сохраняет настройки напоминаний.
+
+    Получателя не спрашиваем: Telegram у пользователя настроен в шлюзе, и
+    второй источник правды рано или поздно разошёлся бы с первым.
+    """
     username, _full_name = current_user_identity()
-    recipient = request.form.get('telegram_recipient')
-
-    if not (recipient or '').strip():
-        flash("Укажите telegram-ник или chat_id — без получателя слать некуда.", "warning")
-        return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
-
     subscription = debt_reminder_service.set_active(
         username, manager_link_service.current_manager_id(),
-        active=True, recipient=recipient,
+        active=True,
         interval=request.form.get('interval'),
         notify_hour=request.form.get('notify_hour'))
 
     if not subscription:
-        flash("Не удалось включить напоминания: не распознан пользователь.", "danger")
+        flash("Не удалось сохранить настройки: не распознан пользователь.", "danger")
     else:
-        flash("Настройки сохранены. Если бот молчит — нажмите «Проверить»: "
-              "она отправит сообщение сразу и покажет ответ сервиса.", "success")
+        target = debt_reminder_service.resolve_recipient(username)
+        if target['chat_id']:
+            flash("Настройки сохранены. Нажмите «Проверить», чтобы убедиться, "
+                  "что сообщение доходит.", "success")
+        else:
+            flash(f"Настройки сохранены, но отправлять пока некуда. {target['problem']}",
+                  "warning")
 
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
 

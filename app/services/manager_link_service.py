@@ -5,6 +5,10 @@
 идентификатора нет. По умолчанию сопоставляем по ФИО, а тёзок, опечатки и
 расхождения в написании админ разводит руками — ручная связка всегда сильнее
 автоматической.
+
+Логин при этом не вводится: список пользователей сервиса отдаёт шлюз, и админ
+выбирает из него. Опечатка в логине давала связку, которая молча ни с кем не
+совпадала.
 """
 
 import re
@@ -13,6 +17,7 @@ from ..core.db_utils import get_planning_session, get_mysql_session
 from ..core.decorators import current_user_identity
 from app.models.auth_models import SalesManager
 from app.models.planning_models import ManagerUserLink
+from . import gateway_client
 
 
 def _normalize(name):
@@ -116,3 +121,36 @@ def list_managers_with_links(search=None):
         }
         for manager in managers
     ]
+
+
+def suggest_users_for_manager(manager, users):
+    """Кандидаты из шлюза для менеджера: сначала совпадения по ФИО.
+
+    Совпавшего по имени показываем первым, остальных оставляем в списке —
+    выбрать всё равно должен человек, а искать логин глазами по всему штату
+    портала неудобно.
+    """
+    target = _normalize(getattr(manager, 'full_name', None))
+    exact = [u for u in users if _normalize(u.get('full_name')) == target]
+    rest = [u for u in users if u not in exact]
+    return {'exact': exact, 'others': rest}
+
+
+def list_managers_with_gateway_users(search_query=''):
+    """Менеджеры CRM вместе со связками и кандидатами из шлюза."""
+    users = gateway_client.list_service_users()
+    gateway_available = users is not None
+    users = users or []
+    users_by_login = {str(u.get('username', '')).lower(): u for u in users}
+
+    rows = list_managers_with_links(search_query)
+    for row in rows:
+        row['candidates'] = suggest_users_for_manager(row['manager'], users)
+        # Показываем ФИО из шлюза рядом с логином: по одному логину не всегда
+        # понятно, тот ли это человек.
+        row['linked_users'] = [
+            {'username': login, 'full_name': (users_by_login.get(login.lower()) or {}).get('full_name')}
+            for login in row.get('usernames', [])
+        ]
+
+    return {'rows': rows, 'gateway_available': gateway_available, 'users': users}

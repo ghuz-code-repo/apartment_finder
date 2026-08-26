@@ -5,16 +5,16 @@
 единственный бот портала — своего заводить нельзя, второй getUpdates с тем же
 токеном ломает long polling.
 
-Получателя портал резолвит по telegram-нику (поле telegram_username в
-auth-service), а не по логину, поэтому ник храним у себя. Сам чат менеджер
-привязывает в личном кабинете портала; пока он этого не сделал, уведомление
-уходит в failed.
+Получателя берём из шлюза: там у пользователя уже настроен Telegram, и
+спрашивать ник ещё раз значит заводить второй источник правды, который рано
+или поздно разойдётся с первым. Если привязки нет, отправлять некуда —
+пользователя отправляем подключить Telegram в личном кабинете портала.
 
 Текст разбирается как Markdown, причём легаси-версия ломается на
 несбалансированных '*', '_', '[' и обратных кавычках, поэтому любые
 подставляемые данные экранируются.
 
-Рассылку дёргает scheduler.py — здесь только логика, чтобы её можно было
+Рассылку дёргает reminder_worker.py — здесь только логика, чтобы её можно было
 проверить без сети.
 """
 
@@ -26,7 +26,7 @@ from flask import current_app
 
 from ..core.db_utils import get_planning_session
 from app.models.planning_models import DebtReminderSubscription
-from . import receivables_service
+from . import gateway_client, receivables_service
 from .notification_client import NotificationServiceClient
 
 logger = logging.getLogger(__name__)
@@ -51,18 +51,20 @@ def get_subscription(username):
     return get_planning_session().query(DebtReminderSubscription).get(str(username))
 
 
-def normalize_recipient(value):
-    """Приводит получателя к тому виду, который ждёт notification-service.
+def resolve_recipient(username, users=None):
+    """Куда слать этому пользователю по данным шлюза.
 
-    Число — готовый chat_id, всё остальное — telegram-ник, и '@' в нём лишний:
-    портал ищет ник без собачки.
+    Результат кэшируем в подписке: рассылка не должна ходить в шлюз за каждым
+    сообщением, а при проверке связка перечитывается заново.
     """
-    value = (value or '').strip()
-    if not value:
-        return None
-    if value.lstrip('-').isdigit():
-        return value
-    return value.lstrip('@')
+    target = gateway_client.get_telegram_target(username, users)
+
+    subscription = get_subscription(username)
+    if subscription and target['chat_id'] != subscription.telegram_recipient:
+        subscription.telegram_recipient = target['chat_id']
+        get_planning_session().commit()
+
+    return target
 
 
 def normalize_interval(value):
@@ -79,8 +81,7 @@ def normalize_hour(value, fallback=None):
     return hour if 0 <= hour <= 23 else 0
 
 
-def set_active(username, manager_id=None, active=True, recipient=None,
-               interval=None, notify_hour=None):
+def set_active(username, manager_id=None, active=True, interval=None, notify_hour=None):
     """Создаёт или обновляет подписку пользователя."""
     username = (username or '').strip()
     if not username:
@@ -97,8 +98,6 @@ def set_active(username, manager_id=None, active=True, recipient=None,
 
     if manager_id is not None:
         subscription.manager_id = manager_id
-    if recipient is not None:
-        subscription.telegram_recipient = normalize_recipient(recipient)
     if interval is not None:
         subscription.interval = normalize_interval(interval)
     if notify_hour is not None:
@@ -108,14 +107,22 @@ def set_active(username, manager_id=None, active=True, recipient=None,
     return subscription
 
 
-def subscription_status(username, manager_id=None):
-    """Состояние подписки для вкладки уведомлений."""
+def subscription_status(username, manager_id=None, check_gateway=True):
+    """Состояние подписки и привязки Telegram для вкладки уведомлений."""
     subscription = get_subscription(username)
+    # Привязку перечитываем у шлюза: пользователь мог подключить Telegram
+    # только что, и страница должна показывать текущее положение дел.
+    target = resolve_recipient(username) if check_gateway else {
+        'chat_id': subscription.telegram_recipient if subscription else None,
+        'telegram_username': None, 'problem': None}
+
     return {
         'subscription': subscription,
-        'connected': bool(subscription and subscription.is_active
-                          and subscription.telegram_recipient),
-        'recipient': subscription.telegram_recipient if subscription else None,
+        'active': bool(subscription and subscription.is_active),
+        'connected': bool(subscription and subscription.is_active and target['chat_id']),
+        'telegram_ready': bool(target['chat_id']),
+        'telegram_username': target['telegram_username'],
+        'telegram_problem': target['problem'],
         'interval': subscription.interval if subscription else DEFAULT_INTERVAL,
         'intervals': INTERVALS,
         'notify_hour': (subscription.notify_hour if subscription
@@ -257,8 +264,7 @@ def is_due(subscription, now=None):
     """
     now = now or datetime.now()
 
-    # Без получателя слать некуда: уведомление ушло бы в failed.
-    if not subscription.is_active or not subscription.telegram_recipient:
+    if not subscription.is_active:
         return False
 
     if subscription.interval == 'hour':
@@ -294,6 +300,15 @@ def send_due_reminders(now=None):
     sent = skipped = quiet = 0
 
     for subscription in due_subscriptions(now):
+        # Привязку спрашиваем у шлюза на каждой отправке: пользователь мог
+        # подключить Telegram уже после того, как включил напоминания.
+        target = resolve_recipient(subscription.username)
+        if not target['chat_id']:
+            logger.info("Напоминание для %s не отправлено: %s",
+                        subscription.username, target['problem'])
+            skipped += 1
+            continue
+
         text = build_reminder_text(subscription.manager_id)
         if not text:
             # Долгов нет — молчим, но отметку ставим, чтобы не пересчитывать
@@ -302,7 +317,7 @@ def send_due_reminders(now=None):
             quiet += 1
             continue
 
-        ok, _detail = send_message(subscription.telegram_recipient, text)
+        ok, _detail = send_message(target['chat_id'], text)
         if ok:
             mark_sent(subscription, now)
             sent += 1
@@ -315,24 +330,32 @@ def send_due_reminders(now=None):
 
 
 def send_test(username, today=None):
-    """Немедленная отправка по кнопке «Проверить». Возвращает (успех, текст)."""
+    """Немедленная отправка по кнопке «Проверить». Возвращает (успех, текст).
+
+    Привязку спрашиваем у шлюза заново: пользователь мог подключить Telegram
+    минуту назад, и повторная проверка должна это увидеть без перезахода.
+    """
+    target = resolve_recipient(username)
+    if not target['chat_id']:
+        return False, target['problem'] or 'Telegram не подключён в личном кабинете портала.'
+
     subscription = get_subscription(username)
-    if not subscription or not subscription.telegram_recipient:
-        return False, 'Сначала укажите telegram-ник или chat_id и сохраните настройки.'
+    manager_id = subscription.manager_id if subscription else None
 
     # Если долгов нет, всё равно шлём: кнопка проверяет доставку, а не наличие
     # дебиторки.
-    text = build_reminder_text(subscription.manager_id, today=today)
+    text = build_reminder_text(manager_id, today=today) if manager_id else None
     subject = REMINDER_SUBJECT if text else TEST_SUBJECT
-    ok, detail = send_message(subscription.telegram_recipient, text or TEST_TEXT, subject=subject)
+    ok, detail = send_message(target['chat_id'], text or TEST_TEXT, subject=subject)
 
     if not ok:
         return False, f'Сервис уведомлений вернул ошибку: {detail}'
 
+    who = f"@{target['telegram_username']}" if target['telegram_username'] else target['chat_id']
     notification_id = detail.get('id') if isinstance(detail, dict) else None
-    message = f'Сообщение отправлено получателю {subscription.telegram_recipient}.'
+    message = f'Сообщение отправлено: {who}.'
     if notification_id:
         message += f' Номер уведомления: {notification_id}.'
-    message += (' Доставка асинхронная: если сообщение не пришло, проверьте, что'
-                ' Telegram привязан в личном кабинете портала и ник указан верно.')
+    message += (' Доставка асинхронная: если сообщение так и не пришло, посмотрите'
+                ' статус этого номера в сервисе уведомлений.')
     return True, message
