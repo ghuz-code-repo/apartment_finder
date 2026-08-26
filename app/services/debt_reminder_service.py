@@ -5,10 +5,13 @@
 единственный бот портала — своего заводить нельзя, второй getUpdates с тем же
 токеном ломает long polling.
 
-Получателя берём из шлюза: там у пользователя уже настроен Telegram, и
-спрашивать ник ещё раз значит заводить второй источник правды, который рано
-или поздно разойдётся с первым. Если привязки нет, отправлять некуда —
-пользователя отправляем подключить Telegram в личном кабинете портала.
+Получателя адресуем логином портала: chat_id по нему находит сам
+notification-service через auth-service. Ник и chat_id у себя не храним — это
+был бы второй источник правды, который рано или поздно разойдётся с первым.
+
+Резолв идёт на приёме запроса, поэтому отказ приходит сразу и с машинным
+кодом: «Telegram не привязан» и «нет доступа к сервису» — разные проблемы с
+разным лечением, и пользователю показывается именно его случай.
 
 Текст разбирается как Markdown, причём легаси-версия ломается на
 несбалансированных '*', '_', '[' и обратных кавычках, поэтому любые
@@ -26,7 +29,7 @@ from flask import current_app
 
 from ..core.db_utils import get_planning_session
 from app.models.planning_models import DebtReminderSubscription
-from . import gateway_client, receivables_service
+from . import receivables_service
 from .notification_client import NotificationServiceClient
 
 logger = logging.getLogger(__name__)
@@ -51,20 +54,37 @@ def get_subscription(username):
     return get_planning_session().query(DebtReminderSubscription).get(str(username))
 
 
-def resolve_recipient(username, users=None):
-    """Куда слать этому пользователю по данным шлюза.
+# Машинные коды отказа notification-service -> что делать пользователю.
+FAILURE_HINTS = {
+    'channel_not_linked': 'Telegram не подключён к порталу. Откройте личный кабинет '
+                          '(Безопасность → Подключить Telegram) и повторите проверку.',
+    'user_not_found': 'Ваш логин не найден на портале — обратитесь к администратору.',
+    'user_banned': 'Учётная запись заблокирована на портале.',
+    'no_address': 'В профиле портала не заполнен адрес для этого канала.',
+    'no_service_access': 'У вашей учётной записи нет ролей в этом сервисе — '
+                         'обратитесь к администратору портала.',
+    'auth_unavailable': 'Сервис авторизации сейчас недоступен, уведомление не создано. '
+                        'Попробуйте позже.',
+}
 
-    Результат кэшируем в подписке: рассылка не должна ходить в шлюз за каждым
-    сообщением, а при проверке связка перечитывается заново.
-    """
-    target = gateway_client.get_telegram_target(username, users)
 
-    subscription = get_subscription(username)
-    if subscription and target['chat_id'] != subscription.telegram_recipient:
-        subscription.telegram_recipient = target['chat_id']
-        get_planning_session().commit()
+def describe_failure(response):
+    """Причина отказа человеческим языком плюс сам код."""
+    payload = {}
+    if response is not None:
+        try:
+            payload = response.json() or {}
+        except ValueError:
+            payload = {}
 
-    return target
+    code = payload.get('failure_code')
+    hint = FAILURE_HINTS.get(code)
+    if hint:
+        return hint, code
+
+    detail = payload.get('error') or payload.get('message') or (
+        response.text[:200] if response is not None else '')
+    return (detail or 'Сервис уведомлений отклонил запрос.'), code
 
 
 def normalize_interval(value):
@@ -107,22 +127,22 @@ def set_active(username, manager_id=None, active=True, interval=None, notify_hou
     return subscription
 
 
-def subscription_status(username, manager_id=None, check_gateway=True):
-    """Состояние подписки и привязки Telegram для вкладки уведомлений."""
+def subscription_status(username, manager_id=None):
+    """Состояние подписки для вкладки уведомлений.
+
+    Заранее узнать, привязан ли Telegram, сервис не может — резолв живёт в
+    шлюзе. Поэтому показываем итог последней попытки: он и отвечает на вопрос
+    «доходит ли».
+    """
     subscription = get_subscription(username)
-    # Привязку перечитываем у шлюза: пользователь мог подключить Telegram
-    # только что, и страница должна показывать текущее положение дел.
-    target = resolve_recipient(username) if check_gateway else {
-        'chat_id': subscription.telegram_recipient if subscription else None,
-        'telegram_username': None, 'problem': None}
 
     return {
         'subscription': subscription,
         'active': bool(subscription and subscription.is_active),
-        'connected': bool(subscription and subscription.is_active and target['chat_id']),
-        'telegram_ready': bool(target['chat_id']),
-        'telegram_username': target['telegram_username'],
-        'telegram_problem': target['problem'],
+        'connected': bool(subscription and subscription.is_active
+                          and subscription.last_status == 'ok'),
+        'last_status': subscription.last_status if subscription else None,
+        'last_error': subscription.last_error if subscription else None,
         'interval': subscription.interval if subscription else DEFAULT_INTERVAL,
         'intervals': INTERVALS,
         'notify_hour': (subscription.notify_hour if subscription
@@ -226,33 +246,40 @@ TEST_TEXT = ('Проверка связи: уведомления о дебит�
              'Если вы видите это сообщение — всё работает.')
 
 
-def send_message(recipient, text, subject=REMINDER_SUBJECT):
-    """Отправляет сообщение и возвращает (успех, что ответил сервис).
+def send_message(login, text, subject=REMINDER_SUBJECT):
+    """Отправляет сообщение по логину. Возвращает (успех, детали).
 
-    Доставка асинхронная: сервис кладёт уведомление в очередь и отвечает id и
-    статусом pending. «Telegram не привязан» всплывёт уже там, статусом failed,
-    поэтому успех здесь означает только то, что очередь приняла сообщение.
+    Резолв адреса notification-service делает на приёме, поэтому отказ вида
+    «Telegram не привязан» приходит здесь же, синхронно, а не теряется в
+    очереди. Успех означает, что уведомление создано и поставлено в очередь.
     """
-    logger.info("Отправляю уведомление о дебиторке: recipient=%s", recipient)
+    logger.info("Отправляю уведомление о дебиторке: login=%s", login)
     try:
-        response = NotificationServiceClient().send_telegram(recipient, text, subject=subject)
+        response = NotificationServiceClient().send_telegram(login, text, subject=subject)
+    except requests.HTTPError as e:
+        # 400 и 503 несут машинный код отказа — по нему и объясняем.
+        reason, code = describe_failure(e.response)
+        logger.error("Уведомление для %s отклонено (%s): %s", login, code, reason)
+        return False, {'reason': reason, 'failure_code': code}
     except requests.RequestException as e:
-        logger.error("Не удалось отправить уведомление %s: %s", recipient, e)
-        return False, str(e)
+        logger.error("Сервис уведомлений недоступен (%s): %s", login, e)
+        return False, {'reason': f'Сервис уведомлений недоступен: {e}', 'failure_code': None}
     except Exception as e:
-        # Сервис мог ответить не-JSON или упасть иначе: для кнопки проверки
-        # важно показать причину, а не молча вернуть «не отправлено».
-        logger.exception("Ошибка отправки уведомления %s", recipient)
-        return False, str(e)
+        logger.exception("Ошибка отправки уведомления %s", login)
+        return False, {'reason': str(e), 'failure_code': None}
 
-    logger.info("Уведомление принято сервисом: recipient=%s, ответ=%s", recipient, response)
+    logger.info("Уведомление принято сервисом: login=%s, ответ=%s", login, response)
     return True, response
 
 
-def send_reminder(recipient, text):
-    """Совместимая обёртка: только признак успеха."""
-    ok, _detail = send_message(recipient, text)
-    return ok
+def remember_result(subscription, ok, detail):
+    """Запоминает итог последней отправки — вкладка показывает именно его."""
+    if not subscription:
+        return
+    subscription.last_status = 'ok' if ok else (
+        (detail or {}).get('failure_code') or 'error')
+    subscription.last_error = None if ok else (detail or {}).get('reason')
+    get_planning_session().commit()
 
 
 def is_due(subscription, now=None):
@@ -300,16 +327,7 @@ def send_due_reminders(now=None):
     sent = skipped = quiet = 0
 
     for subscription in due_subscriptions(now):
-        # Привязку спрашиваем у шлюза на каждой отправке: пользователь мог
-        # подключить Telegram уже после того, как включил напоминания.
-        target = resolve_recipient(subscription.username)
-        if not target['chat_id']:
-            logger.info("Напоминание для %s не отправлено: %s",
-                        subscription.username, target['problem'])
-            skipped += 1
-            continue
-
-        text = build_reminder_text(subscription.manager_id)
+        text = build_reminder_text(subscription.manager_id) if subscription.manager_id else None
         if not text:
             # Долгов нет — молчим, но отметку ставим, чтобы не пересчитывать
             # одно и то же на каждом круге.
@@ -317,7 +335,8 @@ def send_due_reminders(now=None):
             quiet += 1
             continue
 
-        ok, _detail = send_message(target['chat_id'], text)
+        ok, detail = send_message(subscription.username, text)
+        remember_result(subscription, ok, detail)
         if ok:
             mark_sent(subscription, now)
             sent += 1
@@ -330,14 +349,9 @@ def send_due_reminders(now=None):
 
 
 def send_test(username, today=None):
-    """Немедленная отправка по кнопке «Проверить». Возвращает (успех, текст).
-
-    Привязку спрашиваем у шлюза заново: пользователь мог подключить Telegram
-    минуту назад, и повторная проверка должна это увидеть без перезахода.
-    """
-    target = resolve_recipient(username)
-    if not target['chat_id']:
-        return False, target['problem'] or 'Telegram не подключён в личном кабинете портала.'
+    """Немедленная отправка по кнопке «Проверить». Возвращает (успех, текст)."""
+    if not username:
+        return False, 'Не удалось определить пользователя.'
 
     subscription = get_subscription(username)
     manager_id = subscription.manager_id if subscription else None
@@ -346,16 +360,16 @@ def send_test(username, today=None):
     # дебиторки.
     text = build_reminder_text(manager_id, today=today) if manager_id else None
     subject = REMINDER_SUBJECT if text else TEST_SUBJECT
-    ok, detail = send_message(target['chat_id'], text or TEST_TEXT, subject=subject)
+    ok, detail = send_message(username, text or TEST_TEXT, subject=subject)
+    remember_result(subscription, ok, detail)
 
     if not ok:
-        return False, f'Сервис уведомлений вернул ошибку: {detail}'
+        return False, detail.get('reason', 'Отправить не удалось.')
 
-    who = f"@{target['telegram_username']}" if target['telegram_username'] else target['chat_id']
     notification_id = detail.get('id') if isinstance(detail, dict) else None
-    message = f'Сообщение отправлено: {who}.'
+    message = 'Уведомление принято сервисом и поставлено в очередь.'
     if notification_id:
-        message += f' Номер уведомления: {notification_id}.'
-    message += (' Доставка асинхронная: если сообщение так и не пришло, посмотрите'
-                ' статус этого номера в сервисе уведомлений.')
+        message += f' Номер: {notification_id}.'
+    message += (' Если сообщение так и не пришло, посмотрите статус этого номера'
+                ' в сервисе уведомлений.')
     return True, message

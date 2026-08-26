@@ -414,10 +414,11 @@ class DebtReminderSubscription(db.Model):
 
     username = db.Column(db.String(255), primary_key=True)
     manager_id = db.Column(db.Integer, nullable=True, index=True)
-    # Кэш chat_id, полученного от шлюза: руками он не вводится, а рассылке
-    # незачем ходить в auth-service за каждым сообщением. Источник правды —
-    # привязка Telegram в личном кабинете портала.
-    telegram_recipient = db.Column(db.String(255), nullable=True)
+    # Итог последней отправки: 'ok' либо машинный код отказа от
+    # notification-service. Заранее узнать, привязан ли Telegram, сервис не
+    # может — резолв живёт в шлюзе, поэтому вкладка показывает именно результат.
+    last_status = db.Column(db.String(64), nullable=True)
+    last_error = db.Column(db.String(500), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     # Как часто напоминать: 'day' — раз в сутки, 'hour' — раз в час.
     interval = db.Column(db.String(16), nullable=False, default='day')

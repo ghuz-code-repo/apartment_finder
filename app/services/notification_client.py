@@ -41,9 +41,12 @@ class NotificationServiceClient:
         content_type: str = 'text/plain',
     ) -> dict:
         """Отправляет одно email-уведомление."""
+        # Рассылка идёт по адресам из справочника, а не по логинам портала,
+        # поэтому это external_recipient. Поле 'recipient' объявлено
+        # устаревшим и будет удалено.
         payload = {
             'type': 'email',
-            'recipient': recipient,
+            'external_recipient': recipient,
             'subject': subject,
             'content': content,
             'content_type': content_type,
@@ -63,24 +66,25 @@ class NotificationServiceClient:
         response.raise_for_status()
         return response.json()
 
-    def send_telegram(self, recipient: str, content: str, subject: Optional[str] = None) -> dict:
+    def send_telegram(self, login: str, content: str, subject: Optional[str] = None) -> dict:
         """Отправляет сообщение в Telegram через бота портала.
 
-        recipient — либо готовый chat_id (число), либо telegram-ник: ник
-        notification-service резолвит через auth-service, и это именно ник, а
-        не логин на портале. content_type не передаём: бот жёстко разбирает
-        текст как Markdown.
+        Получатель адресуется логином портала: chat_id по нему находит сам
+        notification-service через auth-service. Ник и chat_id у себя не
+        храним — это был бы второй источник правды.
+
+        content_type не передаём: бот разбирает текст как Markdown.
         """
         payload = {
             'type': 'telegram',
-            'recipient': recipient,
+            'login': login,
             'content': content,
         }
         if subject:
             # Заголовок бот выводит жирной первой строкой.
             payload['subject'] = subject
 
-        logger.info("Отправка telegram через notification-service: recipient=%s", recipient)
+        logger.info("Отправка telegram через notification-service: login=%s", login)
 
         response = requests.post(
             f"{self.base_url}/api/v1/notifications",
@@ -102,7 +106,7 @@ class NotificationServiceClient:
         notifications: List[dict] = [
             {
                 'type': 'email',
-                'recipient': r,
+                'external_recipient': r,
                 'subject': subject,
                 'content': content,
                 'content_type': content_type,

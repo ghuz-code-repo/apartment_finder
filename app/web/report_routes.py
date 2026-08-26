@@ -1136,8 +1136,8 @@ def download_project_passport_pptx(complex_name):
 def connect_debt_notifications():
     """Сохраняет настройки напоминаний.
 
-    Получателя не спрашиваем: Telegram у пользователя настроен в шлюзе, и
-    второй источник правды рано или поздно разошёлся бы с первым.
+    Получателя не спрашиваем: уведомление адресуется логином портала, а адрес
+    доставки резолвит сервис уведомлений.
     """
     username, _full_name = current_user_identity()
     subscription = debt_reminder_service.set_active(
@@ -1149,13 +1149,8 @@ def connect_debt_notifications():
     if not subscription:
         flash("Не удалось сохранить настройки: не распознан пользователь.", "danger")
     else:
-        target = debt_reminder_service.resolve_recipient(username)
-        if target['chat_id']:
-            flash("Настройки сохранены. Нажмите «Проверить», чтобы убедиться, "
-                  "что сообщение доходит.", "success")
-        else:
-            flash(f"Настройки сохранены, но отправлять пока некуда. {target['problem']}",
-                  "warning")
+        flash("Настройки сохранены. Нажмите «Проверить», чтобы убедиться, "
+              "что сообщение доходит.", "success")
 
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
 
