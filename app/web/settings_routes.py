@@ -137,10 +137,11 @@ def manage_email_recipients():
 @login_required
 @permission_required('managers_links_manage')
 def manage_manager_links():
-    """Ручное сопоставление логинов с менеджерами CRM.
+    """Сопоставление пользователей портала с менеджерами CRM.
 
-    Пользователей отдаёт шлюз, и списка их у нас нет — поэтому связка заводится
-    от менеджера: админ вписывает логин напротив нужного человека.
+    Список пользователей сервиса берём в шлюзе и предлагаем выбрать из него:
+    логин, вписанный руками, при опечатке давал связку, которая молча ни с кем
+    не совпадала.
     """
     if request.method == 'POST':
         action = request.form.get('action')
@@ -161,9 +162,11 @@ def manage_manager_links():
                                 q=request.args.get('q') or None))
 
     search_query = request.args.get('q', '')
+    data = manager_link_service.list_managers_with_gateway_users(search_query)
     return render_template(
         'settings/manager_links.html',
         title="Связка менеджеров с пользователями",
-        rows=manager_link_service.list_managers_with_links(search_query),
+        rows=data['rows'],
+        gateway_available=data['gateway_available'],
         search_query=search_query
     )

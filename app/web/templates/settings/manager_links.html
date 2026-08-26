@@ -12,6 +12,11 @@
 
 <div class="card card-glass mb-4">
     <div class="card-body">
+        {% if not gateway_available %}
+        <div class="alert alert-warning">
+            {{ _('Список пользователей из шлюза получить не удалось: проверьте INTERNAL_API_KEY и доступность auth-service. Пока список пуст, связать пользователя не получится.') }}
+        </div>
+        {% endif %}
         <form method="GET" class="row g-2 align-items-end">
             <div class="col-md-6">
                 <label for="q" class="form-label">{{ _('Поиск по ФИО менеджера') }}</label>
@@ -66,13 +71,32 @@
                             {% endfor %}
                         </td>
                         <td>
+                            {# Логин выбирается из пользователей сервиса в шлюзе:
+                               так его нельзя опечатать, и сразу видно ФИО. #}
                             <form method="POST" class="d-flex gap-2">
                                 <input type="hidden" name="action" value="link">
                                 <input type="hidden" name="manager_id" value="{{ row.manager.id }}">
-                                <input type="text" class="form-control form-control-sm" name="username"
-                                       placeholder="{{ _('логин в системе') }}" required>
-                                <button type="submit" class="btn btn-sm btn-golden-outline">
-                                    <i class="bi bi-link-45deg"></i>
+                                <select class="form-select form-select-sm" name="username" required>
+                                    <option value="">{{ _('Выберите пользователя...') }}</option>
+                                    {% if row.candidates.exact %}
+                                    <optgroup label="{{ _('Совпадают по ФИО') }}">
+                                        {% for user in row.candidates.exact %}
+                                        <option value="{{ user.username }}">
+                                            {{ user.full_name or user.username }} ({{ user.username }})
+                                        </option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    {% endif %}
+                                    <optgroup label="{{ _('Остальные пользователи') }}">
+                                        {% for user in row.candidates.others %}
+                                        <option value="{{ user.username }}">
+                                            {{ user.full_name or user.username }} ({{ user.username }})
+                                        </option>
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary text-nowrap">
+                                    {{ _('Связать') }}
                                 </button>
                             </form>
                         </td>

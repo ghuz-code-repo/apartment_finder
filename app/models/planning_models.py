@@ -414,9 +414,9 @@ class DebtReminderSubscription(db.Model):
 
     username = db.Column(db.String(255), primary_key=True)
     manager_id = db.Column(db.Integer, nullable=True, index=True)
-    # Кому слать: telegram-ник или готовый chat_id. Портал резолвит именно ник
-    # (поле telegram_username в auth-service), а не логин, поэтому храним его
-    # у себя — как справочник получателей рядом с email-рассылкой.
+    # Кэш chat_id, полученного от шлюза: руками он не вводится, а рассылке
+    # незачем ходить в auth-service за каждым сообщением. Источник правды —
+    # привязка Telegram в личном кабинете портала.
     telegram_recipient = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     # Как часто напоминать: 'day' — раз в сутки, 'hour' — раз в час.

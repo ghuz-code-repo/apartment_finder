@@ -203,20 +203,15 @@
                 {{ _('Бот портала присылает в Telegram просроченную и ближайшую дебиторку по вашим сделкам.') }}
             </p>
 
-            {% if not notifications.manager_linked %}
-            <div class="alert alert-warning mb-0">
-                {{ _('Ваша учётная запись не сопоставлена с менеджером в CRM — напоминать будет не о чем. Обратитесь к администратору.') }}
-            </div>
-            {% else %}
-            <div class="alert alert-secondary py-2 small">
-                {{ _('Сообщения отправляет общий бот портала — отдельного подключать не нужно. Чтобы он вас нашёл, привяжите Telegram в личном кабинете портала (Безопасность → Подключить Telegram) и укажите здесь тот же ник.') }}
-            </div>
-
-            {% if notifications.connected %}
+            {# Ник нигде не вводится: Telegram настраивается один раз в личном
+               кабинете портала, а сюда привязка приезжает готовой. #}
+            {% if notifications.telegram_ready %}
             <div class="alert alert-success d-flex flex-wrap gap-2 align-items-center">
                 <span>
-                    <i class="bi bi-check-circle me-2"></i>{{ _('Напоминания включены.') }}
-                    {{ _('Получатель:') }} <strong>{{ notifications.recipient }}</strong>
+                    <i class="bi bi-telegram me-2"></i>{{ _('Telegram подключён') }}
+                    {% if notifications.telegram_username %}
+                    — <strong>@{{ notifications.telegram_username }}</strong>
+                    {% endif %}
                 </span>
                 {% if notifications.last_sent_at %}
                 <span class="text-muted small ms-auto">
@@ -226,18 +221,22 @@
                 <span class="text-muted small ms-auto">{{ _('Ещё ни разу не отправлялось.') }}</span>
                 {% endif %}
             </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <div><i class="bi bi-exclamation-triangle me-2"></i>{{ notifications.telegram_problem }}</div>
+                <div class="small mt-2">
+                    {{ _('Подключение делается один раз в личном кабинете портала — здесь ник вводить не нужно. После подключения нажмите «Проверить».') }}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not notifications.manager_linked %}
+            <div class="alert alert-secondary py-2 small">
+                {{ _('Ваша учётная запись не сопоставлена с менеджером в CRM, поэтому дебиторка не определяется и напоминать пока не о чем. Проверочное сообщение при этом отправить можно.') }}
+            </div>
             {% endif %}
 
             <form method="POST" action="{{ url_for('report.connect_debt_notifications') }}" class="row g-3 align-items-end mb-3">
-                <div class="col-md-4">
-                    <label for="telegram_recipient" class="form-label">
-                        {{ _('Telegram-ник или chat_id') }}
-                    </label>
-                    <input type="text" class="form-control" id="telegram_recipient" name="telegram_recipient"
-                           value="{{ notifications.recipient or '' }}" placeholder="ivanov_gh" required>
-                    <div class="form-text">{{ _('Ник — тот, что указан в Telegram, без «собачки».') }}</div>
-                </div>
-
                 <div class="col-md-3">
                     <label for="interval" class="form-label">{{ _('Как часто напоминать') }}</label>
                     <select class="form-select" id="interval" name="interval">
@@ -247,8 +246,8 @@
                     </select>
                 </div>
 
-                {# Час нужен только дневному режиму — часовой шлёт раз в час от
-                   момента прошлой отправки. #}
+                {# Час нужен только дневному режиму — часовой считает время от
+                   прошлой отправки. #}
                 <div class="col-md-2" id="notify-hour-field">
                     <label for="notify_hour" class="form-label">{{ _('Не раньше') }}</label>
                     <select class="form-select" id="notify_hour" name="notify_hour">
@@ -260,10 +259,10 @@
                     </select>
                 </div>
 
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-7 d-flex flex-wrap gap-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-save me-2"></i>
-                        {% if notifications.connected %}{{ _('Сохранить') }}{% else %}{{ _('Включить') }}{% endif %}
+                        {% if notifications.active %}{{ _('Сохранить') }}{% else %}{{ _('Включить напоминания') }}{% endif %}
                     </button>
                 </div>
             </form>
@@ -275,7 +274,7 @@
                     </button>
                 </form>
 
-                {% if notifications.connected %}
+                {% if notifications.active %}
                 <form method="POST" action="{{ url_for('report.disconnect_debt_notifications') }}">
                     <button type="submit" class="btn btn-outline-danger">
                         <i class="bi bi-bell-slash me-2"></i>{{ _('Отключить напоминания') }}
@@ -284,9 +283,8 @@
                 {% endif %}
             </div>
             <div class="form-text mt-2">
-                {{ _('Проверка отправляет сообщение сразу, минуя расписание, и показывает ответ сервиса уведомлений. Если дебиторки нет, придёт короткое проверочное сообщение.') }}
+                {{ _('Проверка перечитывает привязку в шлюзе и отправляет сообщение сразу, минуя расписание, а затем показывает ответ сервиса уведомлений. Если дебиторки нет, придёт короткое проверочное сообщение.') }}
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
