@@ -200,8 +200,7 @@
         <div class="card-body">
             <h5 class="mb-1"><i class="bi bi-bell me-2"></i>{{ _('Напоминания о дебиторке') }}</h5>
             <p class="text-muted">
-                {{ _('Раз в день бот портала пришлёт в Telegram просроченную и ближайшую дебиторку по вашим сделкам.') }}
-                {{ _('Отправка — не раньше') }} {{ '%02d:00'|format(notifications.notify_hour) }}.
+                {{ _('Бот портала присылает в Telegram просроченную и ближайшую дебиторку по вашим сделкам.') }}
             </p>
 
             {% if not notifications.manager_linked %}
@@ -214,14 +213,23 @@
             </div>
 
             {% if notifications.connected %}
-            <div class="alert alert-success">
-                <i class="bi bi-check-circle me-2"></i>{{ _('Напоминания включены.') }}
-                {{ _('Получатель:') }} <strong>{{ notifications.recipient }}</strong>
+            <div class="alert alert-success d-flex flex-wrap gap-2 align-items-center">
+                <span>
+                    <i class="bi bi-check-circle me-2"></i>{{ _('Напоминания включены.') }}
+                    {{ _('Получатель:') }} <strong>{{ notifications.recipient }}</strong>
+                </span>
+                {% if notifications.last_sent_at %}
+                <span class="text-muted small ms-auto">
+                    {{ _('Последняя отправка:') }} {{ notifications.last_sent_at.strftime('%d.%m.%Y %H:%M') }}
+                </span>
+                {% else %}
+                <span class="text-muted small ms-auto">{{ _('Ещё ни разу не отправлялось.') }}</span>
+                {% endif %}
             </div>
             {% endif %}
 
-            <form method="POST" action="{{ url_for('report.connect_debt_notifications') }}" class="row g-2 align-items-end mb-3">
-                <div class="col-md-5">
+            <form method="POST" action="{{ url_for('report.connect_debt_notifications') }}" class="row g-3 align-items-end mb-3">
+                <div class="col-md-4">
                     <label for="telegram_recipient" class="form-label">
                         {{ _('Telegram-ник или chat_id') }}
                     </label>
@@ -229,21 +237,55 @@
                            value="{{ notifications.recipient or '' }}" placeholder="ivanov_gh" required>
                     <div class="form-text">{{ _('Ник — тот, что указан в Telegram, без «собачки».') }}</div>
                 </div>
-                <div class="col-auto">
+
+                <div class="col-md-3">
+                    <label for="interval" class="form-label">{{ _('Как часто напоминать') }}</label>
+                    <select class="form-select" id="interval" name="interval">
+                        {% for code, title in notifications.intervals %}
+                        <option value="{{ code }}" {% if code == notifications.interval %}selected{% endif %}>{{ _(title) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {# Час нужен только дневному режиму — часовой шлёт раз в час от
+                   момента прошлой отправки. #}
+                <div class="col-md-2" id="notify-hour-field">
+                    <label for="notify_hour" class="form-label">{{ _('Не раньше') }}</label>
+                    <select class="form-select" id="notify_hour" name="notify_hour">
+                        {% for hour in range(24) %}
+                        <option value="{{ hour }}" {% if hour == notifications.notify_hour %}selected{% endif %}>
+                            {{ '%02d:00'|format(hour) }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-3 d-flex gap-2">
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-bell me-2"></i>
-                        {% if notifications.connected %}{{ _('Сохранить') }}{% else %}{{ _('Включить напоминания') }}{% endif %}
+                        <i class="bi bi-save me-2"></i>
+                        {% if notifications.connected %}{{ _('Сохранить') }}{% else %}{{ _('Включить') }}{% endif %}
                     </button>
                 </div>
             </form>
 
-            {% if notifications.connected %}
-            <form method="POST" action="{{ url_for('report.disconnect_debt_notifications') }}">
-                <button type="submit" class="btn btn-outline-danger">
-                    <i class="bi bi-bell-slash me-2"></i>{{ _('Отключить напоминания') }}
-                </button>
-            </form>
-            {% endif %}
+            <div class="d-flex flex-wrap gap-2">
+                <form method="POST" action="{{ url_for('report.test_debt_notifications') }}">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-send me-2"></i>{{ _('Проверить — отправить сейчас') }}
+                    </button>
+                </form>
+
+                {% if notifications.connected %}
+                <form method="POST" action="{{ url_for('report.disconnect_debt_notifications') }}">
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="bi bi-bell-slash me-2"></i>{{ _('Отключить напоминания') }}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="form-text mt-2">
+                {{ _('Проверка отправляет сообщение сразу, минуя расписание, и показывает ответ сервиса уведомлений. Если дебиторки нет, придёт короткое проверочное сообщение.') }}
+            </div>
             {% endif %}
         </div>
     </div>
@@ -304,9 +346,22 @@
 // без этого менеджер приземлялся бы обратно на «Планы» и не видел результат.
 document.addEventListener('DOMContentLoaded', function () {
     const target = window.location.hash;
-    if (!target) return;
-    const trigger = document.querySelector('[data-bs-target="' + target + '"]');
-    if (trigger) new bootstrap.Tab(trigger).show();
+    if (target) {
+        const trigger = document.querySelector('[data-bs-target="' + target + '"]');
+        if (trigger) new bootstrap.Tab(trigger).show();
+    }
+
+    // Час отправки имеет смысл только для ежедневного режима: часовой считает
+    // время от прошлой отправки, и выбранный час на него не влияет.
+    const interval = document.getElementById('interval');
+    const hourField = document.getElementById('notify-hour-field');
+    if (interval && hourField) {
+        const toggleHour = function () {
+            hourField.style.display = interval.value === 'hour' ? 'none' : '';
+        };
+        interval.addEventListener('change', toggleHour);
+        toggleHour();
+    }
 });
 </script>
 {% endblock %}

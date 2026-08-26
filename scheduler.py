@@ -7,7 +7,6 @@ from app import create_app
 from app.core.config import DevelopmentConfig
 # <<< ИЗМЕНЕНО: Импортируем функцию инкрементного обновления >>>
 from app.services.initial_load_service import incremental_update_from_mysql
-from app.services import debt_reminder_service
 
 # Создаем экземпляр приложения Flask, чтобы получить доступ к его контексту
 app = create_app(DevelopmentConfig)
@@ -58,20 +57,6 @@ def run_scheduler():
             if os.path.exists(LOCK_FILE_PATH):
                 os.remove(LOCK_FILE_PATH)
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ✅ База данных разблокирована.")
-
-        # --- ШАГ 4: Напоминания о дебиторке ---
-        # После снятия блокировки: рассылка читает те же данные и держать ради
-        # неё базу заблокированной незачем. Сервис сам смотрит, чей это час и не
-        # отправляли ли уже сегодня, поэтому проверяем на каждом круге.
-        try:
-            with app.app_context():
-                result = debt_reminder_service.send_due_reminders()
-            if result['sent']:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
-                      f"Напоминаний о дебиторке отправлено: {result['sent']}")
-        except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
-                  f"Ошибка рассылки напоминаний: {e}")
 
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Следующее обновление через 75 минут...")
         time.sleep(SLEEP_INTERVAL)

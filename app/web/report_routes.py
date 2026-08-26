@@ -1144,14 +1144,31 @@ def connect_debt_notifications():
 
     subscription = debt_reminder_service.set_active(
         username, manager_link_service.current_manager_id(),
-        active=True, recipient=recipient)
+        active=True, recipient=recipient,
+        interval=request.form.get('interval'),
+        notify_hour=request.form.get('notify_hour'))
 
     if not subscription:
         flash("Не удалось включить напоминания: не распознан пользователь.", "danger")
     else:
-        flash("Напоминания включены. Если бот молчит — проверьте, что Telegram "
-              "привязан в личном кабинете портала и ник указан верно.", "success")
+        flash("Настройки сохранены. Если бот молчит — нажмите «Проверить»: "
+              "она отправит сообщение сразу и покажет ответ сервиса.", "success")
 
+    return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
+
+
+@report_bp.route('/manager-notifications/test', methods=['POST'])
+@login_required
+@permission_required('managers_receivables_view')
+def test_debt_notifications():
+    """Отправляет уведомление немедленно и показывает ответ сервиса.
+
+    Нужна как раз для случая «ничего не приходит»: отделяет проблему настройки
+    от проблемы доставки, не дожидаясь ближайшей рассылки.
+    """
+    username, _full_name = current_user_identity()
+    ok, message = debt_reminder_service.send_test(username)
+    flash(message, "success" if ok else "danger")
     return redirect(url_for('report.manager_performance_report', _anchor='notifications-pane'))
 
 

@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 # Сколько строк графика показываем в сообщении: остальное менеджер смотрит в отчёте.
 REMINDER_ROWS_LIMIT = 5
 
+# Как часто напоминать. Ключ пишется в подписку, подпись идёт во вкладку.
+INTERVALS = (
+    ('day', 'Раз в день'),
+    ('hour', 'Раз в час'),
+)
+DEFAULT_INTERVAL = 'day'
+
 
 # --- Подписка ---
 
@@ -58,8 +65,23 @@ def normalize_recipient(value):
     return value.lstrip('@')
 
 
-def set_active(username, manager_id=None, active=True, recipient=None):
-    """Включает или выключает напоминания для пользователя."""
+def normalize_interval(value):
+    """Интервал из формы. Незнакомое значение -> ежедневно."""
+    return value if value in dict(INTERVALS) else DEFAULT_INTERVAL
+
+
+def normalize_hour(value, fallback=None):
+    """Час отправки 0-23. Мусор -> текущее значение или общий из конфига."""
+    try:
+        hour = int(value)
+    except (TypeError, ValueError):
+        return fallback if fallback is not None else current_app.config.get('DEBT_REMINDER_HOUR', 9)
+    return hour if 0 <= hour <= 23 else 0
+
+
+def set_active(username, manager_id=None, active=True, recipient=None,
+               interval=None, notify_hour=None):
+    """Создаёт или обновляет подписку пользователя."""
     username = (username or '').strip()
     if not username:
         return None
@@ -67,10 +89,9 @@ def set_active(username, manager_id=None, active=True, recipient=None):
     planning_session = get_planning_session()
     subscription = planning_session.query(DebtReminderSubscription).get(username)
     if not subscription:
-        # Час рассылки общий и берётся из конфига: персональное время пока
-        # никто не просил, а поле в модели оставляет такую возможность.
         subscription = DebtReminderSubscription(
             username=username,
+            interval=DEFAULT_INTERVAL,
             notify_hour=current_app.config.get('DEBT_REMINDER_HOUR', 9))
         planning_session.add(subscription)
 
@@ -78,6 +99,10 @@ def set_active(username, manager_id=None, active=True, recipient=None):
         subscription.manager_id = manager_id
     if recipient is not None:
         subscription.telegram_recipient = normalize_recipient(recipient)
+    if interval is not None:
+        subscription.interval = normalize_interval(interval)
+    if notify_hour is not None:
+        subscription.notify_hour = normalize_hour(notify_hour, subscription.notify_hour)
     subscription.is_active = bool(active)
     planning_session.commit()
     return subscription
@@ -91,8 +116,11 @@ def subscription_status(username, manager_id=None):
         'connected': bool(subscription and subscription.is_active
                           and subscription.telegram_recipient),
         'recipient': subscription.telegram_recipient if subscription else None,
+        'interval': subscription.interval if subscription else DEFAULT_INTERVAL,
+        'intervals': INTERVALS,
         'notify_hour': (subscription.notify_hour if subscription
                         else current_app.config.get('DEBT_REMINDER_HOUR', 9)),
+        'last_sent_at': subscription.last_sent_at if subscription else None,
         'manager_linked': bool(manager_id),
     }
 
@@ -184,62 +212,127 @@ def build_reminder_text(manager_id, today=None):
 
 # --- Отправка ---
 
-def send_reminder(recipient, text):
-    """Отправляет напоминание через notification-service.
+# Текст проверочного сообщения: кнопка «Проверить» должна доказать доставку
+# даже тогда, когда напоминать не о чем.
+TEST_SUBJECT = 'Проверка уведомлений'
+TEST_TEXT = ('Проверка связи: уведомления о дебиторке настроены и доходят.\n'
+             'Если вы видите это сообщение — всё работает.')
 
-    Фактическая доставка асинхронная: сервис кладёт уведомление в очередь, и
-    'не привязан Telegram' всплывёт уже там, статусом failed. Здесь ловим
-    только отказ самого сервиса.
+
+def send_message(recipient, text, subject=REMINDER_SUBJECT):
+    """Отправляет сообщение и возвращает (успех, что ответил сервис).
+
+    Доставка асинхронная: сервис кладёт уведомление в очередь и отвечает id и
+    статусом pending. «Telegram не привязан» всплывёт уже там, статусом failed,
+    поэтому успех здесь означает только то, что очередь приняла сообщение.
     """
+    logger.info("Отправляю уведомление о дебиторке: recipient=%s", recipient)
     try:
-        NotificationServiceClient().send_telegram(recipient, text, subject=REMINDER_SUBJECT)
-        return True
+        response = NotificationServiceClient().send_telegram(recipient, text, subject=subject)
     except requests.RequestException as e:
-        logger.error("Не удалось отправить напоминание %s: %s", recipient, e)
+        logger.error("Не удалось отправить уведомление %s: %s", recipient, e)
+        return False, str(e)
+    except Exception as e:
+        # Сервис мог ответить не-JSON или упасть иначе: для кнопки проверки
+        # важно показать причину, а не молча вернуть «не отправлено».
+        logger.exception("Ошибка отправки уведомления %s", recipient)
+        return False, str(e)
+
+    logger.info("Уведомление принято сервисом: recipient=%s, ответ=%s", recipient, response)
+    return True, response
+
+
+def send_reminder(recipient, text):
+    """Совместимая обёртка: только признак успеха."""
+    ok, _detail = send_message(recipient, text)
+    return ok
+
+
+def is_due(subscription, now=None):
+    """Пора ли отправлять этой подписке.
+
+    Дневной режим: не раньше назначенного часа и не повторно за сутки. Час
+    сравнивается как «не раньше», иначе редкий обход мог перешагнуть его целиком.
+    Часовой режим: прошёл час с прошлой отправки.
+    """
+    now = now or datetime.now()
+
+    # Без получателя слать некуда: уведомление ушло бы в failed.
+    if not subscription.is_active or not subscription.telegram_recipient:
         return False
+
+    if subscription.interval == 'hour':
+        last = subscription.last_sent_at
+        return last is None or (now - last).total_seconds() >= 3600
+
+    return (now.hour >= (subscription.notify_hour or 0)
+            and subscription.last_sent_date != now.date())
 
 
 def due_subscriptions(now=None):
-    """Кому пора отправлять напоминание прямо сейчас.
-
-    notify_hour — это «не раньше», а не «ровно в». Планировщик спит 75 минут,
-    это дольше часа, и при точном сравнении часа его круги могли перешагнуть
-    назначенный час целиком (например, 08:50 и 10:05) — тогда напоминание за
-    день не уходило вовсе. Раз в день его удерживает отметка last_sent_date.
-    """
+    """Кому пора отправлять напоминание прямо сейчас."""
     now = now or datetime.now()
     planning_session = get_planning_session()
     return [
         subscription
         for subscription in planning_session.query(DebtReminderSubscription).filter_by(is_active=True).all()
-        # Без получателя слать некуда: уведомление ушло бы в failed.
-        if subscription.telegram_recipient
-        and now.hour >= subscription.notify_hour
-        and subscription.last_sent_date != now.date()
+        if is_due(subscription, now)
     ]
 
 
-def mark_sent(subscription, sent_date=None):
-    """Помечает, что напоминание за сегодня ушло."""
-    subscription.last_sent_date = sent_date or date.today()
+def mark_sent(subscription, now=None):
+    """Помечает, что уведомление отправлено."""
+    now = now or datetime.now()
+    subscription.last_sent_at = now
+    subscription.last_sent_date = now.date()
     get_planning_session().commit()
 
 
 def send_due_reminders(now=None):
-    """Рассылает напоминания тем, у кого настал их час. Возвращает счётчики."""
-    sent = skipped = 0
+    """Рассылает напоминания тем, кому пора. Возвращает счётчики."""
+    now = now or datetime.now()
+    sent = skipped = quiet = 0
+
     for subscription in due_subscriptions(now):
         text = build_reminder_text(subscription.manager_id)
         if not text:
-            # Долгов нет — молчим, но день отмечаем, чтобы не пересчитывать.
-            mark_sent(subscription)
-            skipped += 1
+            # Долгов нет — молчим, но отметку ставим, чтобы не пересчитывать
+            # одно и то же на каждом круге.
+            mark_sent(subscription, now)
+            quiet += 1
             continue
 
-        if send_reminder(subscription.telegram_recipient, text):
-            mark_sent(subscription)
+        ok, _detail = send_message(subscription.telegram_recipient, text)
+        if ok:
+            mark_sent(subscription, now)
             sent += 1
         else:
             skipped += 1
 
-    return {'sent': sent, 'skipped': skipped}
+    logger.info("Рассылка дебиторки: отправлено=%s, без долгов=%s, ошибок=%s",
+                sent, quiet, skipped)
+    return {'sent': sent, 'quiet': quiet, 'skipped': skipped}
+
+
+def send_test(username, today=None):
+    """Немедленная отправка по кнопке «Проверить». Возвращает (успех, текст)."""
+    subscription = get_subscription(username)
+    if not subscription or not subscription.telegram_recipient:
+        return False, 'Сначала укажите telegram-ник или chat_id и сохраните настройки.'
+
+    # Если долгов нет, всё равно шлём: кнопка проверяет доставку, а не наличие
+    # дебиторки.
+    text = build_reminder_text(subscription.manager_id, today=today)
+    subject = REMINDER_SUBJECT if text else TEST_SUBJECT
+    ok, detail = send_message(subscription.telegram_recipient, text or TEST_TEXT, subject=subject)
+
+    if not ok:
+        return False, f'Сервис уведомлений вернул ошибку: {detail}'
+
+    notification_id = detail.get('id') if isinstance(detail, dict) else None
+    message = f'Сообщение отправлено получателю {subscription.telegram_recipient}.'
+    if notification_id:
+        message += f' Номер уведомления: {notification_id}.'
+    message += (' Доставка асинхронная: если сообщение не пришло, проверьте, что'
+                ' Telegram привязан в личном кабинете портала и ник указан верно.')
+    return True, message
