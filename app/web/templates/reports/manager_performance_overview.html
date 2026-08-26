@@ -201,32 +201,30 @@
             <h5 class="mb-1"><i class="bi bi-bell me-2"></i>{{ _('Напоминания о дебиторке') }}</h5>
             <p class="text-muted">
                 {{ _('Бот портала присылает в Telegram просроченную и ближайшую дебиторку по вашим сделкам.') }}
+                {{ _('Ник указывать не нужно: сообщение адресуется вашей учётной записью, а куда его доставить, портал знает сам.') }}
             </p>
 
-            {# Ник нигде не вводится: Telegram настраивается один раз в личном
-               кабинете портала, а сюда привязка приезжает готовой. #}
-            {% if notifications.telegram_ready %}
+            {# Заранее сказать, привязан ли Telegram, сервис не может: резолв
+               живёт в шлюзе. Поэтому показываем итог последней попытки. #}
+            {% if notifications.last_status == 'ok' %}
             <div class="alert alert-success d-flex flex-wrap gap-2 align-items-center">
-                <span>
-                    <i class="bi bi-telegram me-2"></i>{{ _('Telegram подключён') }}
-                    {% if notifications.telegram_username %}
-                    — <strong>@{{ notifications.telegram_username }}</strong>
-                    {% endif %}
-                </span>
+                <span><i class="bi bi-check-circle me-2"></i>{{ _('Последняя отправка прошла успешно.') }}</span>
                 {% if notifications.last_sent_at %}
                 <span class="text-muted small ms-auto">
-                    {{ _('Последняя отправка:') }} {{ notifications.last_sent_at.strftime('%d.%m.%Y %H:%M') }}
+                    {{ notifications.last_sent_at.strftime('%d.%m.%Y %H:%M') }}
                 </span>
-                {% else %}
-                <span class="text-muted small ms-auto">{{ _('Ещё ни разу не отправлялось.') }}</span>
+                {% endif %}
+            </div>
+            {% elif notifications.last_error %}
+            <div class="alert alert-warning">
+                <div><i class="bi bi-exclamation-triangle me-2"></i>{{ notifications.last_error }}</div>
+                {% if notifications.last_status %}
+                <div class="small text-muted mt-1">{{ _('Код отказа:') }} {{ notifications.last_status }}</div>
                 {% endif %}
             </div>
             {% else %}
-            <div class="alert alert-warning">
-                <div><i class="bi bi-exclamation-triangle me-2"></i>{{ notifications.telegram_problem }}</div>
-                <div class="small mt-2">
-                    {{ _('Подключение делается один раз в личном кабинете портала — здесь ник вводить не нужно. После подключения нажмите «Проверить».') }}
-                </div>
+            <div class="alert alert-secondary py-2 small">
+                {{ _('Отправок ещё не было. Нажмите «Проверить» — сообщение уйдёт сразу, и станет видно, доходит ли оно.') }}
             </div>
             {% endif %}
 
@@ -259,7 +257,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-7 d-flex flex-wrap gap-2">
+                <div class="col-md-7">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-save me-2"></i>
                         {% if notifications.active %}{{ _('Сохранить') }}{% else %}{{ _('Включить напоминания') }}{% endif %}
@@ -283,7 +281,7 @@
                 {% endif %}
             </div>
             <div class="form-text mt-2">
-                {{ _('Проверка перечитывает привязку в шлюзе и отправляет сообщение сразу, минуя расписание, а затем показывает ответ сервиса уведомлений. Если дебиторки нет, придёт короткое проверочное сообщение.') }}
+                {{ _('Проверка отправляет сообщение сразу, минуя расписание. Портал отвечает синхронно, поэтому причину отказа — например, что Telegram не подключён в личном кабинете — видно тут же.') }}
             </div>
         </div>
     </div>
