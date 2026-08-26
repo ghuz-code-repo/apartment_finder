@@ -419,10 +419,14 @@ class DebtReminderSubscription(db.Model):
     # у себя — как справочник получателей рядом с email-рассылкой.
     telegram_recipient = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=False)
-    # Час отправки напоминания по времени сервера.
+    # Как часто напоминать: 'day' — раз в сутки, 'hour' — раз в час.
+    interval = db.Column(db.String(16), nullable=False, default='day')
+    # Час отправки для ежедневного режима, по времени сервера.
     notify_hour = db.Column(db.Integer, nullable=False, default=9)
-    # Когда последний раз отправляли — чтобы не слать по второму разу за день.
+    # Когда последний раз отправляли. Дата нужна для дневного режима, время —
+    # для часового; храним оба, чтобы смена интервала не путала счёт.
     last_sent_date = db.Column(db.Date, nullable=True)
+    last_sent_at = db.Column(db.DateTime, nullable=True)
 
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())

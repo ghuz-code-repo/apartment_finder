@@ -45,6 +45,38 @@ services:
       - "api.macrocrm.gh.uz:${MACRO_API_HOST_IP:-172.16.0.199}"
       - "macrocrm.gh.uz:${MACRO_FILES_HOST_IP:-172.16.0.199}"
 
+  # Рассылка напоминаний о дебиторке.
+  # Отдельным процессом, потому что gunicorn ничего по расписанию не делает, а
+  # держать таймер в веб-воркерах нельзя: их несколько, и каждый слал бы своё.
+  # Образ тот же, отличается только команда.
+  reminder-worker:
+    build:
+      context: ..
+      dockerfile: apartment_finder/Dockerfile
+    container_name: apartment-finder-reminders
+    command: ["python", "reminder_worker.py"]
+    env_file:
+      - .env
+    depends_on:
+      - finder
+    volumes:
+      - ./instance:/app/instance
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      # Наружу воркеру не нужно: письма и Telegram уходят через
+      # notification-service внутри service_network. MySQL Macro живёт в
+      # egress_network — оттуда берётся сама дебиторка.
+      - service_network
+      - egress_network
+    extra_hosts:
+      - "api.macrocrm.gh.uz:${MACRO_API_HOST_IP:-172.16.0.199}"
+      - "macrocrm.gh.uz:${MACRO_FILES_HOST_IP:-172.16.0.199}"
+
 volumes:
   mysql_data:
 
