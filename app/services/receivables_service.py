@@ -4,12 +4,14 @@
 Источник — график платежей в Macro: строки finances со статусом «К оплате».
 Срок платежа лежит в date_to, поэтому просрочка и ближайшие платежи считаются
 от сегодняшней даты, а не от даты создания операции.
+
+Бронь и возвраты из графика исключаются: это не долг клиента по договору.
 """
 
 from datetime import date, timedelta
 
 from flask import current_app
-from sqlalchemy.orm import joinedload
+from sqlalchemy import or_
 
 from ..core.dates import to_date
 from ..core.db_utils import get_mysql_session
@@ -18,6 +20,12 @@ from app.models.finance_models import FinanceOperation
 
 # Статус строки графика, которая ещё не оплачена.
 PENDING_STATUS = 'К оплате'
+# Долгом клиента такие строки не являются: бронь — это обеспечительный платёж,
+# а возврат идёт в обратную сторону.
+EXCLUDED_PAYMENT_TYPES = [
+    'Возврат поступлений при отмене сделки',
+    'Бронь',
+]
 # Горизонт «ближайшей» дебиторки по умолчанию.
 DEFAULT_HORIZON_DAYS = 30
 
@@ -76,6 +84,10 @@ def get_manager_receivables(manager_id, horizon_days=DEFAULT_HORIZON_DAYS, today
         EstateHouse, EstateSell.house_id == EstateHouse.id
     ).filter(
         FinanceOperation.status_name == PENDING_STATUS,
+        # NOT IN отбрасывает и строки с пустым типом, а это обычные платежи
+        # графика — их нужно оставить, поэтому NULL разрешаем явно.
+        or_(FinanceOperation.payment_type.is_(None),
+            FinanceOperation.payment_type.notin_(EXCLUDED_PAYMENT_TYPES)),
         FinanceOperation.date_to.isnot(None),
         # Граница — начало следующего дня: у датой-временем платёж последнего
         # дня горизонта иначе отсекается по времени суток.
