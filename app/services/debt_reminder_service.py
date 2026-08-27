@@ -29,7 +29,7 @@ from flask import current_app
 
 from ..core.db_utils import get_planning_session
 from app.models.planning_models import DebtReminderSubscription
-from . import receivables_service
+from . import gateway_client, manager_link_service, receivables_service
 from .notification_client import NotificationServiceClient
 
 logger = logging.getLogger(__name__)
@@ -321,13 +321,63 @@ def mark_sent(subscription, now=None):
     get_planning_session().commit()
 
 
+def refresh_manager_link(subscription, users):
+    """Сверяет менеджера подписки с текущей связкой логина.
+
+    manager_id пишется в подписку в момент настройки — это снимок. Связку
+    «логин ↔ менеджер CRM» админ потом меняет: переносит на другого человека,
+    удаляет, или совпадение по ФИО перестаёт работать. Снимок при этом остаётся
+    прежним, и напоминания продолжают уходить старому логину — с чужой
+    дебиторкой. Поэтому перед каждой отправкой связка пересчитывается.
+
+    Returns:
+        (manager_id, готова_ли_подписка_к_отправке)
+    """
+    manager_id, resolved = manager_link_service.manager_id_for(subscription.username, users)
+
+    if not resolved:
+        # Шлюз не ответил: гасить подписку по этой причине нельзя
+        logger.warning("Связка логина %s не проверена — пропускаю круг", subscription.username)
+        return None, False
+
+    if manager_id == subscription.manager_id:
+        return manager_id, True
+
+    if manager_id is None:
+        # Связки больше нет: слать чужую дебиторку этому логину нельзя
+        logger.warning("Логин %s больше не связан с менеджером %s — подписка отключена",
+                       subscription.username, subscription.manager_id)
+        subscription.is_active = False
+        subscription.manager_id = None
+        subscription.last_status = 'manager_unlinked'
+        subscription.last_error = ('Логин больше не связан с менеджером CRM. '
+                                   'Свяжитесь с администратором и включите напоминания заново.')
+        get_planning_session().commit()
+        return None, False
+
+    logger.info("Логин %s теперь связан с менеджером %s (был %s) — подписка обновлена",
+                subscription.username, manager_id, subscription.manager_id)
+    subscription.manager_id = manager_id
+    get_planning_session().commit()
+    return manager_id, True
+
+
 def send_due_reminders(now=None):
     """Рассылает напоминания тем, кому пора. Возвращает счётчики."""
     now = now or datetime.now()
     sent = skipped = quiet = 0
 
+    # Список пользователей шлюза берём один раз на круг: он нужен для проверки
+    # связок, а подписок может быть много. None — шлюз недоступен.
+    users = gateway_client.list_service_users()
+
     for subscription in due_subscriptions(now):
-        text = build_reminder_text(subscription.manager_id) if subscription.manager_id else None
+        manager_id, ready = refresh_manager_link(subscription, users)
+        if not ready:
+            skipped += 1
+            continue
+
+        text = build_reminder_text(manager_id) if manager_id else None
         if not text:
             # Долгов нет — молчим, но отметку ставим, чтобы не пересчитывать
             # одно и то же на каждом круге.
@@ -354,7 +404,12 @@ def send_test(username, today=None):
         return False, 'Не удалось определить пользователя.'
 
     subscription = get_subscription(username)
-    manager_id = subscription.manager_id if subscription else None
+
+    # Кнопку жмёт сам пользователь, поэтому связку берём актуальную, а не снимок
+    # из подписки: иначе проверка покажет чужую дебиторку.
+    manager_id = manager_link_service.current_manager_id()
+    if manager_id is None and subscription:
+        manager_id = subscription.manager_id
 
     # Если долгов нет, всё равно шлём: кнопка проверяет доставку, а не наличие
     # дебиторки.

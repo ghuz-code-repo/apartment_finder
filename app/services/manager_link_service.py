@@ -55,6 +55,40 @@ def resolve_manager_id(username, full_name):
     return manager.id if manager else None
 
 
+def manager_id_for(username, users):
+    """id менеджера CRM для логина вне контекста запроса — для фоновой рассылки.
+
+    Возвращает пару (manager_id, resolved). resolved=False означает «выяснить не
+    удалось»: шлюз не ответил, а список пользователей нужен для сопоставления по
+    ФИО. Это принципиально не то же самое, что «связки нет»: во втором случае
+    подписку надо гасить, в первом — пропустить круг и попробовать позже.
+
+    Args:
+        username: логин портала
+        users: список пользователей сервиса из шлюза (None — шлюз недоступен).
+               Передаётся снаружи, чтобы не ходить в шлюз на каждую подписку.
+    """
+    username = (username or '').strip()
+    if not username:
+        return None, True
+
+    # Ручная связка сильнее автоматической и не требует шлюза
+    link = get_link(username)
+    if link:
+        return link.manager_id, True
+
+    if users is None:
+        return None, False
+
+    user = gateway_client.find_user(username, users)
+    if not user:
+        # Пользователя больше нет в сервисе — связка мертва
+        return None, True
+
+    manager = find_manager_by_full_name(user.get('full_name'))
+    return (manager.id if manager else None), True
+
+
 def current_manager_id():
     """id менеджера CRM для текущего пользователя."""
     username, full_name = current_user_identity()
