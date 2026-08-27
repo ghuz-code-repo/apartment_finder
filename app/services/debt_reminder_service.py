@@ -272,6 +272,24 @@ def send_message(login, text, subject=REMINDER_SUBJECT):
     return True, response
 
 
+def _commit(what):
+    """Коммит, который не роняет круг рассылки.
+
+    База — SQLite на общем томе, в неё пишут и веб, и воркер, поэтому запись
+    может упереться в «database is locked». Раньше такое исключение обрывало
+    круг целиком: сообщение уже ушло, а отметка об отправке не сохранилась — и
+    через пять минут всё повторялось заново. Отсюда и брались сотни одинаковых
+    напоминаний.
+    """
+    try:
+        get_planning_session().commit()
+        return True
+    except Exception as e:
+        get_planning_session().rollback()
+        logger.error("Не удалось сохранить %s: %s", what, e)
+        return False
+
+
 def remember_result(subscription, ok, detail):
     """Запоминает итог последней отправки — вкладка показывает именно его."""
     if not subscription:
@@ -279,7 +297,7 @@ def remember_result(subscription, ok, detail):
     subscription.last_status = 'ok' if ok else (
         (detail or {}).get('failure_code') or 'error')
     subscription.last_error = None if ok else (detail or {}).get('reason')
-    get_planning_session().commit()
+    _commit('итог отправки')
 
 
 def is_due(subscription, now=None):
@@ -314,11 +332,16 @@ def due_subscriptions(now=None):
 
 
 def mark_sent(subscription, now=None):
-    """Помечает, что уведомление отправлено."""
+    """Помечает, что уведомление отправлено.
+
+    Ставится ДО отправки: неудачная отправка стоит одного пропущенного
+    напоминания, а несохранённая отметка — бесконечного потока одинаковых
+    сообщений. Из двух отказов первый безопаснее.
+    """
     now = now or datetime.now()
     subscription.last_sent_at = now
     subscription.last_sent_date = now.date()
-    get_planning_session().commit()
+    return _commit('отметку об отправке')
 
 
 def refresh_manager_link(subscription, users):
@@ -352,13 +375,13 @@ def refresh_manager_link(subscription, users):
         subscription.last_status = 'manager_unlinked'
         subscription.last_error = ('Логин больше не связан с менеджером CRM. '
                                    'Свяжитесь с администратором и включите напоминания заново.')
-        get_planning_session().commit()
+        _commit('отключение подписки')
         return None, False
 
     logger.info("Логин %s теперь связан с менеджером %s (был %s) — подписка обновлена",
                 subscription.username, manager_id, subscription.manager_id)
     subscription.manager_id = manager_id
-    get_planning_session().commit()
+    _commit('обновление связки подписки')
     return manager_id, True
 
 
@@ -385,10 +408,17 @@ def send_due_reminders(now=None):
             quiet += 1
             continue
 
+        # Отметка идёт первой: если её не удалось сохранить, отправлять нельзя —
+        # иначе следующий круг сочтёт, что отправки не было, и пошлёт снова.
+        if not mark_sent(subscription, now):
+            logger.error("Пропускаю %s: отметку об отправке сохранить не удалось",
+                         subscription.username)
+            skipped += 1
+            continue
+
         ok, detail = send_message(subscription.username, text)
         remember_result(subscription, ok, detail)
         if ok:
-            mark_sent(subscription, now)
             sent += 1
         else:
             skipped += 1
