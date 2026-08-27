@@ -67,6 +67,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      # Та же причина, что и у finder: planning.db на bind-mount принадлежит uid
+      # хоста, а процесс в контейнере — root без этой способности не может
+      # писать в чужой файл. Без неё воркер молча читает базу и не сохраняет ни
+      # отметку об отправке, ни статус подписки, из-за чего одно и то же
+      # напоминание уходит на каждом круге.
+      - DAC_OVERRIDE
     networks:
       # Наружу воркеру не нужно: письма и Telegram уходят через
       # notification-service внутри service_network. MySQL Macro живёт в
