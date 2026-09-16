@@ -95,6 +95,7 @@ permissions_registry.register('finder.projects_info_update', 'Проекты: и
 # ============================================================
 permissions_registry.register('finder.marketing_call_center_view', 'Маркетинг: колл-центр', 'Просмотр аналитики колл-центра', 'view')
 permissions_registry.register('finder.marketing_funnel_view', 'Маркетинг: воронка', 'Просмотр воронки и контактов этапов', 'view')
+permissions_registry.register('finder.marketing_offer_view', 'Маркетинг: лучший офер', 'Формирование офера по проекту', 'view')
 permissions_registry.register('finder.marketing_funnel_export', 'Маркетинг: выгрузка контактов', 'Выгрузка контактов этапа воронки', 'export')
 
 # ============================================================
@@ -246,6 +247,7 @@ PERMISSION_MAP = {
     # Marketing
     'marketing_call_center_view': 'finder.marketing_call_center_view',
     'marketing_funnel_view': 'finder.marketing_funnel_view',
+    'marketing_offer_view': 'finder.marketing_offer_view',
     'marketing_funnel_export': 'finder.marketing_funnel_export',
     # Competitors
     'competitors_map_view': 'finder.competitors_map_view',

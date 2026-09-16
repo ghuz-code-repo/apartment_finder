@@ -1,0 +1,257 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .project-card {
+        display: block;
+        border: 1px solid rgba(var(--bs-emphasis-color-rgb), .15);
+        border-radius: .6rem;
+        padding: 1rem;
+        text-decoration: none;
+        color: inherit;
+        height: 100%;
+        transition: border-color .15s, transform .15s;
+    }
+    .project-card:hover {
+        border-color: var(--gh-gold, #c4a668);
+        transform: translateY(-2px);
+    }
+    .project-card.active { border-color: var(--gh-gold, #c4a668); background: rgba(196, 166, 104, .08); }
+    .offer-metric { border-left: 4px solid var(--gh-gold, #c4a668); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ _('Лучший офер') }}</h1>
+        <p class="text-muted mb-0">
+            {{ _('Каждый показатель привязан к конкретной квартире — ссылка ведёт на её карточку в CRM, цифру можно проверить.') }}
+        </p>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-header"><h5 class="mb-0">{{ _('Активные проекты') }}</h5></div>
+    <div class="card-body">
+        {% if projects %}
+        <div class="row g-3">
+            {% for project in projects %}
+            <div class="col-md-4 col-lg-3">
+                <a class="project-card {% if project.complex_name == selected_project %}active{% endif %}"
+                   href="{{ url_for('marketing.best_offer', project=project.complex_name) }}">
+                    <div class="fw-semibold">{{ project.complex_name }}</div>
+                    <div class="fs-4 fw-bold">{{ project.flats }}</div>
+                    <div class="text-muted small">{{ _('квартир в продаже') }}</div>
+                    <div class="text-muted small mt-2">
+                        {% if project.min_price %}{{ _('от') }} {{ "{:,.0f}".format(project.min_price) }} UZS{% endif %}
+                    </div>
+                    <div class="text-muted small">
+                        {% if project.min_area %}{{ project.min_area }}–{{ project.max_area }} м²{% endif %}
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">{{ _('Свободных квартир не найдено.') }}</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if selected_project %}
+<div class="card card-glass mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">{{ _('Критерии офера') }} — {{ selected_project }}</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET">
+            <input type="hidden" name="project" value="{{ selected_project }}">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">{{ _('Цена квартиры, UZS') }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('от') }}</span>
+                        <input type="number" class="form-control" name="price_from" min="0"
+                               value="{{ filters.price_from or '' }}">
+                        <span class="input-group-text">{{ _('до') }}</span>
+                        <input type="number" class="form-control" name="price_to" min="0"
+                               value="{{ filters.price_to or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">{{ _('Цена за м², UZS') }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('от') }}</span>
+                        <input type="number" class="form-control" name="price_m2_from" min="0"
+                               value="{{ filters.price_m2_from or '' }}">
+                        <span class="input-group-text">{{ _('до') }}</span>
+                        <input type="number" class="form-control" name="price_m2_to" min="0"
+                               value="{{ filters.price_m2_to or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">{{ _('Площадь, м²') }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text">{{ _('от') }}</span>
+                        <input type="number" step="0.1" class="form-control" name="area_from" min="0"
+                               value="{{ filters.area_from or '' }}">
+                        <span class="input-group-text">{{ _('до') }}</span>
+                        <input type="number" step="0.1" class="form-control" name="area_to" min="0"
+                               value="{{ filters.area_to or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label for="monthly_to" class="form-label">{{ _('Платёж по ипотеке до, UZS/мес') }}</label>
+                    <input type="number" class="form-control" id="monthly_to" name="monthly_to" min="0"
+                           value="{{ filters.monthly_to or '' }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">{{ _('Скидки и акции') }}</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="discount_mode" id="discount-auto"
+                               value="auto" {% if discount_mode != 'manual' %}checked{% endif %}>
+                        <label class="form-check-label" for="discount-auto">
+                            {{ _('Применить все доступные по проекту') }}
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="discount_mode" id="discount-manual"
+                               value="manual" {% if discount_mode == 'manual' %}checked{% endif %}>
+                        <label class="form-check-label" for="discount-manual">
+                            {{ _('Выбрать вручную') }}
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-md-8" id="manual-discounts"
+                     {% if discount_mode != 'manual' %}style="display: none;"{% endif %}>
+                    {% for method, items in [('full_payment', offer.discounts.full_payment),
+                                             ('mortgage', offer.discounts.mortgage)] %}
+                    {% if items %}
+                    <div class="mb-2">
+                        <div class="text-muted small">
+                            {% if method == 'full_payment' %}{{ _('100%% оплата') }}{% else %}{{ _('Ипотека') }}{% endif %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-3">
+                            {% for item in items %}
+                            <div class="d-flex align-items-center gap-1">
+                                <label class="small" for="{{ method }}_{{ item.code }}">{{ item.name }}</label>
+                                <input type="number" class="form-control form-control-sm" style="width: 5rem;"
+                                       id="{{ method }}_{{ item.code }}"
+                                       name="{{ method }}_{{ item.code }}"
+                                       min="0" max="{{ item.max_percent }}"
+                                       value="{{ selected_discounts.get(method, {}).get(item.code, '') }}"
+                                       placeholder="0">
+                                <span class="text-muted small">/ {{ item.max_percent }}%</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% if not offer.discounts.full_payment and not offer.discounts.mortgage %}
+                    <div class="text-muted small">{{ _('По этому проекту скидок в активной версии нет.') }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-magic me-2"></i>{{ _('Собрать офер') }}
+                    </button>
+                    <span class="text-muted small ms-2">
+                        {{ _('Под критерии попало квартир:') }} {{ offer.considered }}
+                    </span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if not offer.mortgage_configured %}
+<div class="alert alert-warning">
+    {{ _('Срок ипотеки не задан в настройках калькулятора, поэтому ежемесячный платёж не рассчитывается.') }}
+</div>
+{% endif %}
+
+<div class="row g-4">
+    {% for key, title, hint in [('price', _('Минимальная цена'), _('квартира целиком, со скидками')),
+                                ('price_m2', _('Минимальная цена за м²'), _('с учётом скидок')),
+                                ('monthly', _('Ипотека от'), _('ежемесячный платёж'))] %}
+    <div class="col-lg-4">
+        <div class="card card-glass h-100 offer-metric">
+            <div class="card-body">
+                <div class="text-muted small">{{ title }}</div>
+                {% set flat = offer.best[key] %}
+                {% if not flat %}
+                <div class="fs-4 fw-bold text-muted mt-2">—</div>
+                <div class="text-muted small">{{ _('подходящей квартиры нет') }}</div>
+                {% else %}
+                <div class="fs-3 fw-bold mt-1">
+                    {% if key == 'price' %}{{ "{:,.0f}".format(flat.final_price) }}
+                    {% elif key == 'price_m2' %}{{ "{:,.0f}".format(flat.price_m2) }}
+                    {% else %}{{ "{:,.0f}".format(flat.monthly_payment) }}{% endif %}
+                    <span class="fs-6 text-muted">UZS{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}</span>
+                </div>
+                <div class="text-muted small">{{ hint }}</div>
+
+                <hr>
+                <div class="small">
+                    <div>
+                        {{ _('Квартира') }}
+                        {% if flat.flat_number %}№{{ flat.flat_number }}{% endif %}
+                        {% if flat.rooms %} · {{ flat.rooms }}-{{ _('комн') }}{% endif %}
+                        {% if flat.area %} · {{ flat.area }} м²{% endif %}
+                        {% if flat.floor %} · {{ _('этаж') }} {{ flat.floor }}{% endif %}
+                    </div>
+                    <div class="text-muted">
+                        {{ _('Прайс:') }} {{ "{:,.0f}".format(flat.base_price) }} UZS
+                        {% if flat.discount_percent %} · {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
+                    </div>
+                    {% if key == 'monthly' and flat.initial_payment %}
+                    <div class="text-muted">
+                        {{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS
+                        {% if flat.mortgage_term_months %} · {{ flat.mortgage_term_months }} {{ _('мес.') }}{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if flat.crm_url %}
+                <a class="btn btn-sm btn-outline-secondary mt-3" href="{{ flat.crm_url }}" target="_blank" rel="noopener">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>{{ _('Карточка в CRM') }}
+                </a>
+                {% else %}
+                <div class="text-muted small mt-3">
+                    {{ _('Ссылка на CRM не настроена: задайте CRM_FLAT_URL.') }}
+                </div>
+                {% endif %}
+                {% endif %}{# /flat #}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Поля ручных скидок нужны только во втором режиме — иначе они сбивают с
+    // толку: заполнены, а применяется всё равно максимум по матрице.
+    const manual = document.getElementById('manual-discounts');
+    const radios = document.querySelectorAll('input[name="discount_mode"]');
+    if (!manual || !radios.length) return;
+
+    function toggle() {
+        const selected = document.querySelector('input[name="discount_mode"]:checked');
+        manual.style.display = selected && selected.value === 'manual' ? '' : 'none';
+    }
+    radios.forEach(function (radio) { radio.addEventListener('change', toggle); });
+    toggle();
+});
+</script>
+{% endblock %}

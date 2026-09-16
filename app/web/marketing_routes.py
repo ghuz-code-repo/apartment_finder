@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from flask import Blueprint, abort, render_template, request, send_file
 
 from ..core.decorators import login_required, permission_required
-from ..services import call_center_service, marketing_funnel_service
+from ..services import best_offer_service, call_center_service, marketing_funnel_service
 from ..services.contracting_income_service import GRANULARITIES
 
 marketing_bp = Blueprint('marketing', __name__, template_folder='templates')
@@ -151,4 +151,72 @@ def funnel_export():
         download_name=filename,
         as_attachment=True,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+def _parse_number(value):
+    """Число из формы. Пустое и мусор -> None, фильтр просто не применяется."""
+    if value is None or str(value).strip() == '':
+        return None
+    try:
+        return float(str(value).replace(' ', '').replace('\u00a0', '').replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+
+
+@marketing_bp.route('/best-offer')
+@login_required
+@permission_required('marketing_offer_view')
+def best_offer():
+    """Список проектов и конструктор офера по выбранному."""
+    project = request.args.get('project')
+    projects = best_offer_service.list_projects()
+
+    if not project:
+        return render_template(
+            'marketing/best_offer.html',
+            title="Лучший офер",
+            projects=projects,
+            selected_project=None,
+        )
+
+    filters = {key: _parse_number(request.args.get(key)) for key in (
+        'price_from', 'price_to', 'price_m2_from', 'price_m2_to',
+        'area_from', 'area_to', 'monthly_to')}
+
+    discount_mode = request.args.get('discount_mode', 'auto')
+    # Ручные проценты приходят полями вида full_payment_kd — разбираем их в
+    # тот же вид, что понимает pricing_service.
+    selected_discounts = {}
+    for field, value in request.args.items():
+        for method in ('full_payment', 'mortgage'):
+            prefix = method + '_'
+            if field.startswith(prefix) and value not in (None, ''):
+                code = field[len(prefix):]
+                try:
+                    selected_discounts.setdefault(method, {})[code] = int(float(value))
+                except (TypeError, ValueError):
+                    continue
+
+    manual_percents = {
+        'full_payment': selected_discounts.get('full_payment', {}),
+        'mortgage_standard': selected_discounts.get('mortgage', {}),
+    }
+
+    offer = best_offer_service.build_offer(
+        project,
+        filters=filters,
+        manual_percents=manual_percents,
+        apply_all_discounts=discount_mode != 'manual',
+    )
+
+    return render_template(
+        'marketing/best_offer.html',
+        title=f"Лучший офер: {project}",
+        projects=projects,
+        selected_project=project,
+        offer=offer,
+        filters=filters,
+        discount_mode=discount_mode,
+        selected_discounts=selected_discounts,
     )
