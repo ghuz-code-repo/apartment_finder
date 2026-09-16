@@ -91,6 +91,15 @@ permissions_registry.register('finder.projects_info_view', 'Проекты: ин
 permissions_registry.register('finder.projects_info_update', 'Проекты: информация о ЖК', 'Настройка рендеров и характеристик ЖК', 'manage')
 
 # ============================================================
+# MARKETING MODULE — колл-центр, офер, воронка
+# ============================================================
+permissions_registry.register('finder.marketing_call_center_view', 'Маркетинг: колл-центр', 'Просмотр аналитики колл-центра', 'view')
+permissions_registry.register('finder.marketing_call_center_view_own', 'Маркетинг: колл-центр (только свои)', 'Просмотр показателей колл-центра только по своим заявкам', 'view')
+permissions_registry.register('finder.marketing_funnel_view', 'Маркетинг: воронка', 'Просмотр воронки и контактов этапов', 'view')
+permissions_registry.register('finder.marketing_offer_view', 'Маркетинг: лучший офер', 'Формирование офера по проекту', 'view')
+permissions_registry.register('finder.marketing_funnel_export', 'Маркетинг: выгрузка контактов', 'Выгрузка контактов этапа воронки', 'export')
+
+# ============================================================
 # COMPETITORS MODULE — map, profiles, comparison, dynamics, media
 # ============================================================
 permissions_registry.register('finder.competitors_map_view', 'Конкуренты: карта', 'Просмотр карты конкурентов', 'view')
@@ -236,6 +245,12 @@ PERMISSION_MAP = {
     'projects_competitor_template_export': 'finder.projects_competitor_template_export',
     'projects_info_view': 'finder.projects_info_view',
     'projects_info_update': 'finder.projects_info_update',
+    # Marketing
+    'marketing_call_center_view': 'finder.marketing_call_center_view',
+    'marketing_call_center_view_own': 'finder.marketing_call_center_view_own',
+    'marketing_funnel_view': 'finder.marketing_funnel_view',
+    'marketing_offer_view': 'finder.marketing_offer_view',
+    'marketing_funnel_export': 'finder.marketing_funnel_export',
     # Competitors
     'competitors_map_view': 'finder.competitors_map_view',
     'competitors_profile_view': 'finder.competitors_profile_view',
