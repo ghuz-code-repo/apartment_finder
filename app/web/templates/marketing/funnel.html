@@ -1,0 +1,193 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .funnel-stage {
+        border: 1px solid rgba(var(--bs-emphasis-color-rgb), .15);
+        border-radius: .6rem;
+        padding: .9rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        text-decoration: none;
+        color: inherit;
+        transition: border-color .15s, transform .15s;
+    }
+    .funnel-stage:hover {
+        border-color: var(--gh-gold, #c4a668);
+        transform: translateX(2px);
+    }
+    .funnel-stage.active {
+        border-color: var(--gh-gold, #c4a668);
+        background-color: rgba(196, 166, 104, .08);
+    }
+    /* Ширина полосы — доля от всех заявок: масштаб воронки виден сразу. */
+    .funnel-bar {
+        height: 10px;
+        border-radius: 5px;
+        background: linear-gradient(90deg, #c4a668, #8a6d3b);
+        min-width: 2px;
+    }
+    .funnel-arrow { color: #888; font-size: .8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ _('Воронка') }}</h1>
+        <p class="text-muted mb-0">
+            {{ _('Заявки периода и их движение по этапам. Клик по этапу открывает контакты — тех, кто прошёл этап, включая ушедших дальше.') }}
+        </p>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-body">
+        <form method="GET">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="start_date" class="form-label">{{ _('Начало периода') }}</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date"
+                           value="{{ start_date.isoformat() }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="end_date" class="form-label">{{ _('Конец периода') }}</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date"
+                           value="{{ end_date.isoformat() }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="complexes" class="form-label">{{ _('Проект') }}</label>
+                    <select class="form-select" id="complexes" name="complexes">
+                        <option value="">{{ _('Все проекты') }}</option>
+                        {% for name in options.complexes %}
+                        <option value="{{ name }}" {% if name in selected_complexes %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="channels" class="form-label">{{ _('Канал') }}</label>
+                    <select class="form-select" id="channels" name="channels">
+                        <option value="">{{ _('Все каналы') }}</option>
+                        {% for channel in options.channels %}
+                        <option value="{{ channel }}" {% if channel in selected_channels %}selected{% endif %}>{{ channel }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search me-2"></i>{{ _('Построить') }}
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card card-glass h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ _('Этапы') }}</h5>
+                <span class="text-muted small">{{ _('Всего заявок:') }} {{ funnel.total }}</span>
+            </div>
+            <div class="card-body d-flex flex-column gap-2">
+                {% for stage in funnel.stages %}
+                <a class="funnel-stage {% if stage.key == selected_stage %}active{% endif %}"
+                   href="{{ url_for('marketing.funnel', start_date=start_date.isoformat(), end_date=end_date.isoformat(), complexes=selected_complexes, channels=selected_channels, stage=stage.key) }}">
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-baseline">
+                            <span class="fw-semibold">{{ stage.title }}</span>
+                            <span class="fs-5 fw-bold">{{ stage.count }}</span>
+                        </div>
+                        <div class="funnel-bar mt-2" style="width: {{ stage.from_total or 0 }}%;"></div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <span class="funnel-arrow">
+                                {% if stage.from_previous is not none %}
+                                ↳ {{ stage.from_previous }}% {{ _('с прошлого этапа') }}
+                                {% else %}
+                                {{ _('база воронки') }}
+                                {% endif %}
+                            </span>
+                            {% if stage.from_total is not none %}
+                            <span class="funnel-arrow">{{ stage.from_total }}% {{ _('от всех') }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card card-glass h-100">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0">
+                    {% if selected_stage %}
+                    {{ _('Контакты этапа') }} «{{ stage_title }}»
+                    {% else %}
+                    {{ _('Контакты') }}
+                    {% endif %}
+                </h5>
+                {% if contacts %}
+                <a class="btn btn-sm btn-golden-outline"
+                   href="{{ url_for('marketing.funnel_export', start_date=start_date.isoformat(), end_date=end_date.isoformat(), complexes=selected_complexes, channels=selected_channels, stage=selected_stage) }}">
+                    <i class="bi bi-download me-2"></i>{{ _('Скачать') }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                {% if not selected_stage %}
+                <div class="text-center text-muted py-5">
+                    {{ _('Выберите этап слева, чтобы увидеть контакты.') }}
+                </div>
+                {% elif not contacts %}
+                <div class="text-center text-muted py-5">
+                    {{ _('На этом этапе за выбранный период контактов нет.') }}
+                </div>
+                {% else %}
+                {% if contacts_truncated %}
+                <div class="alert alert-secondary rounded-0 mb-0 py-2 small">
+                    {{ _('На экране первые') }} {{ contacts|length }} {{ _('из') }} {{ stage_count }}.
+                    {{ _('В выгрузке будут все.') }}
+                </div>
+                {% endif %}
+                <div class="table-responsive" style="max-height: 560px;">
+                    <table class="table modern-table mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Заявка') }}</th>
+                                <th>{{ _('Контакт') }}</th>
+                                <th>{{ _('Проект') }}</th>
+                                <th>{{ _('Канал') }}</th>
+                                <th>{{ _('Последний контакт') }}</th>
+                                <th>{{ _('Менеджер') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in contacts %}
+                            <tr>
+                                <td class="text-muted">{{ row.lead_id }}</td>
+                                <td>
+                                    <div>{{ row.contact_name }}</div>
+                                    <div class="text-muted small">{{ row.phone }}</div>
+                                </td>
+                                <td>{{ row.complex_name }}</td>
+                                <td class="text-muted small">{{ row.channel }}</td>
+                                <td class="text-nowrap">
+                                    {{ row.last_action.strftime('%d.%m.%Y') if row.last_action else '—' }}
+                                </td>
+                                <td>{{ row.manager_name }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
