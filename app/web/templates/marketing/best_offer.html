@@ -1,5 +1,12 @@
 {% extends "layouts/base.html" %}
 
+{# Суммы в сервисе в сумах, на экран — в выбранной валюте. #}
+{% macro amount(value) -%}
+{%- if value is not none -%}
+{{ "{:,.0f}".format(value / money.factor).replace(',', ' ') }}
+{%- else -%}—{%- endif -%}
+{%- endmacro %}
+
 {% block styles %}
 {{ super() }}
 <style>
@@ -19,16 +26,37 @@
     }
     .project-card.active { border-color: var(--gh-gold, #c4a668); background: rgba(196, 166, 104, .08); }
     .offer-metric { border-left: 4px solid var(--gh-gold, #c4a668); }
+    .offer-criteria th:first-child { width: 34%; }
+    .offer-criteria th:not(:first-child) { width: 33%; }
+    .offer-criteria td { vertical-align: middle; }
+    .offer-criteria input { min-width: 9rem; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
         <h1 class="gradient-heading mb-0">{{ _('Лучший офер') }}</h1>
         <p class="text-muted mb-0">
             {{ _('Каждый показатель привязан к конкретной квартире — ссылка ведёт на её карточку в CRM, цифру можно проверить.') }}
         </p>
+    </div>
+    {# Переключатель валюты. Ссылки работают и без JS; со скриптом введённые
+       суммы пересчитываются по курсу, а не остаются теми же цифрами. #}
+    <div class="text-end">
+        <div class="btn-group" role="group" aria-label="{{ _('Валюта') }}" id="currency-switch"
+             data-rate="{{ money.rate or '' }}" data-current="{{ money.currency }}">
+            {% for code in ['UZS', 'USD'] %}
+            {% set args = dict(request.args.to_dict(), currency=code) %}
+            <a href="{{ url_for('marketing.best_offer', **args) }}" data-currency="{{ code }}"
+               class="btn btn-sm {% if money.currency == code %}btn-primary{% else %}btn-outline-secondary{% endif %}
+                      {% if code == 'USD' and not money.rate %}disabled{% endif %}">{{ code }}</a>
+            {% endfor %}
+        </div>
+        <div class="text-muted small mt-1">
+            {% if money.rate %}{{ _('Курс:') }} 1 USD = {{ "{:,.0f}".format(money.rate).replace(',', ' ') }} UZS
+            {% else %}{{ _('Курс не задан — доступны только суммы в UZS') }}{% endif %}
+        </div>
     </div>
 </div>
 
@@ -40,12 +68,12 @@
             {% for project in projects %}
             <div class="col-md-4 col-lg-3">
                 <a class="project-card {% if project.complex_name == selected_project %}active{% endif %}"
-                   href="{{ url_for('marketing.best_offer', project=project.complex_name) }}">
+                   href="{{ url_for('marketing.best_offer', project=project.complex_name, currency=money.currency) }}">
                     <div class="fw-semibold">{{ project.complex_name }}</div>
                     <div class="fs-4 fw-bold">{{ project.flats }}</div>
                     <div class="text-muted small">{{ _('квартир в продаже') }}</div>
                     <div class="text-muted small mt-2">
-                        {% if project.min_price %}{{ _('от') }} {{ "{:,.0f}".format(project.min_price) }} UZS{% endif %}
+                        {% if project.min_price %}{{ _('от') }} {{ amount(project.min_price) }} {{ money.currency }}{% endif %}
                     </div>
                     <div class="text-muted small">
                         {% if project.min_area %}{{ project.min_area }}–{{ project.max_area }} м²{% endif %}
@@ -66,48 +94,52 @@
         <h5 class="mb-0">{{ _('Критерии офера') }} — {{ selected_project }}</h5>
     </div>
     <div class="card-body">
-        <form method="GET">
+        <form method="GET" id="offer-form">
             <input type="hidden" name="project" value="{{ selected_project }}">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">{{ _('Цена квартиры, UZS') }}</label>
-                    <div class="input-group">
-                        <span class="input-group-text">{{ _('от') }}</span>
-                        <input type="number" class="form-control" name="price_from" min="0"
-                               value="{{ filters.price_from or '' }}">
-                        <span class="input-group-text">{{ _('до') }}</span>
-                        <input type="number" class="form-control" name="price_to" min="0"
-                               value="{{ filters.price_to or '' }}">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">{{ _('Цена за м², UZS') }}</label>
-                    <div class="input-group">
-                        <span class="input-group-text">{{ _('от') }}</span>
-                        <input type="number" class="form-control" name="price_m2_from" min="0"
-                               value="{{ filters.price_m2_from or '' }}">
-                        <span class="input-group-text">{{ _('до') }}</span>
-                        <input type="number" class="form-control" name="price_m2_to" min="0"
-                               value="{{ filters.price_m2_to or '' }}">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">{{ _('Площадь, м²') }}</label>
-                    <div class="input-group">
-                        <span class="input-group-text">{{ _('от') }}</span>
-                        <input type="number" step="0.1" class="form-control" name="area_from" min="0"
-                               value="{{ filters.area_from or '' }}">
-                        <span class="input-group-text">{{ _('до') }}</span>
-                        <input type="number" step="0.1" class="form-control" name="area_to" min="0"
-                               value="{{ filters.area_to or '' }}">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <label for="monthly_to" class="form-label">{{ _('Платёж по ипотеке до, UZS/мес') }}</label>
-                    <input type="number" class="form-control" id="monthly_to" name="monthly_to" min="0"
-                           value="{{ filters.monthly_to or '' }}">
-                </div>
+            <input type="hidden" name="currency" value="{{ money.currency }}" id="offer-currency">
 
+            <div class="table-responsive">
+                <table class="table offer-criteria mb-3">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Критерий') }}</th>
+                            <th>{{ _('От') }}</th>
+                            <th>{{ _('До') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for title, low, high, kind in [
+                            (_('Цена квартиры') ~ ', ' ~ money.currency, 'price_from', 'price_to', 'money'),
+                            (_('Цена за м²') ~ ', ' ~ money.currency, 'price_m2_from', 'price_m2_to', 'money'),
+                            (_('Площадь, м²'), 'area_from', 'area_to', 'area'),
+                            (_('Платёж по ипотеке в месяц') ~ ', ' ~ money.currency, 'monthly_from', 'monthly_to', 'money'),
+                        ] %}
+                        <tr>
+                            <td>
+                                {{ title }}
+                                {% if kind == 'money' and low != 'monthly_from' %}
+                                <div class="text-muted small">{{ _('со скидками') }}</div>
+                                {% endif %}
+                            </td>
+                            {% for field in [low, high] %}
+                            {% set value = filters.get(field) %}
+                            <td>
+                                <input type="text" class="form-control" name="{{ field }}"
+                                       inputmode="decimal" autocomplete="off" data-kind="{{ kind }}"
+                                       placeholder="{{ _('не ограничено') }}"
+                                       value="{% if value %}{% if kind == 'money' %}{{ '{:,.0f}'.format(value).replace(',', ' ') }}{% else %}{{ '{:g}'.format(value) }}{% endif %}{% endif %}">
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="form-text mt-0">
+                {{ _('Цена и цена за м² сравниваются с ценой после скидок — той же, что показана в карточках. Платёж по ипотеке ограничивает только показатель «Ипотека от».') }}
+            </p>
+
+            <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">{{ _('Скидки и акции') }}</label>
                     <div class="form-check">
@@ -161,6 +193,9 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-magic me-2"></i>{{ _('Собрать офер') }}
                     </button>
+                    <a class="btn btn-outline-secondary" href="{{ url_for('marketing.best_offer', project=selected_project, currency=money.currency) }}">
+                        {{ _('Сбросить') }}
+                    </a>
                     {# Печать открывается в новой вкладке с теми же параметрами:
                        офер на бумаге должен совпадать с тем, что на экране. #}
                     <a class="btn btn-golden-outline" target="_blank" rel="noopener"
@@ -169,6 +204,9 @@
                     </a>
                     <span class="text-muted small ms-2">
                         {{ _('Под критерии попало квартир:') }} {{ offer.considered }}
+                        {% if offer.implausible %}
+                        · {{ _('пропущено лотов с неправдоподобной ценой:') }} {{ offer.implausible }}
+                        {% endif %}
                     </span>
                 </div>
             </div>
@@ -196,10 +234,10 @@
                 <div class="text-muted small">{{ _('подходящей квартиры нет') }}</div>
                 {% else %}
                 <div class="fs-3 fw-bold mt-1">
-                    {% if key == 'price' %}{{ "{:,.0f}".format(flat.final_price) }}
-                    {% elif key == 'price_m2' %}{{ "{:,.0f}".format(flat.price_m2) }}
-                    {% else %}{{ "{:,.0f}".format(flat.monthly_payment) }}{% endif %}
-                    <span class="fs-6 text-muted">UZS{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}</span>
+                    {% if key == 'price' %}{{ amount(flat.final_price) }}
+                    {% elif key == 'price_m2' %}{{ amount(flat.price_m2) }}
+                    {% else %}{{ amount(flat.monthly_payment) }}{% endif %}
+                    <span class="fs-6 text-muted">{{ money.currency }}{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}</span>
                 </div>
                 <div class="text-muted small">{{ hint }}</div>
 
@@ -213,17 +251,17 @@
                         {% if flat.floor %} · {{ _('этаж') }} {{ flat.floor }}{% endif %}
                     </div>
                     <div class="text-muted">
-                        {{ _('Прайс:') }} {{ "{:,.0f}".format(flat.base_price) }} UZS
+                        {{ _('Прайс:') }} {{ amount(flat.base_price) }} {{ money.currency }}
                         {% if flat.discount_percent %} · {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
                     </div>
                     {% if key == 'monthly' %}
                     <div class="text-muted">
-                        {{ _('Цена по ипотеке:') }} {{ "{:,.0f}".format(flat.final_price) }} UZS
+                        {{ _('Цена по ипотеке:') }} {{ amount(flat.final_price) }} {{ money.currency }}
                     </div>
                     {% endif %}
                     {% if key == 'monthly' and flat.initial_payment %}
                     <div class="text-muted">
-                        {{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS
+                        {{ _('Первый взнос:') }} {{ amount(flat.initial_payment) }} {{ money.currency }}
                         {% if flat.mortgage_term_months %} · {{ flat.mortgage_term_months }} {{ _('мес.') }}{% endif %}
                     </div>
                     {% endif %}
@@ -255,14 +293,60 @@ document.addEventListener('DOMContentLoaded', function () {
     // толку: заполнены, а применяется всё равно максимум по матрице.
     const manual = document.getElementById('manual-discounts');
     const radios = document.querySelectorAll('input[name="discount_mode"]');
-    if (!manual || !radios.length) return;
-
-    function toggle() {
-        const selected = document.querySelector('input[name="discount_mode"]:checked');
-        manual.style.display = selected && selected.value === 'manual' ? '' : 'none';
+    if (manual && radios.length) {
+        const toggle = function () {
+            const selected = document.querySelector('input[name="discount_mode"]:checked');
+            manual.style.display = selected && selected.value === 'manual' ? '' : 'none';
+        };
+        radios.forEach(function (radio) { radio.addEventListener('change', toggle); });
+        toggle();
     }
-    radios.forEach(function (radio) { radio.addEventListener('change', toggle); });
-    toggle();
+
+    const form = document.getElementById('offer-form');
+    const moneyInputs = form ? Array.from(form.querySelectorAll('input[data-kind="money"]')) : [];
+
+    function parse(text) {
+        const clean = String(text || '').replace(/[\s  ]/g, '').replace(',', '.');
+        const number = parseFloat(clean);
+        return isFinite(number) && number > 0 ? number : null;
+    }
+
+    function group(number) {
+        return Math.round(number).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    }
+
+    // Разряды отделяем пробелами после ввода: «700000000» читать трудно,
+    // а сервер пробелы понимает.
+    moneyInputs.forEach(function (input) {
+        input.addEventListener('blur', function () {
+            const number = parse(input.value);
+            input.value = number === null ? '' : group(number);
+        });
+    });
+
+    // Смена валюты: введённые суммы пересчитываются по курсу и форма
+    // отправляется заново. Без пересчёта «700 000 000 UZS» превратились бы
+    // в 700 миллионов долларов.
+    const switcher = document.getElementById('currency-switch');
+    if (switcher && form) {
+        const rate = parseFloat(switcher.dataset.rate);
+        switcher.querySelectorAll('a[data-currency]').forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                const target = link.dataset.currency;
+                const current = switcher.dataset.current;
+                if (target === current || !rate) return;
+                event.preventDefault();
+                moneyInputs.forEach(function (input) {
+                    const number = parse(input.value);
+                    if (number === null) return;
+                    const converted = target === 'USD' ? number / rate : number * rate;
+                    input.value = group(converted);
+                });
+                document.getElementById('offer-currency').value = target;
+                form.submit();
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

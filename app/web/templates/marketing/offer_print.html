@@ -1,3 +1,7 @@
+{# Суммы в сервисе в сумах, на бумагу — в выбранной валюте. #}
+{% macro amount(value) -%}
+{%- if value is not none -%}{{ "{:,.0f}".format(value / money.factor).replace(',', ' ') }}{%- else -%}—{%- endif -%}
+{%- endmacro -%}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -113,10 +117,10 @@
         <div class="metric">
             <div class="metric-label">{{ title }}</div>
             <div class="metric-value">
-                {% if key == 'price' %}{{ "{:,.0f}".format(flat.final_price) }}
-                {% elif key == 'price_m2' %}{{ "{:,.0f}".format(flat.price_m2) }}
-                {% else %}{{ "{:,.0f}".format(flat.monthly_payment) }}{% endif %}
-                UZS{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}
+                {% if key == 'price' %}{{ amount(flat.final_price) }}
+                {% elif key == 'price_m2' %}{{ amount(flat.price_m2) }}
+                {% else %}{{ amount(flat.monthly_payment) }}{% endif %}
+                {{ money.currency }}{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}
                 <span style="font-size: 8pt; color: #777; font-weight: 400;">— {{ hint }}</span>
             </div>
             <div class="metric-flat">
@@ -124,13 +128,13 @@
                 {% if flat.rooms %} · {{ flat.rooms }}-{{ _('комн') }}{% endif %}
                 {% if flat.area %} · {{ flat.area }} м²{% endif %}
                 {% if flat.floor %} · {{ _('этаж') }} {{ flat.floor }}{% endif %}
-                · {{ _('прайс') }} {{ "{:,.0f}".format(flat.base_price) }} UZS{% if flat.discount_percent %},
+                · {{ _('прайс') }} {{ amount(flat.base_price) }} {{ money.currency }}{% if flat.discount_percent %},
                 {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
                 {% if key == 'monthly' %}
-                <br>{{ _('Цена по ипотеке:') }} {{ "{:,.0f}".format(flat.final_price) }} UZS
+                <br>{{ _('Цена по ипотеке:') }} {{ amount(flat.final_price) }} {{ money.currency }}
                 {% endif %}
                 {% if key == 'monthly' and flat.initial_payment %}
-                <br>{{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS{% if flat.mortgage_term_months %},
+                <br>{{ _('Первый взнос:') }} {{ amount(flat.initial_payment) }} {{ money.currency }}{% if flat.mortgage_term_months %},
                 {{ _('срок') }} {{ flat.mortgage_term_months }} {{ _('мес.') }}{% endif %}
                 {% endif %}
             </div>
