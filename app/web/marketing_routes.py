@@ -173,13 +173,36 @@ def funnel_export():
 
 
 def _parse_number(value):
-    """Число из формы. Пустое и мусор -> None, фильтр просто не применяется."""
+    """Число из формы. Пустое и мусор -> None, фильтр просто не применяется.
+
+    Цены вводят с пробелами-разделителями («700 000 000») — их убираем.
+    Запятая считается десятичной: площадь пишут как «45,5».
+    """
     if value is None or str(value).strip() == '':
         return None
+    text = str(value).replace(' ', '').replace(' ', '').replace(' ', '').replace(',', '.')
     try:
-        return float(str(value).replace(' ', '').replace('\u00a0', '').replace(',', '.'))
+        number = float(text)
     except (TypeError, ValueError):
         return None
+    return number if number > 0 else None
+
+
+OFFER_CURRENCIES = ('UZS', 'USD')
+# Денежные фильтры: вводятся в выбранной валюте, в сервис уходят в сумах.
+MONEY_FILTERS = ('price_from', 'price_to', 'price_m2_from', 'price_m2_to',
+                 'monthly_from', 'monthly_to')
+AREA_FILTERS = ('area_from', 'area_to')
+
+
+def _usd_rate():
+    """Курс UZS за 1 USD. Без курса доллары показать нельзя — вернётся None."""
+    from ..services import currency_service
+    try:
+        rate = currency_service.get_current_effective_rate()
+    except Exception:
+        rate = None
+    return rate if rate and rate > 0 else None
 
 
 def _offer_request():
@@ -189,9 +212,17 @@ def _offer_request():
     местах, распечатанный офер однажды окажется не тем, что на экране.
     """
     project = request.args.get('project')
-    filters = {key: _parse_number(request.args.get(key)) for key in (
-        'price_from', 'price_to', 'price_m2_from', 'price_m2_to',
-        'area_from', 'area_to', 'monthly_to')}
+
+    rate = _usd_rate()
+    currency = request.args.get('currency', 'UZS')
+    if currency not in OFFER_CURRENCIES or (currency == 'USD' and not rate):
+        currency = 'UZS'
+    factor = rate if currency == 'USD' else 1
+
+    # inputs — как ввёл пользователь, в его валюте; filters — в сумах для расчёта.
+    inputs = {key: _parse_number(request.args.get(key)) for key in MONEY_FILTERS + AREA_FILTERS}
+    filters = {key: (value * factor if value and key in MONEY_FILTERS else value)
+               for key, value in inputs.items()}
 
     discount_mode = request.args.get('discount_mode', 'auto')
     # Ручные проценты приходят полями вида full_payment_kd — разбираем их в
@@ -211,26 +242,34 @@ def _offer_request():
         'full_payment': selected_discounts.get('full_payment', {}),
         'mortgage_standard': selected_discounts.get('mortgage', {}),
     }
-    return project, filters, discount_mode, selected_discounts, manual_percents
+    money = {'currency': currency, 'rate': rate, 'factor': factor}
+    return project, filters, inputs, money, discount_mode, selected_discounts, manual_percents
 
 
-def _criteria_labels(filters, discount_mode):
+def _format_amount(value, currency):
+    return f'{value:,.0f}'.replace(',', ' ') + f' {currency}'
+
+
+def _criteria_labels(inputs, discount_mode, currency):
     """Критерии человеческим языком — для печатной версии."""
+    def bounds(low, high, fmt):
+        if low and high:
+            return f'{fmt(low)} — {fmt(high)}'
+        return f'от {fmt(low)}' if low else f'до {fmt(high)}'
+
     def money(value):
-        return f'{value:,.0f}'.replace(',', ' ')
+        return _format_amount(value, currency)
+
+    def area(value):
+        return f'{value:g} м²'
 
     labels = []
-    if filters.get('price_from') or filters.get('price_to'):
-        bounds = ' — '.join(money(v) for v in (filters.get('price_from'), filters.get('price_to')) if v)
-        labels.append(f'Цена: {bounds} UZS')
-    if filters.get('price_m2_from') or filters.get('price_m2_to'):
-        bounds = ' — '.join(money(v) for v in (filters.get('price_m2_from'), filters.get('price_m2_to')) if v)
-        labels.append(f'Цена за м²: {bounds} UZS')
-    if filters.get('area_from') or filters.get('area_to'):
-        bounds = ' — '.join(str(v) for v in (filters.get('area_from'), filters.get('area_to')) if v)
-        labels.append(f'Площадь: {bounds} м²')
-    if filters.get('monthly_to'):
-        labels.append(f"Платёж до {money(filters['monthly_to'])} UZS/мес")
+    for low, high, title, fmt in (('price_from', 'price_to', 'Цена', money),
+                                  ('price_m2_from', 'price_m2_to', 'Цена за м²', money),
+                                  ('area_from', 'area_to', 'Площадь', area),
+                                  ('monthly_from', 'monthly_to', 'Платёж по ипотеке в месяц', money)):
+        if inputs.get(low) or inputs.get(high):
+            labels.append(f'{title}: {bounds(inputs.get(low), inputs.get(high), fmt)}')
     labels.append('Скидки: все доступные' if discount_mode != 'manual' else 'Скидки: выбраны вручную')
     return labels
 
@@ -241,7 +280,8 @@ def _criteria_labels(filters, discount_mode):
 def best_offer():
     """Список проектов и конструктор офера по выбранному."""
     projects = best_offer_service.list_projects()
-    project, filters, discount_mode, selected_discounts, manual_percents = _offer_request()
+    (project, filters, inputs, money, discount_mode,
+     selected_discounts, manual_percents) = _offer_request()
 
     if not project:
         return render_template(
@@ -249,6 +289,7 @@ def best_offer():
             title="Лучший офер",
             projects=projects,
             selected_project=None,
+            money=money,
         )
 
     offer = best_offer_service.build_offer(
@@ -264,10 +305,10 @@ def best_offer():
         projects=projects,
         selected_project=project,
         offer=offer,
-        filters=filters,
+        filters=inputs,
+        money=money,
         discount_mode=discount_mode,
         selected_discounts=selected_discounts,
-        print_args=request.args.to_dict(flat=False),
     )
 
 
@@ -276,7 +317,8 @@ def best_offer():
 @permission_required('marketing_offer_view')
 def best_offer_print():
     """Печатная версия офера: лист A4 для печати или сохранения в PDF."""
-    project, filters, discount_mode, _selected, manual_percents = _offer_request()
+    (project, filters, inputs, money, discount_mode,
+     _selected, manual_percents) = _offer_request()
     if not project:
         abort(404)
 
@@ -290,6 +332,7 @@ def best_offer_print():
     return render_template(
         'marketing/offer_print.html',
         offer=offer,
-        criteria=_criteria_labels(filters, discount_mode),
+        money=money,
+        criteria=_criteria_labels(inputs, discount_mode, money['currency']),
         current_date=datetime.now().strftime('%d.%m.%Y'),
     )

@@ -26,6 +26,32 @@ AVAILABLE_STATUSES = ("Маркетинговый резерв", "Подбор")
 FLAT_CATEGORY = 'flat'
 
 
+# Нижняя граница правдоподобной цены за м², UZS. В витрине встречаются лоты с
+# ценой-заглушкой (1 сум, 0,01 за м²): без отсечки такой лот стал бы
+# «минимальной ценой» офера.
+MIN_PLAUSIBLE_PRICE_M2 = 1_000_000
+
+
+def is_plausible_price(price, area):
+    if not price or not area or price <= 0 or area <= 0:
+        return False
+    return price / area >= MIN_PLAUSIBLE_PRICE_M2
+
+
+def _in_range(value, low, high):
+    """Пустая граница не ограничивает. Нет значения — в диапазон не попадает,
+    если хотя бы одна граница задана."""
+    if not low and not high:
+        return True
+    if value is None:
+        return False
+    if low and value < low:
+        return False
+    if high and value > high:
+        return False
+    return True
+
+
 def flat_url(sell_id):
     """Ссылка на карточку квартиры в CRM. Пустой шаблон — ссылки нет."""
     template = current_app.config.get('CRM_FLAT_URL') or ''
@@ -51,6 +77,10 @@ def list_projects():
 
     projects = {}
     for complex_name, _sell_id, price, price_m2, area in rows:
+        if not is_plausible_price(price, area):
+            continue
+        # Цену за м² считаем сами: поле витрины заполнено не у всех лотов.
+        price_m2 = price / area
         project = projects.setdefault(complex_name, {
             'complex_name': complex_name,
             'flats': 0,
@@ -156,15 +186,10 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
         EstateSell.estate_price.isnot(None),
     )
 
-    # Фильтры «от» и «до» приходят из формы и могут быть пустыми.
-    if filters.get('price_from'):
-        query = query.filter(EstateSell.estate_price >= filters['price_from'])
-    if filters.get('price_to'):
-        query = query.filter(EstateSell.estate_price <= filters['price_to'])
-    if filters.get('price_m2_from'):
-        query = query.filter(EstateSell.estate_price_m2 >= filters['price_m2_from'])
-    if filters.get('price_m2_to'):
-        query = query.filter(EstateSell.estate_price_m2 <= filters['price_m2_to'])
+    # Площадь фильтруем в запросе. Цену и цену за м² — ниже, по цене со
+    # скидками: клиент видит её, и фильтр по прайсу расходился бы с карточкой.
+    # Поле estate_price_m2 для этого не годится ещё и потому, что пустое не у
+    # всех лотов.
     if filters.get('area_from'):
         query = query.filter(EstateSell.estate_area >= filters['area_from'])
     if filters.get('area_to'):
@@ -191,22 +216,31 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
 
     best = {'price': None, 'price_m2': None, 'monthly': None}
     considered = 0
+    implausible = 0
 
     for sell in flats:
+        if not is_plausible_price(sell.estate_price, sell.estate_area):
+            implausible += 1
+            continue
+
         options = _price_options(sell, discounts, manual_percents, settings)
         full = options.get(pricing_service.FULL_PAYMENT_KEY)
         mortgage = options.get(pricing_service.MORTGAGE_KEY)
         if not full:
             continue
 
-        considered += 1
         final_price = full['final_price']
         price_m2 = final_price / sell.estate_area if sell.estate_area else None
-        monthly = mortgage.get('monthly_payment') if mortgage else None
+        if not _in_range(final_price, filters.get('price_from'), filters.get('price_to')):
+            continue
+        if not _in_range(price_m2, filters.get('price_m2_from'), filters.get('price_m2_to')):
+            continue
 
-        # Фильтр по ипотеке задаётся как «от ХХ в месяц»: он отсекает слишком
-        # дорогие платежи, а не дешёвые.
-        if filters.get('monthly_to') and monthly and monthly > filters['monthly_to']:
+        considered += 1
+        monthly = mortgage.get('monthly_payment') if mortgage else None
+        # Платёж отсекает лот только из показателя «Ипотека от»: квартира,
+        # которую не потянуть в ипотеку, остаётся хорошим вариантом за 100%.
+        if not _in_range(monthly, filters.get('monthly_from'), filters.get('monthly_to')):
             monthly = None
 
         flat = {
@@ -243,6 +277,7 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
     return {
         'complex_name': complex_name,
         'considered': considered,
+        'implausible': implausible,
         'best': best,
         'discounts': {
             'full_payment': discounts.get(PaymentMethod.FULL_PAYMENT, {}).get('limits', []),
