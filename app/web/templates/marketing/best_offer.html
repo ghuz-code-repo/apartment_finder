@@ -216,6 +216,11 @@
                         {{ _('Прайс:') }} {{ "{:,.0f}".format(flat.base_price) }} UZS
                         {% if flat.discount_percent %} · {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
                     </div>
+                    {% if key == 'monthly' %}
+                    <div class="text-muted">
+                        {{ _('Цена по ипотеке:') }} {{ "{:,.0f}".format(flat.final_price) }} UZS
+                    </div>
+                    {% endif %}
                     {% if key == 'monthly' and flat.initial_payment %}
                     <div class="text-muted">
                         {{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS

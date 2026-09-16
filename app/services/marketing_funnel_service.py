@@ -6,9 +6,16 @@
 сегмент контактов для повторного офера, поэтому этап кликабелен, а список
 выгружается в Excel.
 
-Заявка считается прошедшей этап, если такой переход есть в логе статусов, а не
-по текущему статусу: иначе дошедшие до сделки исчезли бы из всех предыдущих
-этапов и конверсии считались бы от неполной базы.
+Откуда берётся каждый этап:
+
+* заявки — таблица estate_buys, проект по полям интереса (см. lead_projects);
+* встречи — свои таблицы витрины: назначенная встреча — задача типа «встреча»
+  (tasks) или отчёт о встрече, состоявшаяся — отчёт без признака no_meeting
+  (estate_meetings). Подстатусы в логе переименовываются в настройках CRM, и
+  поиск по названию давал ноль;
+* подбор, бронь и сделка — переходы в логе статусов по заявкам выбранной
+  когорты, а не текущий статус: иначе дошедшие до сделки исчезли бы из всех
+  предыдущих этапов и конверсии считались бы от неполной базы.
 """
 
 import io
@@ -16,28 +23,31 @@ from datetime import timedelta
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from ..core.dates import to_date
 from ..core.db_utils import get_mysql_session
 from app.models.auth_models import SalesManager
 from app.models.estate_models import EstateHouse
 from app.models.funnel_models import EstateBuy, EstateBuysStatusLog
-from app.models.marketing_models import Contact, EstateMeeting
+from app.models.marketing_models import Contact, EstateMeeting, Task
+from .lead_projects import lead_project_condition, project_names_for
 
 # Этапы воронки по порядку. Для каждого — как определяется прохождение:
-# статус в логе, подстатус или отчёт о встрече.
+# статус в логе либо таблица встреч.
 STAGES = (
     {'key': 'lead', 'title': 'Заявка', 'source': 'all'},
     {'key': 'selection', 'title': 'Подбор', 'source': 'status', 'status': 'Подбор'},
-    {'key': 'meeting_set', 'title': 'Встреча назначена', 'source': 'custom_status',
-     'custom_status': 'Назначена встреча'},
-    {'key': 'meeting_held', 'title': 'Визит состоялся', 'source': 'meeting'},
+    {'key': 'meeting_set', 'title': 'Встреча назначена', 'source': 'meeting_set'},
+    {'key': 'meeting_held', 'title': 'Визит состоялся', 'source': 'meeting_held'},
     {'key': 'booking', 'title': 'Бронь', 'source': 'status', 'status': 'Бронь'},
     {'key': 'deal', 'title': 'Сделка', 'source': 'status',
      'status': ('Сделка в работе', 'Сделка проведена')},
 )
 STAGE_BY_KEY = {stage['key']: stage for stage in STAGES}
+
+# Типы задач, которыми в Macro назначают встречу: в офисе и на объекте.
+MEETING_TASK_TYPES = ('meeting', 'meeting_house')
 
 
 def get_filter_options():
@@ -62,12 +72,9 @@ def _cohort_query(start_date, end_date, complexes=None, channels=None):
         EstateBuy.created_at < end_date + timedelta(days=1),
     )
 
-    if complexes:
-        house_ids = [row[0] for row in mysql_session.query(EstateHouse.id).filter(
-            EstateHouse.complex_name.in_(complexes)).all()]
-        # Пустой список означает, что ни один проект не подошёл: показывать
-        # всё, как будто фильтра нет, нельзя.
-        query = query.filter(EstateBuy.house_id.in_(house_ids or [0]))
+    project_condition = lead_project_condition(complexes)
+    if project_condition is not None:
+        query = query.filter(project_condition)
     if channels:
         query = query.filter(EstateBuy.channel_type.in_(channels))
 
@@ -85,27 +92,53 @@ def _stage_ids(stage, cohort_ids, cohort_query):
     if source == 'all':
         return set(cohort_ids)
 
-    if source == 'meeting':
-        # Встречу подтверждает отчёт, а он ссылается на второй ключ заявки.
-        buy_keys = dict(mysql_session.query(EstateBuy.estate_buy_id, EstateBuy.id).filter(
-            EstateBuy.id.in_(cohort_ids)).all())
-        rows = mysql_session.query(EstateMeeting.estate_buy_id).filter(
-            EstateMeeting.estate_buy_id.in_(list(buy_keys.keys()) or [0]),
-            (EstateMeeting.no_meeting.is_(None)) | (EstateMeeting.no_meeting == 0),
-        ).distinct().all()
-        return {buy_keys[row[0]] for row in rows if row[0] in buy_keys}
+    if source in ('meeting_set', 'meeting_held'):
+        return _meeting_ids(source, cohort_ids)
 
     query = mysql_session.query(EstateBuysStatusLog.estate_buy_id).filter(
         EstateBuysStatusLog.estate_buy_id.in_(cohort_query))
 
-    if source == 'status':
-        statuses = stage['status']
-        statuses = statuses if isinstance(statuses, tuple) else (statuses,)
-        query = query.filter(EstateBuysStatusLog.status_to_name.in_(statuses))
-    else:
-        query = query.filter(EstateBuysStatusLog.status_custom_to_name == stage['custom_status'])
+    statuses = stage['status']
+    statuses = statuses if isinstance(statuses, tuple) else (statuses,)
+    query = query.filter(EstateBuysStatusLog.status_to_name.in_(statuses))
 
     return {row[0] for row in query.distinct().all()}
+
+
+def _meeting_ids(source, cohort_ids):
+    """Заявки когорты с назначенной или состоявшейся встречей — по таблицам встреч.
+
+    Встречи и задачи ссылаются на второй ключ заявки (estate_buy_id), поэтому
+    сначала строим соответствие ключей.
+    """
+    mysql_session = get_mysql_session()
+    leads = mysql_session.query(EstateBuy.estate_buy_id, EstateBuy.id, EstateBuy.contacts_id).filter(
+        EstateBuy.id.in_(cohort_ids), EstateBuy.estate_buy_id.isnot(None)).all()
+    by_buy_key = {buy_key: (lead_id, contacts_id) for buy_key, lead_id, contacts_id in leads}
+    if not by_buy_key:
+        return set()
+    buy_keys = list(by_buy_key)
+
+    reports = mysql_session.query(EstateMeeting.estate_buy_id).filter(
+        EstateMeeting.estate_buy_id.in_(buy_keys))
+    if source == 'meeting_held':
+        reports = reports.filter(or_(EstateMeeting.no_meeting.is_(None), EstateMeeting.no_meeting == 0))
+    ids = {by_buy_key[row[0]][0] for row in reports.distinct().all()}
+    if source == 'meeting_held':
+        return ids
+
+    # Назначенная встреча — задача-встреча, даже если отчёта по ней ещё нет.
+    # Отчёт тоже считается: без назначения встречи он бы не появился.
+    tasks = mysql_session.query(Task.estate_id, Task.contacts_id).filter(
+        Task.estate_id.in_(buy_keys), Task.custom_type.in_(MEETING_TASK_TYPES)).all()
+    for buy_key, task_contact in tasks:
+        lead_id, lead_contact = by_buy_key[buy_key]
+        # estate_id общий для заявок, объектов и домов: при несовпадении
+        # контакта задача относится к другой сущности с тем же номером.
+        if task_contact and lead_contact and task_contact != lead_contact:
+            continue
+        ids.add(lead_id)
+    return ids
 
 
 def get_funnel(start_date, end_date, complexes=None, channels=None):
@@ -165,14 +198,15 @@ def get_stage_contacts(stage_key, start_date, end_date, complexes=None, channels
     contact_ids = {lead.contacts_id for lead in leads if lead.contacts_id}
     contacts = {}
     if contact_ids:
-        contacts = {c.contacts_id or c.id: c for c in mysql_session.query(Contact).filter(
-            Contact.contacts_id.in_(contact_ids)).all()}
+        # По документации заявка ссылается на contacts.id, встречи — на
+        # contacts.contacts_id; обычно они совпадают, но опираться на это не будем.
+        for contact in mysql_session.query(Contact).filter(or_(
+                Contact.id.in_(contact_ids), Contact.contacts_id.in_(contact_ids))).all():
+            contacts.setdefault(contact.id, contact)
+            if contact.contacts_id:
+                contacts.setdefault(contact.contacts_id, contact)
 
-    house_ids = {lead.house_id for lead in leads if lead.house_id}
-    houses = {}
-    if house_ids:
-        houses = {h.id: h for h in mysql_session.query(EstateHouse).filter(
-            EstateHouse.id.in_(house_ids)).all()}
+    project_names = project_names_for(leads)
 
     managers = {m.id: m.full_name for m in mysql_session.query(SalesManager).all()}
 
@@ -184,12 +218,11 @@ def get_stage_contacts(stage_key, start_date, end_date, complexes=None, channels
     rows = []
     for lead in leads:
         contact = contacts.get(lead.contacts_id)
-        house = houses.get(lead.house_id)
         rows.append({
             'lead_id': lead.id,
             'contact_name': (contact.full_name if contact else None) or '—',
             'phone': (contact.phones if contact else None) or '—',
-            'complex_name': (house.complex_name if house else None) or '—',
+            'complex_name': project_names.get(lead.id) or '—',
             'stage': stage['title'],
             'channel': lead.channel_type or '—',
             'created_at': to_date(lead.created_at),

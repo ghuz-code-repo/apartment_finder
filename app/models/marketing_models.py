@@ -73,6 +73,30 @@ class EstateMeeting(db.Model):
         return f'<EstateMeeting {self.id} buy={self.estate_buy_id}>'
 
 
+class Task(db.Model):
+    """Задача CRM. Назначенная встреча в Macro — задача типа «встреча».
+
+    estate_id общий для заявок, объектов и домов, поэтому к заявке задачу
+    привязываем по estate_buys.estate_buy_id вместе с типом задачи.
+    """
+    __bind_key__ = 'mysql_source'
+    __tablename__ = 'tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    estate_id = db.Column(db.Integer, nullable=True, index=True)
+    contacts_id = db.Column(db.Integer, nullable=True)
+    date_added = db.Column(db.Date)
+    date_finish = db.Column(db.Date)
+    # Встреча в офисе — meeting, на объекте — meeting_house.
+    custom_type = db.Column(db.String(16))
+    custom_type_name = db.Column(db.String(48))
+    is_closed = db.Column(db.Integer)
+    manager_id = db.Column(db.Integer, nullable=True)
+
+    def __repr__(self):
+        return f'<Task {self.id} {self.custom_type}>'
+
+
 class Contact(db.Model):
     """Контакт клиента.
 

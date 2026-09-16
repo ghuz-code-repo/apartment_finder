@@ -126,6 +126,9 @@
                 {% if flat.floor %} · {{ _('этаж') }} {{ flat.floor }}{% endif %}
                 · {{ _('прайс') }} {{ "{:,.0f}".format(flat.base_price) }} UZS{% if flat.discount_percent %},
                 {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
+                {% if key == 'monthly' %}
+                <br>{{ _('Цена по ипотеке:') }} {{ "{:,.0f}".format(flat.final_price) }} UZS
+                {% endif %}
                 {% if key == 'monthly' and flat.initial_payment %}
                 <br>{{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS{% if flat.mortgage_term_months %},
                 {{ _('срок') }} {{ flat.mortgage_term_months }} {{ _('мес.') }}{% endif %}
