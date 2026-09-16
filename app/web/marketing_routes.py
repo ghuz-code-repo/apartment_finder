@@ -336,3 +336,34 @@ def best_offer_print():
         criteria=_criteria_labels(inputs, discount_mode, money['currency']),
         current_date=datetime.now().strftime('%d.%m.%Y'),
     )
+
+
+@marketing_bp.route('/lead-scoring')
+@login_required
+@permission_required('marketing_lead_scoring_view')
+def lead_scoring():
+    """Скоринг лидов в тестовом режиме: модель, её качество и проверка на свежих лидах."""
+    from ..services import lead_scoring_service
+
+    record = lead_scoring_service.active_model()
+    check = None
+    if record:
+        try:
+            check = lead_scoring_service.live_check(record)
+        except Exception as e:
+            # Проверка читает брони из MySQL: недоступная витрина не должна
+            # прятать саму модель и её метрики.
+            flash(f'Не удалось собрать проверку на свежих лидах: {e}', 'warning')
+
+    return render_template(
+        'marketing/lead_scoring.html',
+        title="Скоринг лидов (тест)",
+        model=record,
+        check=check,
+        skip_titles=_lead_skip_titles(),
+    )
+
+
+def _lead_skip_titles():
+    from ..services.lead_scoring_features import SKIP_REASONS
+    return SKIP_REASONS

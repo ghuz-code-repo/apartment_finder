@@ -98,6 +98,7 @@ permissions_registry.register('finder.marketing_call_center_view_own', 'Марк
 permissions_registry.register('finder.marketing_funnel_view', 'Маркетинг: воронка', 'Просмотр воронки и контактов этапов', 'view')
 permissions_registry.register('finder.marketing_offer_view', 'Маркетинг: лучший офер', 'Формирование офера по проекту', 'view')
 permissions_registry.register('finder.marketing_funnel_export', 'Маркетинг: выгрузка контактов', 'Выгрузка контактов этапа воронки', 'export')
+permissions_registry.register('finder.marketing_lead_scoring_view', 'Маркетинг: скоринг лидов (тест)', 'Оценки входящих лидов моделью и проверка их качества', 'advanced')
 
 # ============================================================
 # COMPETITORS MODULE — map, profiles, comparison, dynamics, media
@@ -251,6 +252,7 @@ PERMISSION_MAP = {
     'marketing_funnel_view': 'finder.marketing_funnel_view',
     'marketing_offer_view': 'finder.marketing_offer_view',
     'marketing_funnel_export': 'finder.marketing_funnel_export',
+    'marketing_lead_scoring_view': 'finder.marketing_lead_scoring_view',
     # Competitors
     'competitors_map_view': 'finder.competitors_map_view',
     'competitors_profile_view': 'finder.competitors_profile_view',

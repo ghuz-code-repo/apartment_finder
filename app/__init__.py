@@ -133,6 +133,9 @@ def create_app(config_class=DevelopmentConfig):
 
     CORS(app)
     db.init_app(app)
+    # Исключённые в настройках ЖК и квартиры — во всех отчётах и маркетинге.
+    from .core.report_exclusions import init_report_exclusions
+    init_report_exclusions(app)
 
     migrate_default.init_app(app, db, directory='migrations_default',
                              include_symbol=lambda name, table: table.info.get('bind_key') is None)
@@ -175,7 +178,7 @@ def create_app(config_class=DevelopmentConfig):
     with app.app_context():
         # Импорт моделей
         from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, \
-            funnel_models, special_offer_models, registry_models
+            funnel_models, special_offer_models, registry_models, lead_scoring_models
 
         # Локальный импорт Blueprints для предотвращения циклической зависимости
         from .web.main_routes import main_bp

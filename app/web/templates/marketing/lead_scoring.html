@@ -1,0 +1,188 @@
+{% extends "layouts/base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .grade-badge { display: inline-block; min-width: 1.8rem; text-align: center; font-weight: 700;
+                   border-radius: .35rem; padding: .1rem .45rem; }
+    .grade-A { background: rgba(25, 135, 84, .15); color: #198754; }
+    .grade-B { background: rgba(196, 166, 104, .2); color: #9a7b3c; }
+    .grade-C { background: rgba(var(--bs-emphasis-color-rgb), .08); color: var(--bs-secondary-color); }
+    .share-bar { height: .45rem; border-radius: .25rem; background: rgba(var(--bs-emphasis-color-rgb), .08); }
+    .share-bar > div { height: 100%; border-radius: .25rem; background: var(--gh-gold, #c4a668); }
+</style>
+{% endblock %}
+
+{% macro grade_table(rows, show_threshold=false) %}
+<div class="table-responsive">
+    <table class="table modern-table mb-0 align-middle">
+        <thead>
+            <tr>
+                <th>{{ _('Группа') }}</th>
+                <th class="text-end">{{ _('Заявок') }}</th>
+                <th class="text-end">{{ _('Доля заявок') }}</th>
+                <th class="text-end">{{ _('Броней') }}</th>
+                <th class="text-end">{{ _('Конверсия в бронь') }}</th>
+                <th style="width: 28%;">{{ _('Доля всех броней') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td><span class="grade-badge grade-{{ row.grade }}">{{ row.grade }}</span></td>
+                <td class="text-end">{{ "{:,}".format(row.leads).replace(',', ' ') }}</td>
+                <td class="text-end">{{ row.leads_share }}%</td>
+                <td class="text-end">{{ "{:,}".format(row.booked).replace(',', ' ') }}</td>
+                <td class="text-end">{% if row.booking_rate is not none %}{{ row.booking_rate }}%{% else %}—{% endif %}</td>
+                <td>
+                    {% if row.bookings_share is not none %}
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="share-bar flex-grow-1"><div style="width: {{ row.bookings_share }}%;"></div></div>
+                        <span class="small text-nowrap">{{ row.bookings_share }}%</span>
+                    </div>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+        <h1 class="gradient-heading mb-0">{{ _('Скоринг лидов') }} <span class="badge bg-warning text-dark fs-6 align-middle">{{ _('тест') }}</span></h1>
+        <p class="text-muted mb-0">
+            {{ _('Модель оценивает, насколько вероятно, что новый входящий лид дойдёт до брони. В работу колл-центра оценки пока не попадают — здесь проверяем, что группы действительно различаются.') }}
+        </p>
+    </div>
+</div>
+
+{% if not model %}
+<div class="card card-glass">
+    <div class="card-body text-center py-5">
+        <h5>{{ _('Модель ещё не обучена') }}</h5>
+        <p class="text-muted mb-3">{{ _('Обучение запускается на сервере командой, затем новые заявки оцениваются второй командой или воркером:') }}</p>
+        <pre class="d-inline-block text-start bg-body-tertiary p-3 rounded mb-0">python lead_scoring.py train
+python lead_scoring.py score --days 30</pre>
+    </div>
+</div>
+{% else %}
+{% set m = model.metrics %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Версия модели') }}</div>
+            <div class="kpi-value">v{{ model.version }}</div>
+            <div class="kpi-sub-value">{{ model.created_at.strftime('%d.%m.%Y') if model.created_at else '' }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Броней в верхних 20%%') }}</div>
+            <div class="kpi-value">{{ m.capture['20'] }}%</div>
+            <div class="kpi-sub-value">{{ _('случайный порядок — 20%%') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">ROC-AUC</div>
+            <div class="kpi-value">{{ m.roc_auc }}</div>
+            <div class="kpi-sub-value">{{ _('0,5 — угадывание, 1 — идеал') }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="kpi-card text-center">
+            <div class="kpi-label">{{ _('Конверсия в бронь') }}</div>
+            <div class="kpi-value">{{ m.base_rate }}%</div>
+            <div class="kpi-sub-value">{{ _('за %(days)s дней, в среднем', days=model.horizon_days) }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">{{ _('Качество на отложенном периоде') }}</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            {{ _('Модель училась на заявках') }} {{ model.train_from.strftime('%d.%m.%Y') }}–{{ model.train_to.strftime('%d.%m.%Y') }}
+            ({{ "{:,}".format(model.train_rows).replace(',', ' ') }}, {{ _('броней') }}: {{ model.train_positives }})
+            {{ _('и проверялась на более поздних, которых не видела:') }}
+            {{ model.test_from.strftime('%d.%m.%Y') }}–{{ model.test_to.strftime('%d.%m.%Y') }}
+            ({{ "{:,}".format(model.test_rows).replace(',', ' ') }}, {{ _('броней') }}: {{ model.test_positives }}).
+            {{ _('Группы: A — 10%% заявок с самой высокой оценкой, B — следующие 20%%, C — остальные.') }}
+        </p>
+        {{ grade_table(m.grades) }}
+        <p class="form-text mb-0">
+            {{ _('Броней в верхних 10 / 20 / 30%% заявок:') }} {{ m.capture['10'] }} / {{ m.capture['20'] }} / {{ m.capture['30'] }}%.
+        </p>
+    </div>
+</div>
+
+<div class="card card-glass mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0">{{ _('Проверка на свежих лидах') }}</h5>
+        {% if check and check.period %}
+        <span class="text-muted small">{{ _('Заявки') }} {{ check.period[0].strftime('%d.%m.%Y') }}–{{ check.period[1].strftime('%d.%m.%Y') }}</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if check and check.total_leads %}
+        <p class="text-muted small">
+            {{ _('Брони набираются до %(days)s дней, поэтому первые недели цифры предварительные: смотрите на разницу между группами, а не на абсолютную конверсию.', days=model.horizon_days) }}
+        </p>
+        {{ grade_table(check.groups) }}
+        {% if check.skipped %}
+        <p class="form-text mb-0">
+            {{ _('Не оценивались:') }}
+            {% for code, count in check.skipped %}{{ skip_titles.get(code, code) }} — {{ count }}{% if not loop.last %}; {% endif %}{% endfor %}.
+        </p>
+        {% endif %}
+        {% else %}
+        <div class="text-center text-muted py-3">
+            {{ _('Оценённых заявок пока нет. Запустите:') }} <code>python lead_scoring.py score --days 30</code>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if check and check.recent %}
+<div class="card card-glass">
+    <div class="card-header"><h5 class="mb-0">{{ _('Последние оценённые заявки') }}</h5></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table modern-table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>{{ _('Заявка') }}</th>
+                        <th>{{ _('Поступила') }}</th>
+                        <th>{{ _('Группа') }}</th>
+                        <th class="text-end">{{ _('Оценка') }}</th>
+                        <th>{{ _('Канал') }}</th>
+                        <th>{{ _('Источник') }}</th>
+                        <th>{{ _('Бронь') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in check.recent %}
+                    <tr>
+                        <td>{{ row.lead_id }}</td>
+                        <td>{{ row.created_at.strftime('%d.%m.%Y %H:%M') if row.created_at else '—' }}</td>
+                        <td><span class="grade-badge grade-{{ row.grade }}">{{ row.grade }}</span></td>
+                        <td class="text-end">{{ "%.2f"|format(row.score * 100) }}%</td>
+                        <td>{{ row.channel_type or '—' }}</td>
+                        <td class="text-truncate" style="max-width: 18rem;">{{ row.utm_source or '—' }}</td>
+                        <td>{% if row.booked %}<span class="text-success fw-semibold">{{ _('да') }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
