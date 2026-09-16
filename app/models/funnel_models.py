@@ -18,8 +18,12 @@ class EstateBuy(db.Model):
     status_name = db.Column(db.String(32))
     custom_status_name = db.Column(db.String(255))
 
-    # ID дома (для связи с ЖК)
+    # Дом объекта в сделке. Заполняется только начиная с брони, поэтому
+    # проект новой заявки по нему не определить — для этого поля интереса ниже.
     house_id = db.Column(db.Integer, nullable=True)
+    # Первый интерес заявки: комплекс и дом, которыми клиент заинтересовался.
+    first_complex_interest = db.Column(db.Integer, nullable=True)
+    first_house_interest = db.Column(db.Integer, nullable=True)
 
     # ID кастомного статуса (для "Назначена встреча = 616")
     status_custom = db.Column(db.Integer, nullable=True)

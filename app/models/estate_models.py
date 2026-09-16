@@ -50,6 +50,10 @@ class EstateHouse(db.Model):
     __table_args__ = {'extend_existing': True}
 
     id = db.Column(db.Integer, primary_key=True)
+    # Ключи, на которые ссылаются заявки и встречи витрины: estate_buys.house_id
+    # и first_house_interest ведут в house_id, first_complex_interest — в complex_id.
+    house_id = db.Column(db.Integer, nullable=True, index=True)
+    complex_id = db.Column(db.Integer, nullable=True, index=True)
     complex_name = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     geo_house = db.Column(db.String(50))

@@ -17,7 +17,7 @@
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from ..core.dates import to_date
 from ..core.db_utils import get_mysql_session
@@ -25,6 +25,7 @@ from app.models.auth_models import SalesManager
 from app.models.estate_models import EstateHouse
 from app.models.funnel_models import EstateBuy, EstateBuysStatusLog
 from app.models.marketing_models import Call, EstateMeeting
+from .lead_projects import lead_project_condition, project_keys
 from .contracting_income_service import (GRANULARITIES, build_periods, period_label,
                                          period_start)
 
@@ -39,16 +40,6 @@ CALL_DIRECTIONS = ('in', 'out')
 CLOSING_STATUSES = ('Сделка проведена', 'Сделка в работе', 'Отказ', 'Нецелевой')
 
 
-def _house_ids_for_complexes(complexes):
-    """id домов выбранных ЖК. None — фильтра по проекту нет."""
-    if not complexes:
-        return None
-    rows = get_mysql_session().query(EstateHouse.id).filter(
-        EstateHouse.complex_name.in_(complexes)
-    ).all()
-    return [row[0] for row in rows]
-
-
 def get_filter_options():
     """Списки для фильтров: проекты и менеджеры."""
     mysql_session = get_mysql_session()
@@ -61,7 +52,7 @@ def get_filter_options():
 
 # --- Ряды динамики ---
 
-def _call_rows(start_date, end_date, manager_ids, house_ids):
+def _call_rows(start_date, end_date, manager_ids, complexes):
     """Звонки интервала: одна дата на звонок."""
     query = get_mysql_session().query(Call.call_date).filter(
         Call.call_date.isnot(None),
@@ -75,15 +66,15 @@ def _call_rows(start_date, end_date, manager_ids, house_ids):
 
     if manager_ids:
         query = query.filter(Call.manager_id.in_(manager_ids))
-    if house_ids is not None:
+    project_condition = lead_project_condition(complexes)
+    if project_condition is not None:
         # У звонка своего дома нет — проект берём у заявки, к которой он привязан.
-        query = query.join(EstateBuy, Call.estate_id == EstateBuy.id).filter(
-            EstateBuy.house_id.in_(house_ids))
+        query = query.join(EstateBuy, Call.estate_id == EstateBuy.id).filter(project_condition)
 
     return [row[0] for row in query.all()]
 
 
-def _selection_rows(start_date, end_date, manager_ids, house_ids):
+def _selection_rows(start_date, end_date, manager_ids, complexes):
     """Переходы в «Подбор» за интервал."""
     query = get_mysql_session().query(EstateBuysStatusLog.log_date).filter(
         EstateBuysStatusLog.log_date.isnot(None),
@@ -94,14 +85,15 @@ def _selection_rows(start_date, end_date, manager_ids, house_ids):
 
     if manager_ids:
         query = query.filter(EstateBuysStatusLog.manager_id.in_(manager_ids))
-    if house_ids is not None:
+    project_condition = lead_project_condition(complexes)
+    if project_condition is not None:
         query = query.join(EstateBuy, EstateBuysStatusLog.estate_buy_id == EstateBuy.id).filter(
-            EstateBuy.house_id.in_(house_ids))
+            project_condition)
 
     return [row[0] for row in query.all()]
 
 
-def _meeting_rows(start_date, end_date, manager_ids, house_ids, only_held=False):
+def _meeting_rows(start_date, end_date, manager_ids, complexes, only_held=False):
     """Встречи интервала по дате учёта."""
     query = get_mysql_session().query(EstateMeeting.meeting_date).filter(
         EstateMeeting.meeting_date.isnot(None),
@@ -114,8 +106,13 @@ def _meeting_rows(start_date, end_date, manager_ids, house_ids, only_held=False)
         query = query.filter((EstateMeeting.no_meeting.is_(None)) | (EstateMeeting.no_meeting == 0))
     if manager_ids:
         query = query.filter(EstateMeeting.manager_id.in_(manager_ids))
-    if house_ids is not None:
-        query = query.filter(EstateMeeting.house_id.in_(house_ids))
+    keys = project_keys(complexes)
+    if keys is not None:
+        # У встречи свой проект — где она прошла. Ключи витрины: complex_id и
+        # house_id домов, а не estate_houses.id.
+        house_ids, complex_ids = keys
+        query = query.filter(or_(EstateMeeting.complex_id.in_(complex_ids),
+                                 EstateMeeting.house_id.in_(house_ids)))
 
     return [row[0] for row in query.all()]
 
@@ -126,19 +123,13 @@ def get_dynamics(start_date, end_date, granularity=DEFAULT_GRANULARITY,
     if granularity not in dict(GRANULARITIES):
         granularity = DEFAULT_GRANULARITY
 
-    house_ids = _house_ids_for_complexes(complexes)
-    # Пустой список домов означает, что под фильтр не попал ни один проект:
-    # считать «как будто фильтра нет» было бы враньём.
-    if house_ids is not None and not house_ids:
-        house_ids = [0]
-
     periods = build_periods(start_date, end_date, granularity)
     buckets = {p: {'calls': 0, 'selections': 0, 'meetings': 0} for p in periods}
 
     series = (
-        ('calls', _call_rows(start_date, end_date, manager_ids, house_ids)),
-        ('selections', _selection_rows(start_date, end_date, manager_ids, house_ids)),
-        ('meetings', _meeting_rows(start_date, end_date, manager_ids, house_ids)),
+        ('calls', _call_rows(start_date, end_date, manager_ids, complexes)),
+        ('selections', _selection_rows(start_date, end_date, manager_ids, complexes)),
+        ('meetings', _meeting_rows(start_date, end_date, manager_ids, complexes)),
     )
     for key, rows in series:
         for raw_date in rows:
@@ -200,10 +191,6 @@ def get_manager_stats(start_date, end_date, manager_ids=None, complexes=None):
     статусов: это скорость реакции на новую заявку.
     """
     mysql_session = get_mysql_session()
-    house_ids = _house_ids_for_complexes(complexes)
-    if house_ids is not None and not house_ids:
-        house_ids = [0]
-
     query = mysql_session.query(
         EstateBuy.id,
         EstateBuy.created_at,
@@ -217,8 +204,9 @@ def get_manager_stats(start_date, end_date, manager_ids=None, complexes=None):
     if manager_ids:
         query = query.filter(
             func.coalesce(EstateBuy.call_center_manager_id, EstateBuy.manager_id).in_(manager_ids))
-    if house_ids is not None:
-        query = query.filter(EstateBuy.house_id.in_(house_ids))
+    project_condition = lead_project_condition(complexes)
+    if project_condition is not None:
+        query = query.filter(project_condition)
 
     leads = query.all()
     if not leads:
