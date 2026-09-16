@@ -195,6 +195,7 @@ def create_app(config_class=DevelopmentConfig):
         from .web.ai_routes import ai_bp
         from .web.tma_routes import tma_bp
         from .web.sync_routes import sync_bp
+        from .web.marketing_routes import marketing_bp
         from .web.tiles_routes import tiles_bp
         from .web.plans_routes import plans_bp
         from .web.media_routes import media_bp
@@ -217,6 +218,7 @@ def create_app(config_class=DevelopmentConfig):
         app.register_blueprint(ai_bp)
         app.register_blueprint(tma_bp, url_prefix='/tma')
         app.register_blueprint(sync_bp, url_prefix='/api/sync')
+        app.register_blueprint(marketing_bp, url_prefix='/marketing')
         app.register_blueprint(tiles_bp)
         app.register_blueprint(plans_bp)
         app.register_blueprint(media_bp)

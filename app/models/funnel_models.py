@@ -8,27 +8,42 @@ class EstateBuy(db.Model):
     __tablename__ = 'estate_buys'
 
     id = db.Column(db.Integer, primary_key=True)
+    # Второй ключ витрины. Лог статусов и звонки ссылаются на id, а отчёты о
+    # встречах — на estate_buy_id, поэтому в модели нужны оба.
+    estate_buy_id = db.Column(db.Integer, nullable=True, index=True)
+
     # Дата создания заявки. Раньше в источнике было поле date_added (DATE),
     # сейчас его нет — единственная дата создания это created_at (DATETIME).
     created_at = db.Column(db.DateTime)
     status_name = db.Column(db.String(32))
     custom_status_name = db.Column(db.String(255))
 
-    # ============================================
-    # === НАЧАЛО ИЗМЕНЕНИЙ: Добавляем поля ===
-    # ============================================
-
     # ID дома (для связи с ЖК)
     house_id = db.Column(db.Integer, nullable=True)
 
     # ID кастомного статуса (для "Назначена встреча = 616")
     status_custom = db.Column(db.Integer, nullable=True)
+    # Числовой статус витрины: 20 — Подбор, 30 — Бронь, 100 — Сделка проведена.
+    status = db.Column(db.Integer, nullable=True)
 
-    # ============================================
-    # === КОНЕЦ ИЗМЕНЕНИЙ ===
-    # ============================================
+    # Контакт клиента — по нему собирается выгрузка из воронки.
+    contacts_id = db.Column(db.Integer, nullable=True, index=True)
 
-    __bind_key__ = 'mysql_source'
+    # Менеджер заявки и отдельно менеджер колл-центра: в отчёте колл-центра
+    # интересен именно второй, но заполнен он не всегда.
+    manager_id = db.Column(db.Integer, db.ForeignKey(auth_models.SalesManager.id),
+                           nullable=True, index=True)
+    call_center_manager_id = db.Column(db.Integer, nullable=True, index=True)
+
+    # Канал заявки: витрина уже разложила источник, сопоставлять utm руками
+    # не нужно.
+    channel_type = db.Column(db.String(32), nullable=True)
+    channel_name = db.Column(db.String(255), nullable=True)
+    utm_source = db.Column(db.String(255), nullable=True)
+    utm_medium = db.Column(db.String(255), nullable=True)
+    utm_campaign = db.Column(db.String(255), nullable=True)
+
+    __bind_key__ = "mysql_source"
 
 
 class EstateBuysStatusLog(db.Model):
