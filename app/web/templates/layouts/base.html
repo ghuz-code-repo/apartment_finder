@@ -68,7 +68,7 @@
                             </li>
                             {% endif %}
 
-                            {% if current_user.can('marketing_call_center_view') or current_user.can('marketing_call_center_view_own') or current_user.can('marketing_funnel_view') or current_user.can('marketing_offer_view') %}
+                            {% if current_user.can('marketing_call_center_view') or current_user.can('marketing_call_center_view_own') or current_user.can('marketing_funnel_view') or current_user.can('marketing_offer_view') or current_user.can('marketing_lead_scoring_view') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                     {{ _('Маркетинг') }}
@@ -82,6 +82,10 @@
                                     {% endif %}
                                     {% if current_user.can('marketing_funnel_view') %}
                                     <li><a class="dropdown-item" href="{{ url_for('marketing.funnel') }}">{{ _('Воронка') }}</a></li>
+                                    {% endif %}
+                                    {% if current_user.can('marketing_lead_scoring_view') %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('marketing.lead_scoring') }}">{{ _('Скоринг лидов (тест)') }}</a></li>
                                     {% endif %}
                                 </ul>
                             </li>
