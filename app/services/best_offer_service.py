@@ -209,7 +209,7 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
         if filters.get('monthly_to') and monthly and monthly > filters['monthly_to']:
             monthly = None
 
-        candidate = {
+        flat = {
             'sell_id': sell.id,
             'flat_number': sell.geo_flatnum,
             'floor': sell.estate_floor,
@@ -217,22 +217,28 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
             'area': sell.estate_area,
             'category': map_mysql_key_to_russian_value(sell.estate_sell_category),
             'base_price': sell.estate_price,
-            'final_price': final_price,
-            'price_m2': price_m2,
-            'discount_percent': full['total_discount_percent'],
-            'monthly_payment': monthly,
-            'initial_payment': mortgage.get('initial_payment') if mortgage else None,
-            'mortgage_term_months': mortgage.get('mortgage_term_months') if mortgage else None,
             'crm_url': flat_url(sell.id),
         }
+        full_candidate = dict(flat, final_price=final_price, price_m2=price_m2,
+                              discount_percent=full['total_discount_percent'])
 
         if best['price'] is None or final_price < best['price']['final_price']:
-            best['price'] = candidate
+            best['price'] = full_candidate
         if price_m2 and (best['price_m2'] is None or price_m2 < best['price_m2']['price_m2']):
-            best['price_m2'] = candidate
+            best['price_m2'] = full_candidate
         if monthly and (best['monthly'] is None
                         or monthly < best['monthly']['monthly_payment']):
-            best['monthly'] = candidate
+            # У ипотеки своя строка матрицы и свои скидки: цена и скидка в её
+            # карточке берутся из ипотечного варианта, а не из 100% оплаты.
+            best['monthly'] = dict(
+                flat,
+                final_price=mortgage['final_price'],
+                price_m2=mortgage['final_price'] / sell.estate_area if sell.estate_area else None,
+                discount_percent=mortgage['total_discount_percent'],
+                monthly_payment=monthly,
+                initial_payment=mortgage.get('initial_payment'),
+                mortgage_term_months=mortgage.get('mortgage_term_months'),
+            )
 
     return {
         'complex_name': complex_name,
