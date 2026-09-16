@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# Заголовок попадает в имя файла при сохранении в PDF, поэтому это название
+       проекта, а не служебный адрес страницы. #}
+    <title>{{ _('Офер') }} — {{ offer.complex_name }}</title>
+    <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            background-color: #fff;
+            font-size: 9pt;
+            color: #1a1a1a;
+        }
+        .page-container {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 10mm;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+        }
+        @media screen {
+            .page-container { box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15); }
+        }
+        .header { text-align: center; margin-bottom: 0.5rem; position: relative; }
+        .header-logo { position: absolute; top: 0; left: 0; height: 34px; width: auto; }
+        .header h1 { color: #c4a668; font-weight: 700; font-size: 18pt; margin: 0; }
+        .header p { font-size: 8.5pt; color: #555; margin-top: 0.2rem; }
+        .section-title {
+            font-size: 12pt;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #c4a668;
+            padding-bottom: 0.3rem;
+            margin: 0.6rem 0;
+        }
+        .criteria {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .criteria span {
+            border: 1px solid #eee;
+            background-color: #fcfcfc;
+            border-radius: 0.3rem;
+            padding: 0.2rem 0.5rem;
+            font-size: 8pt;
+        }
+        .metric {
+            border: 1px solid #ddd;
+            border-left: 4px solid #c4a668;
+            border-radius: 0.4rem;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.6rem;
+        }
+        .metric-label { font-size: 8pt; text-transform: uppercase; color: #777; }
+        .metric-value { font-size: 16pt; font-weight: 700; margin: 0.1rem 0; }
+        .metric-flat { font-size: 8.5pt; color: #333; }
+        /* Ссылка на карточку — то, ради чего офер считается проверяемым:
+           в печати URL виден целиком, иначе на бумаге он бесполезен. */
+        .metric-link { font-size: 7.5pt; color: #666; word-break: break-all; }
+        .footer {
+            text-align: center;
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid #ccc;
+            font-size: 8pt;
+            color: #888;
+        }
+        @page { size: A4; margin: 10mm; }
+        @media print {
+            body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .page-container { width: auto; min-height: 276mm; padding: 0; box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="no-print d-flex justify-content-end mb-3">
+            <button class="btn btn-secondary" type="button" id="printBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zM12 7H4a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1m-1 4H5a.5.5 0 0 1 0-1h6a.5.5 0 0 1 0 1m-1-2H6a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1"/></svg>
+                {{ _('Печать / Сохранить в PDF') }}
+            </button>
+        </div>
+
+        <div class="header">
+            <img src="{{ url_for('static', filename='logo_light.svg') }}" alt="{{ _('Логотип') }}" class="header-logo">
+            <h1>{{ _('Персональный офер') }}</h1>
+            <p><strong>Golden House | {{ offer.complex_name }}. {{ _('Дата') }}: {{ current_date }}</strong></p>
+        </div>
+
+        {% if criteria %}
+        <div class="section-title">{{ _('Критерии подбора') }}</div>
+        <div class="criteria">
+            {% for label in criteria %}<span>{{ label }}</span>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="section-title">{{ _('Предложение') }}</div>
+
+        {% for key, title, hint in [('price', _('Минимальная цена'), _('квартира целиком, со скидками')),
+                                    ('price_m2', _('Минимальная цена за м²'), _('с учётом скидок')),
+                                    ('monthly', _('Ипотека от'), _('ежемесячный платёж'))] %}
+        {% set flat = offer.best[key] %}
+        {% if flat %}
+        <div class="metric">
+            <div class="metric-label">{{ title }}</div>
+            <div class="metric-value">
+                {% if key == 'price' %}{{ "{:,.0f}".format(flat.final_price) }}
+                {% elif key == 'price_m2' %}{{ "{:,.0f}".format(flat.price_m2) }}
+                {% else %}{{ "{:,.0f}".format(flat.monthly_payment) }}{% endif %}
+                UZS{% if key == 'monthly' %}/{{ _('мес') }}{% endif %}
+                <span style="font-size: 8pt; color: #777; font-weight: 400;">— {{ hint }}</span>
+            </div>
+            <div class="metric-flat">
+                {{ _('Квартира') }}{% if flat.flat_number %} №{{ flat.flat_number }}{% endif %}
+                {% if flat.rooms %} · {{ flat.rooms }}-{{ _('комн') }}{% endif %}
+                {% if flat.area %} · {{ flat.area }} м²{% endif %}
+                {% if flat.floor %} · {{ _('этаж') }} {{ flat.floor }}{% endif %}
+                · {{ _('прайс') }} {{ "{:,.0f}".format(flat.base_price) }} UZS{% if flat.discount_percent %},
+                {{ _('скидка') }} {{ flat.discount_percent }}%{% endif %}
+                {% if key == 'monthly' and flat.initial_payment %}
+                <br>{{ _('Первый взнос:') }} {{ "{:,.0f}".format(flat.initial_payment) }} UZS{% if flat.mortgage_term_months %},
+                {{ _('срок') }} {{ flat.mortgage_term_months }} {{ _('мес.') }}{% endif %}
+                {% endif %}
+            </div>
+            {% if flat.crm_url %}
+            <div class="metric-link">{{ _('Карточка в CRM:') }} {{ flat.crm_url }}</div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        {% if not offer.best.price %}
+        <div class="metric">
+            <div class="metric-flat">{{ _('Под заданные критерии подходящих квартир не нашлось.') }}</div>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>{% trans %}Офер не является публичной офертой. Наличие квартир и условия уточняйте у менеджеров Golden House.{% endtrans %}</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const printBtn = document.getElementById('printBtn');
+            if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+        });
+    </script>
+</body>
+</html>

@@ -5,12 +5,14 @@
 (колл-центр и маркетинг), свои права и своя навигация.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from flask import Blueprint, abort, render_template, request, send_file
+from flask import Blueprint, abort, flash, render_template, request, send_file
 
-from ..core.decorators import login_required, permission_required
-from ..services import best_offer_service, call_center_service, marketing_funnel_service
+from ..core.decorators import (current_user_can, login_required, permission_required,
+                               permission_required_any)
+from ..services import (best_offer_service, call_center_service, manager_link_service,
+                        marketing_funnel_service)
 from ..services.contracting_income_service import GRANULARITIES
 
 marketing_bp = Blueprint('marketing', __name__, template_folder='templates')
@@ -54,23 +56,38 @@ def _selected_ints(field):
 
 @marketing_bp.route('/call-center')
 @login_required
-@permission_required('marketing_call_center_view')
+@permission_required_any('marketing_call_center_view', 'marketing_call_center_view_own')
 def call_center():
-    """Динамика обзвона, подбора и встреч плюс разбивка по менеджерам."""
+    """Динамика обзвона, подбора и встреч плюс разбивка по менеджерам.
+
+    Оператор с правом «только свои» видит те же графики, но по своим заявкам:
+    фильтр по менеджеру ему не показывается и подставляется принудительно —
+    иначе чужие показатели уехали бы в HTML и нашлись бы поиском по странице.
+    """
     start_date, end_date = _parse_period()
     granularity = request.args.get('granularity', call_center_service.DEFAULT_GRANULARITY)
     complexes = request.args.getlist('complexes')
-    managers = _selected_ints('managers')
+
+    see_all = current_user_can('marketing_call_center_view')
+    own_manager_id = None
+    if see_all:
+        managers = _selected_ints('managers')
+    else:
+        own_manager_id = manager_link_service.current_manager_id()
+        if not own_manager_id:
+            flash("Ваша учётная запись не сопоставлена с менеджером в CRM, "
+                  "поэтому показывать нечего. Обратитесь к администратору.", "warning")
+        # Ноль в фильтре — заведомо несуществующий менеджер: пустой список
+        # означал бы «все», а это ровно то, чего право не разрешает.
+        managers = [own_manager_id or 0]
 
     options = call_center_service.get_filter_options()
-    # Шаблону нужны готовые пары значение/подпись: в Jinja нет лямбд, а фильтр
-    # один и тот же для проектов и менеджеров.
     options['complex_items'] = [{'value': name, 'label': name} for name in options['complexes']]
     options['manager_items'] = [{'value': m.id, 'label': m.full_name} for m in options['managers']]
 
     return render_template(
         'marketing/call_center.html',
-        title="Колл-центр",
+        title="Колл-центр" if see_all else "Мой колл-центр",
         dynamics=call_center_service.get_dynamics(
             start_date, end_date, granularity, manager_ids=managers, complexes=complexes),
         managers=call_center_service.get_manager_stats(
@@ -80,7 +97,8 @@ def call_center():
         start_date=start_date,
         end_date=end_date,
         selected_complexes=complexes,
-        selected_managers=managers,
+        selected_managers=managers if see_all else [],
+        see_all=see_all,
     )
 
 
@@ -164,22 +182,13 @@ def _parse_number(value):
         return None
 
 
-@marketing_bp.route('/best-offer')
-@login_required
-@permission_required('marketing_offer_view')
-def best_offer():
-    """Список проектов и конструктор офера по выбранному."""
+def _offer_request():
+    """Разбирает параметры конструктора офера.
+
+    Одна функция на страницу и на печать: если разбирать параметры в двух
+    местах, распечатанный офер однажды окажется не тем, что на экране.
+    """
     project = request.args.get('project')
-    projects = best_offer_service.list_projects()
-
-    if not project:
-        return render_template(
-            'marketing/best_offer.html',
-            title="Лучший офер",
-            projects=projects,
-            selected_project=None,
-        )
-
     filters = {key: _parse_number(request.args.get(key)) for key in (
         'price_from', 'price_to', 'price_m2_from', 'price_m2_to',
         'area_from', 'area_to', 'monthly_to')}
@@ -202,6 +211,45 @@ def best_offer():
         'full_payment': selected_discounts.get('full_payment', {}),
         'mortgage_standard': selected_discounts.get('mortgage', {}),
     }
+    return project, filters, discount_mode, selected_discounts, manual_percents
+
+
+def _criteria_labels(filters, discount_mode):
+    """Критерии человеческим языком — для печатной версии."""
+    def money(value):
+        return f'{value:,.0f}'.replace(',', ' ')
+
+    labels = []
+    if filters.get('price_from') or filters.get('price_to'):
+        bounds = ' — '.join(money(v) for v in (filters.get('price_from'), filters.get('price_to')) if v)
+        labels.append(f'Цена: {bounds} UZS')
+    if filters.get('price_m2_from') or filters.get('price_m2_to'):
+        bounds = ' — '.join(money(v) for v in (filters.get('price_m2_from'), filters.get('price_m2_to')) if v)
+        labels.append(f'Цена за м²: {bounds} UZS')
+    if filters.get('area_from') or filters.get('area_to'):
+        bounds = ' — '.join(str(v) for v in (filters.get('area_from'), filters.get('area_to')) if v)
+        labels.append(f'Площадь: {bounds} м²')
+    if filters.get('monthly_to'):
+        labels.append(f"Платёж до {money(filters['monthly_to'])} UZS/мес")
+    labels.append('Скидки: все доступные' if discount_mode != 'manual' else 'Скидки: выбраны вручную')
+    return labels
+
+
+@marketing_bp.route('/best-offer')
+@login_required
+@permission_required('marketing_offer_view')
+def best_offer():
+    """Список проектов и конструктор офера по выбранному."""
+    projects = best_offer_service.list_projects()
+    project, filters, discount_mode, selected_discounts, manual_percents = _offer_request()
+
+    if not project:
+        return render_template(
+            'marketing/best_offer.html',
+            title="Лучший офер",
+            projects=projects,
+            selected_project=None,
+        )
 
     offer = best_offer_service.build_offer(
         project,
@@ -219,4 +267,29 @@ def best_offer():
         filters=filters,
         discount_mode=discount_mode,
         selected_discounts=selected_discounts,
+        print_args=request.args.to_dict(flat=False),
+    )
+
+
+@marketing_bp.route('/best-offer/print')
+@login_required
+@permission_required('marketing_offer_view')
+def best_offer_print():
+    """Печатная версия офера: лист A4 для печати или сохранения в PDF."""
+    project, filters, discount_mode, _selected, manual_percents = _offer_request()
+    if not project:
+        abort(404)
+
+    offer = best_offer_service.build_offer(
+        project,
+        filters=filters,
+        manual_percents=manual_percents,
+        apply_all_discounts=discount_mode != 'manual',
+    )
+
+    return render_template(
+        'marketing/offer_print.html',
+        offer=offer,
+        criteria=_criteria_labels(filters, discount_mode),
+        current_date=datetime.now().strftime('%d.%m.%Y'),
     )

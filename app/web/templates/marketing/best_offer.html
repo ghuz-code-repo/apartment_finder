@@ -157,10 +157,16 @@
                     {% endif %}
                 </div>
 
-                <div class="col-12">
+                <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-magic me-2"></i>{{ _('Собрать офер') }}
                     </button>
+                    {# Печать открывается в новой вкладке с теми же параметрами:
+                       офер на бумаге должен совпадать с тем, что на экране. #}
+                    <a class="btn btn-golden-outline" target="_blank" rel="noopener"
+                       href="{{ url_for('marketing.best_offer_print', **request.args.to_dict(flat=False)) }}">
+                        <i class="bi bi-printer me-2"></i>{{ _('Печать / PDF') }}
+                    </a>
                     <span class="text-muted small ms-2">
                         {{ _('Под критерии попало квартир:') }} {{ offer.considered }}
                     </span>

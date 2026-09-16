@@ -68,13 +68,13 @@
                             </li>
                             {% endif %}
 
-                            {% if current_user.can('marketing_call_center_view') or current_user.can('marketing_funnel_view') or current_user.can('marketing_offer_view') %}
+                            {% if current_user.can('marketing_call_center_view') or current_user.can('marketing_call_center_view_own') or current_user.can('marketing_funnel_view') or current_user.can('marketing_offer_view') %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                     {{ _('Маркетинг') }}
                                 </a>
                                 <ul class="dropdown-menu">
-                                    {% if current_user.can('marketing_call_center_view') %}
+                                    {% if current_user.can('marketing_call_center_view') or current_user.can('marketing_call_center_view_own') %}
                                     <li><a class="dropdown-item" href="{{ url_for('marketing.call_center') }}">{{ _('Колл-центр') }}</a></li>
                                     {% endif %}
                                     {% if current_user.can('marketing_offer_view') %}

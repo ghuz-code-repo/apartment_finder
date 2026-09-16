@@ -14,7 +14,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="gradient-heading mb-0">{{ _('Колл-центр') }}</h1>
+        <h1 class="gradient-heading mb-0">
+            {% if see_all %}{{ _('Колл-центр') }}{% else %}{{ _('Мой колл-центр') }}{% endif %}
+        </h1>
         <p class="text-muted mb-0">
             {{ _('Обзвон — звонки клиентам и от клиентов. Подбор — переходы заявок в статус «Подбор». Встречи — отчёты о встречах.') }}
         </p>
@@ -85,8 +87,12 @@
 
                 {{ multi_filter('complexes', _('Проекты'), _('Все проекты'),
                                 options.complex_items, selected_complexes) }}
+                {# Оператору с правом «только свои» фильтр по менеджерам не нужен:
+                   выбор всё равно принудительный. #}
+                {% if see_all %}
                 {{ multi_filter('managers', _('Менеджеры'), _('Все менеджеры'),
                                 options.manager_items, selected_managers) }}
+                {% endif %}
 
             </div>
         </form>
