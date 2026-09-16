@@ -154,10 +154,34 @@ def _get_our_project_dynamic_stats(complex_name, property_type_russian):
     }
 
 
+OUR_COLUMNS = ['Наименование ЖК', 'Тип', 'Широта', 'Долгота', 'Класс', 'Высота потолков',
+               'Благоустройство', 'Стадия строительства', 'Первоначальная дата кадастра']
+COMPETITOR_COLUMNS = ['Наименование ЖК', 'Тип', 'Широта', 'Долгота', 'Класс', 'Высота потолков',
+                      'Благоустройство', 'Стадия строительства', 'Кол-во объектов', 'Продано шт',
+                      'Средняя площадь', 'Средняя цена за квадратный метр остатка',
+                      'Средняя стоимость дна остатков', 'Плановая Дата кадастр',
+                      'Первоначальная дата кадастра', 'Прямой конкурент для']
+
+# Листы общего файла. Старые названия тоже узнаём: файлы, скачанные раньше
+# раздельными кнопками, должны загружаться без переименования листов.
+OUR_SHEET = 'Наши ЖК'
+COMPETITOR_SHEET = 'Конкуренты'
+_OUR_SHEET_NAMES = {OUR_SHEET.lower(), 'ourprojects'}
+_COMPETITOR_SHEET_NAMES = {COMPETITOR_SHEET.lower(), 'competitors'}
+# Колонки, которые есть только у конкурентов: по ним узнаём лист с чужим названием.
+_COMPETITOR_ONLY_COLUMNS = set(COMPETITOR_COLUMNS) - set(OUR_COLUMNS)
+
+
+def _read_sheet(file):
+    return pd.read_excel(file).replace({np.nan: None, pd.NaT: None})
+
+
 def export_our_projects():
     """Экспорт наших ЖК: ручные поля из SQLite."""
-    cols = ['Наименование ЖК', 'Тип', 'Широта', 'Долгота', 'Класс', 'Высота потолков',
-            'Благоустройство', 'Стадия строительства', 'Первоначальная дата кадастра']
+    return _to_excel(_our_rows(), OUR_COLUMNS, "OurProjects")
+
+
+def _our_rows():
     data = []
     for name in data_service.get_all_complex_names():
         for pt in PropertyType:
@@ -171,12 +195,18 @@ def export_our_projects():
                 'Стадия строительства': saved.construction_stage if saved else None,
                 'Первоначальная дата кадастра': saved.initial_cadastre_date if saved else None
             })
-    return _to_excel(data, cols, "OurProjects")
+    return data
 
 
 def import_our_projects(file):
     """Импорт наших ЖК: сохранение ручных полей + авто-расчет системных из MySQL."""
-    df = pd.read_excel(file).replace({np.nan: None, pd.NaT: None})
+    count = _import_our_rows(_read_sheet(file))
+    db.session.commit()
+    return count
+
+
+def _import_our_rows(df):
+    count = 0
     for _, row in df.dropna(subset=['Наименование ЖК']).iterrows():
         name, p_type = str(row['Наименование ЖК']).strip(), str(row['Тип']).strip()
         stats = _get_our_project_dynamic_stats(name, p_type)
@@ -198,15 +228,16 @@ def import_our_projects(file):
             comp.avg_area, comp.avg_price_sqm = stats['avg_area'], stats['avg_price_sqm']
             comp.avg_bottom_price, comp.planned_cadastre_date = stats['avg_bottom_price'], stats['planned_date']
         db.session.add(comp)
-    db.session.commit()
+        count += 1
+    return count
 
 
 def export_competitors():
     """Экспорт внешних конкурентов: все поля из SQLite."""
-    cols = ['Наименование ЖК', 'Тип', 'Широта', 'Долгота', 'Класс', 'Высота потолков', 'Благоустройство',
-            'Стадия строительства', 'Кол-во объектов', 'Продано шт', 'Средняя площадь',
-            'Средняя цена за квадратный метр остатка', 'Средняя стоимость дна остатков',
-            'Плановая Дата кадастр', 'Первоначальная дата кадастра', 'Прямой конкурент для']
+    return _to_excel(_competitor_rows(), COMPETITOR_COLUMNS, "Competitors")
+
+
+def _competitor_rows():
     data = []
     for c in Competitor.query.filter_by(is_internal=False).all():
         data.append({
@@ -220,12 +251,18 @@ def export_competitors():
             'Первоначальная дата кадастра': c.initial_cadastre_date,
             'Прямой конкурент для': c.direct_competitor_name
         })
-    return _to_excel(data, cols, "Competitors")
+    return data
 
 
 def import_competitors(file):
     """Импорт внешних конкурентов: все данные берутся из Excel."""
-    df = pd.read_excel(file).replace({np.nan: None, pd.NaT: None})
+    count = _import_competitor_rows(_read_sheet(file))
+    db.session.commit()
+    return count
+
+
+def _import_competitor_rows(df):
+    count = 0
     for _, row in df.dropna(subset=['Наименование ЖК']).iterrows():
         name, p_type = str(row['Наименование ЖК']).strip(), str(row['Тип']).strip()
         comp = Competitor.query.filter_by(name=name, property_type=p_type, is_internal=False).first() or Competitor(
@@ -248,7 +285,65 @@ def import_competitors(file):
         db.session.add(comp)
         db.session.flush()
         record_history(comp)
-    db.session.commit()
+        count += 1
+    return count
+
+
+def export_all(include_our=True, include_competitors=True):
+    """Один файл на все проекты карты: наши ЖК и конкуренты на отдельных листах.
+
+    Колонки у листов разные — у наших ЖК аналитика считается из MySQL и в
+    файл не выгружается, — поэтому в одну таблицу их не сводим. Лист, на
+    который у пользователя нет права, в файл не попадает.
+    """
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
+        if include_our:
+            pd.DataFrame(_our_rows(), columns=OUR_COLUMNS).to_excel(
+                writer, index=False, sheet_name=OUR_SHEET)
+        if include_competitors:
+            pd.DataFrame(_competitor_rows(), columns=COMPETITOR_COLUMNS).to_excel(
+                writer, index=False, sheet_name=COMPETITOR_SHEET)
+    out.seek(0)
+    return out
+
+
+def _sheet_kind(sheet_name, df):
+    name = str(sheet_name).strip().lower()
+    if name in _OUR_SHEET_NAMES:
+        return 'our'
+    if name in _COMPETITOR_SHEET_NAMES:
+        return 'competitors'
+    if 'Наименование ЖК' not in df.columns:
+        return None
+    return 'competitors' if _COMPETITOR_ONLY_COLUMNS & set(df.columns) else 'our'
+
+
+def import_all(file, allow_our=True, allow_competitors=True):
+    """Загружает общий файл: каждый лист уходит в свой импорт.
+
+    Возвращает, сколько строк загружено по каждому виду, и какие листы
+    пропущены (нет права или лист не похож ни на один из шаблонов).
+    Всё в одной транзакции: ошибка на втором листе не оставит первый
+    загруженным наполовину.
+    """
+    sheets = pd.read_excel(file, sheet_name=None)
+    result = {'our': 0, 'competitors': 0, 'skipped': []}
+    try:
+        for sheet_name, df in sheets.items():
+            df = df.replace({np.nan: None, pd.NaT: None})
+            kind = _sheet_kind(sheet_name, df)
+            if kind == 'our' and allow_our:
+                result['our'] += _import_our_rows(df)
+            elif kind == 'competitors' and allow_competitors:
+                result['competitors'] += _import_competitor_rows(df)
+            else:
+                result['skipped'].append(str(sheet_name))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return result
 
 
 def get_comparison(comp_id, our_complex_name):

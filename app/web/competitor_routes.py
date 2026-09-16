@@ -1,7 +1,7 @@
 # app/web/competitor_routes.py
 from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file
-from ..core.decorators import permission_required, login_required
-from ..core.decorators import permission_required
+from ..core.decorators import (current_user_can, login_required, permission_required,
+                               permission_required_any)
 from ..services import competitor_service, data_service
 from ..models.competitor_models import Competitor
 
@@ -25,6 +25,42 @@ def map_view():
 @permission_required('competitors_import_view')
 def import_view():
     return render_template('competitors/import.html')
+
+# --- ВСЕ ПРОЕКТЫ ОДНИМ ФАЙЛОМ ---
+@competitor_bp.route('/competitors/export')
+@login_required
+@permission_required_any('competitors_our_export', 'competitors_external_export')
+def export_all():
+    return send_file(
+        competitor_service.export_all(
+            include_our=current_user_can('competitors_our_export'),
+            include_competitors=current_user_can('competitors_external_export'),
+        ),
+        download_name='map_projects_data.xlsx',
+        as_attachment=True
+    )
+
+@competitor_bp.route('/competitors/import', methods=['POST'])
+@login_required
+@permission_required_any('competitors_our_import', 'competitors_external_import')
+def import_all():
+    file = request.files.get('file')
+    if not file:
+        return redirect(url_for('competitor.import_view'))
+    try:
+        result = competitor_service.import_all(
+            file,
+            allow_our=current_user_can('competitors_our_import'),
+            allow_competitors=current_user_can('competitors_external_import'),
+        )
+    except Exception as e:
+        flash(f'Файл не загружен: {e}', 'danger')
+        return redirect(url_for('competitor.import_view'))
+
+    flash(f"Загружено: наших ЖК — {result['our']}, конкурентов — {result['competitors']}", 'success')
+    if result['skipped']:
+        flash('Пропущены листы (нет права или неизвестный формат): ' + ', '.join(result['skipped']), 'warning')
+    return redirect(url_for('competitor.map_view'))
 
 # --- НАШИ ЖК ---
 @competitor_bp.route('/competitors/our/export')

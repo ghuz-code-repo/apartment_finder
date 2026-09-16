@@ -63,8 +63,8 @@
                 <i class="bi bi-upload"></i> {{ _('Импорт из Excel') }}
             </a>
             {% endif %}
-            {% if current_user.can('competitors_our_export') %}
-            <a href="{{ url_for('competitor.export_our') }}" class="btn btn-outline-secondary btn-sm">
+            {% if current_user.can('competitors_our_export') or current_user.can('competitors_external_export') %}
+            <a href="{{ url_for('competitor.export_all') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-download"></i> {{ _('Экспорт данных') }}
             </a>
             {% endif %}
