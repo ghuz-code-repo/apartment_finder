@@ -289,11 +289,25 @@ def _notify(manager_id, task_id, moved_at):
 
 # --- Обработка сделки ---
 
-def _handle(lead, settings, enabled_at, log=None):
+def _handle(lead, settings, enabled_at, log=None, fresh=False):
+    """Обработать сделку. fresh — заявка изменилась с прошлого опроса.
+
+    Возвращает решение или причину пропуска — чтобы проход не отчитывался
+    пустым «ok», когда сделку на самом деле пропустили.
+    """
     lead_id, deal_id = int(lead['id']), int(lead['dealId'])
     log = log or AutoMeetingLog.query.filter_by(estate_buy_id=lead_id, deal_id=deal_id).first()
-    if log and (log.decision in FINAL_DECISIONS or log.attempts >= MAX_ATTEMPTS):
-        return None
+    if log and log.decision in FINAL_DECISIONS:
+        return 'пропуск: уже обработана'
+    if log and log.attempts >= MAX_ATTEMPTS:
+        # Заявку снова изменили после последней попытки (например, заново
+        # перевели в работу) — это новый повод, а старые попытки могли
+        # сгореть на уже исправленной настройке. Просто попасть в выборку
+        # мало: окна опроса перекрываются, и та же правка приходит дважды.
+        changed = _parse_time(lead.get('dateModified'))
+        if not (fresh and changed and log.moved_at and changed > log.moved_at):
+            return 'пропуск: исчерпаны попытки'
+        log.attempts = 0
     log = log or AutoMeetingLog(estate_buy_id=lead_id, deal_id=deal_id, attempts=0)
     log.house_id = lead.get('sellParentId')
     log.attempts = (log.attempts or 0) + 1
@@ -371,7 +385,7 @@ def run_once(now=None):
     for lead in _modified_leads(since):
         if _is_candidate(lead, settings):
             handled.add(int(lead['id']))
-            decision = _handle(lead, settings, enabled_at)
+            decision = _handle(lead, settings, enabled_at, fresh=True)
             if decision:
                 counts[decision] = counts.get(decision, 0) + 1
 
