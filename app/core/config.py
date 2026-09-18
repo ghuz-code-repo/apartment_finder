@@ -55,6 +55,20 @@ class Config:
 
     # --- Macro API v2 (планировки квартир) ---
     # Базовый адрес заканчивается версией: https://<ваш-сервер>/v2
+    # Страж встреч: при переходе в «Сделку в работе» ставит задачу-встречу,
+    # если за последние 3 месяца её не было. Выключен по умолчанию.
+    MEETING_GUARD_ENABLED = os.environ.get('MEETING_GUARD_ENABLED', 'false').lower() in ('1', 'true', 'yes', 'on')
+    # Дома (id дома объекта в сделке) через запятую. Пусто — все дома.
+    MEETING_GUARD_HOUSE_IDS = os.environ.get('MEETING_GUARD_HOUSE_IDS', '')
+    # true — ничего не создаёт в CRM, только пишет в журнал, что создал бы.
+    MEETING_GUARD_DRY_RUN = os.environ.get('MEETING_GUARD_DRY_RUN', 'false').lower() in ('1', 'true', 'yes', 'on')
+    MEETING_GUARD_LOOKBACK_DAYS = int(os.environ.get('MEETING_GUARD_LOOKBACK_DAYS', '90'))
+    # Статусы заявки «Сделка в работе» (estateBuy/statuses).
+    MEETING_GUARD_STATUSES = os.environ.get('MEETING_GUARD_STATUSES', '50')
+    # Кастомный тип задачи «Встреча в офисе» (tasks/listTasksTypes). Пусто — найти сам.
+    MEETING_GUARD_TYPES_ID = os.environ.get('MEETING_GUARD_TYPES_ID', '')
+    # Постановщик задачи. Пусто — сам менеджер сделки.
+    MEETING_GUARD_ASSIGNER_ID = os.environ.get('MEETING_GUARD_ASSIGNER_ID', '')
     MACRO_API_URL = os.environ.get('MACRO_API_URL', '')
     MACRO_API_TOKEN = os.environ.get('MACRO_API_TOKEN', '')
     # Файлы планировок приходят относительными путями (/upload/estate/plan_1.jpg),
