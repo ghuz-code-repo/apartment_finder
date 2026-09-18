@@ -84,6 +84,36 @@ services:
       - "api.macrocrm.gh.uz:${MACRO_API_HOST_IP:-172.16.0.199}"
       - "macrocrm.gh.uz:${MACRO_FILES_HOST_IP:-172.16.0.199}"
 
+  # Страж встреч: при переходе заявки в «Сделку в работе» ставит менеджеру
+  # задачу-встречу, если за 3 месяца её не было. Пишет в CRM через Macro API,
+  # поэтому выключен, пока в .env нет MEETING_GUARD_ENABLED=true.
+  meeting-guard:
+    build:
+      context: ..
+      dockerfile: apartment_finder/Dockerfile
+    container_name: apartment-finder-meeting-guard
+    command: ["python", "meeting_guard.py", "worker"]
+    env_file:
+      - .env
+    depends_on:
+      - finder
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # planning.db на bind-mount принадлежит uid хоста — как у reminder-worker.
+      - DAC_OVERRIDE
+    networks:
+      # Macro API и MySQL витрины — в egress_network.
+      - egress_network
+    extra_hosts:
+      - "api.macrocrm.gh.uz:${MACRO_API_HOST_IP:-172.16.0.199}"
+      - "macrocrm.gh.uz:${MACRO_FILES_HOST_IP:-172.16.0.199}"
+
 volumes:
   mysql_data:
 

@@ -91,6 +91,18 @@ def call(action, payload):
 
     action — путь вида 'estateSell/getFlatPlans'.
     """
+    body = call_raw(action, payload)
+    if not isinstance(body, dict) or 'data' not in body:
+        raise MacroApiError(f'{action}: в ответе нет поля data')
+    return body['data']
+
+
+def call_raw(action, payload):
+    """Вызывает метод и возвращает ответ целиком.
+
+    Нужен там, где ответ не обёрнут в `data` (tasks/create отдаёт {task_id})
+    или где кроме данных важна `meta` — курсор пагинации списков.
+    """
     if not is_configured():
         raise MacroApiError('Доступ к Macro API не настроен (MACRO_API_URL/MACRO_API_TOKEN)')
 
@@ -111,7 +123,8 @@ def call(action, payload):
         retry_after = response.headers.get('Retry-After', '?')
         raise MacroApiError(f'{action}: превышен лимит запросов, Retry-After={retry_after}')
 
-    if response.status_code != 200:
+    # 201 — ответ методов создания (notifications/create).
+    if response.status_code not in (200, 201):
         raise MacroApiError(f'{action}: HTTP {response.status_code} {response.text[:200]}')
 
     try:
@@ -119,10 +132,11 @@ def call(action, payload):
     except ValueError as exc:
         raise MacroApiError(f'{action}: ответ не JSON') from exc
 
-    if not isinstance(body, dict) or 'data' not in body:
-        raise MacroApiError(f'{action}: в ответе нет поля data')
+    # Справочники вроде tasks/listTasksTypes отдают массив верхнего уровня.
+    if not isinstance(body, (dict, list)):
+        raise MacroApiError(f'{action}: неожиданный формат ответа')
 
-    return body['data']
+    return body
 
 
 def get_flat_plans(estate_id):

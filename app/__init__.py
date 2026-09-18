@@ -178,7 +178,7 @@ def create_app(config_class=DevelopmentConfig):
     with app.app_context():
         # Импорт моделей
         from .models import auth_models, planning_models, estate_models, finance_models, exclusion_models, \
-            funnel_models, special_offer_models, registry_models, lead_scoring_models
+            funnel_models, special_offer_models, registry_models, lead_scoring_models, automation_models
 
         # Локальный импорт Blueprints для предотвращения циклической зависимости
         from .web.main_routes import main_bp
