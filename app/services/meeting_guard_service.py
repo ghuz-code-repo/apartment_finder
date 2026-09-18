@@ -103,18 +103,64 @@ def _iso(moment):
 _cache = {}
 
 
+MEETING_TYPE_NAME = 'встреча в офисе'
+
+
+def _task_types(body):
+    """Список типов из ответа справочника — массив или массив внутри объекта."""
+    body = _unwrap(body)
+    if isinstance(body, dict):
+        for key in ('types', 'items', 'data', 'tasksTypes', 'tasks_types'):
+            if isinstance(body.get(key), list):
+                return body[key]
+        return []
+    return body if isinstance(body, list) else []
+
+
+def _system_type(item):
+    for key in ('system_type', 'systemType', 'type', 'system'):
+        if item.get(key):
+            return str(item[key]).strip().lower()
+    return ''
+
+
+def find_meeting_type(types):
+    """Тип «Встреча в офисе» — с системным типом meeting.
+
+    Решает системный тип, а не название: в справочнике бывают двойники вроде
+    «встреча в офисе» с типом other. Такая задача не считается встречей ни в
+    CRM, ни в витрине (tasks.custom_type), и воронка её не увидит. Название
+    — только чтобы выбрать среди нескольких встреч и как последний шанс.
+    """
+    types = [t for t in types if isinstance(t, dict) and t.get('id')]
+
+    def named(t):
+        return str(t.get('name', '')).strip().lower() == MEETING_TYPE_NAME
+
+    meetings = [t for t in types if _system_type(t) == 'meeting']
+    if meetings:
+        meetings.sort(key=lambda t: (not named(t), 'офис' not in str(t.get('name', '')).lower()))
+        return int(meetings[0]['id'])
+    # Системный тип не пришёл ни в каком поле — тогда по названию.
+    if not any(_system_type(t) for t in types):
+        by_name = [t for t in types if named(t)]
+        if by_name:
+            return int(by_name[0]['id'])
+    return None
+
+
 def meeting_types_id(settings):
     """Кастомный тип «Встреча в офисе» — из настроек или из справочника."""
     if settings['types_id']:
         return settings['types_id']
     if 'types_id' not in _cache:
-        types = _unwrap(api.call_raw('tasks/listTasksTypes', {})) or []
-        meetings = [t for t in types if t.get('system_type') == 'meeting']
-        if not meetings:
-            raise api.MacroApiError('В справочнике типов задач нет типа «встреча в офисе»')
-        # Если встречных типов несколько, берём тот, что назван «в офисе».
-        meetings.sort(key=lambda t: 'офис' not in str(t.get('name', '')).lower())
-        _cache['types_id'] = int(meetings[0]['id'])
+        types = _task_types(api.call_raw('tasks/listTasksTypes', {}))
+        found = find_meeting_type(types)
+        if not found:
+            names = ', '.join(f"{t.get('id')}: {t.get('name')}" for t in types if isinstance(t, dict))[:500]
+            raise api.MacroApiError('В справочнике типов задач не найден тип «Встреча в офисе». '
+                                    f'Есть: {names or "пусто"}. Задайте MEETING_GUARD_TYPES_ID.')
+        _cache['types_id'] = found
     return _cache['types_id']
 
 
@@ -308,6 +354,16 @@ def run_once(now=None):
         db.session.commit()
         return {'status': f'включён с {now:%d.%m.%Y %H:%M}, обрабатываются переходы с этого момента'}
 
+    # Тип задачи — настройка, а не свойство сделки: если его не найти, ни
+    # одну встречу не создать. Останавливаем проход целиком и не тратим
+    # попытки сделок — иначе они сгорят на ошибке конфигурации.
+    if not settings['dry_run']:
+        try:
+            meeting_types_id(settings)
+        except api.MacroApiError as e:
+            logger.warning('[MEETING GUARD] %s', e)
+            return {'status': f'не определён тип задачи: {e}'}
+
     last_poll = _state(STATE_LAST_POLL) or enabled_at
     since = max(last_poll - POLL_OVERLAP, now - MAX_WINDOW)
 
@@ -336,6 +392,15 @@ def run_once(now=None):
     _set_state(STATE_LAST_POLL, now)
     db.session.commit()
     return {'status': 'ok', 'since': since.strftime('%d.%m.%Y %H:%M'), **counts}
+
+
+def reset_errors():
+    """Вернуть сделки с ошибкой в очередь — после исправления настроек."""
+    rows = AutoMeetingLog.query.filter_by(decision='error').all()
+    for row in rows:
+        row.attempts = 0
+    db.session.commit()
+    return len(rows)
 
 
 def check_lead(lead_id):

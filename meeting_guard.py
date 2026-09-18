@@ -6,6 +6,7 @@
     python meeting_guard.py run             # один проход
     python meeting_guard.py worker          # проход каждые MEETING_GUARD_INTERVAL секунд
     python meeting_guard.py log             # последние решения из журнала
+    python meeting_guard.py retry           # вернуть сделки с ошибкой в очередь
 
 Настройки — в .env (MEETING_GUARD_*). По умолчанию выключен: без
 MEETING_GUARD_ENABLED=true проход ничего не делает. Первый проход только
@@ -43,6 +44,7 @@ def main():
     sub.add_parser('worker', help='проходы по расписанию')
     journal = sub.add_parser('log', help='журнал решений')
     journal.add_argument('--limit', type=int, default=30)
+    sub.add_parser('retry', help='вернуть сделки с ошибкой в очередь')
     args = parser.parse_args()
 
     app = create_app()
@@ -50,8 +52,15 @@ def main():
         db.create_all(bind_key='planning_db')
 
         if args.command == 'types':
-            types = macro_api_service.call_raw('tasks/listTasksTypes', {})
-            print(json.dumps(meeting_guard_service._unwrap(types), ensure_ascii=False, indent=1))
+            raw = macro_api_service.call_raw('tasks/listTasksTypes', {})
+            print(json.dumps(raw, ensure_ascii=False, indent=1))
+            found = meeting_guard_service.find_meeting_type(meeting_guard_service._task_types(raw))
+            print()
+            print(f'Тип «Встреча в офисе»: {found or "не найден — задайте MEETING_GUARD_TYPES_ID"}')
+            return
+
+        if args.command == 'retry':
+            log(f'Возвращено в очередь сделок с ошибкой: {meeting_guard_service.reset_errors()}')
             return
 
         if args.command == 'check':
