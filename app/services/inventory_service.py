@@ -4,7 +4,7 @@ from collections import defaultdict
 from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import pandas as pd
 import io
-from datetime import datetime # Добавлено для работы с датами
+from datetime import datetime, timedelta
 from app.models.planning_models import map_mysql_key_to_russian_value
 from app.models.planning_models import DiscountVersion, PaymentMethod, PropertyType
 # ДОБАВЛЕНО EstateDeal в импорт
@@ -366,6 +366,51 @@ def generate_inventory_excel(summary_data: dict, currency: str, usd_rate: float)
     return output
 
 
+# Статусы остатка: объект ещё можно продать. Коды витрины (estate_statuses):
+# 20 — Подбор, 30 — Бронь, 32 — Маркетинговый резерв.
+AVAILABLE_STATUS_CODES = (20, 30, 32)
+
+# Статус объекта на конец выбранного дня по журналу статусов.
+#
+# Если после этой даты событий не было, статус с тех пор не менялся — берём
+# текущий. Это ещё и надёжнее журнала: часть старых переходов (например,
+# «Сделка в работе» → «Сделка проведена» в 2024-м) в него не попала.
+# Если события после даты есть, статус на дату — последнее событие до неё,
+# а при его отсутствии статус «до» первого события после (так отсекаются
+# квартиры, которых на ту дату ещё не было в продаже).
+#
+# Остаток считается именно на дату, а не выводится из сегодняшних статусов и
+# дат сделок: расторжения, возвраты в продажу и новые квартиры учитываются сами.
+_STATUS_AT_DATE_SQL = """
+    SELECT s.id AS sell_id,
+           CASE WHEN EXISTS (SELECT 1 FROM estate_sells_statuses_log later
+                             WHERE later.estate_sell_id = s.id AND later.log_date >= :next_day)
+                THEN COALESCE(
+                       (SELECT prev.status_to FROM estate_sells_statuses_log prev
+                        WHERE prev.estate_sell_id = s.id AND prev.log_date < :next_day
+                        ORDER BY prev.log_date DESC, prev.id DESC LIMIT 1),
+                       (SELECT nxt.status_from FROM estate_sells_statuses_log nxt
+                        WHERE nxt.estate_sell_id = s.id AND nxt.log_date >= :next_day
+                        ORDER BY nxt.log_date ASC, nxt.id ASC LIMIT 1))
+                ELSE s.estate_sell_status
+           END AS status_at_date
+    FROM estate_sells s
+    WHERE s.estate_area > 0
+"""
+
+
+def available_sell_ids_at_date(target_date):
+    """id объектов, которые на указанную дату были в остатке."""
+    from sqlalchemy import text
+
+    next_day = datetime.combine(target_date, datetime.min.time()) + timedelta(days=1)
+    # Запрос идёт мимо ORM, поэтому bind указываем явно: сессия по умолчанию
+    # смотрит в локальную базу, а таблицы витрины живут в MySQL.
+    with db.engines['mysql_source'].connect() as conn:
+        rows = conn.execute(text(_STATUS_AT_DATE_SQL), {'next_day': next_day}).all()
+    return [row.sell_id for row in rows if row.status_at_date in AVAILABLE_STATUS_CODES]
+
+
 def get_historical_inventory_data(target_date_str: str):
     mysql_session = get_mysql_session()
     planning_session = get_planning_session()
@@ -383,32 +428,25 @@ def get_historical_inventory_data(target_date_str: str):
         discounts_map = {(d.complex_name, d.property_type): d for d in active_version.discounts
                          if d.payment_method == PaymentMethod.FULL_PAYMENT}
 
-    sold_before_target_subquery = mysql_session.query(EstateDeal.estate_sell_id).filter(
-        EstateDeal.deal_status_name.notin_(["Отменено", "Не определён"]),
-        EstateDeal.deal_date_start <= target_date
-    ).scalar_subquery()
-
-    has_any_active_deal_subquery = mysql_session.query(EstateDeal.estate_sell_id).filter(
-        EstateDeal.deal_status_name.notin_(["Отменено", "Не определён"])
-    ).scalar_subquery()
-
-    valid_statuses = ["Маркетинговый резерв", "Подбор", "Бронь"]
-
+    available_ids = available_sell_ids_at_date(target_date)
     available_sells = mysql_session.query(EstateSell).options(
         db.joinedload(EstateSell.house)
     ).filter(
         EstateSell.estate_area > 0,
-        or_(
-            EstateSell.estate_sell_status_name.in_(valid_statuses),
-            EstateSell.id.in_(has_any_active_deal_subquery)
-        ),
-        EstateSell.id.notin_(sold_before_target_subquery)
-    ).all()
+        # Объект без цены отчёт по текущим остаткам не показывает — здесь так же,
+        # иначе отчёты на сегодня расходились бы на такие объекты.
+        EstateSell.estate_price.isnot(None),
+        EstateSell.id.in_(available_ids)
+    ).all() if available_ids else []
 
     pool = {}
 
     for sell in available_sells:
-        if not sell.house or sell.house.complex_name in excluded_complex_names:
+        # Дом без названия ЖК (служебный, тестовый) отчёт не показывает —
+        # так же, как и отчёт по текущим остаткам.
+        if not sell.house or not sell.house.complex_name:
+            continue
+        if sell.house.complex_name in excluded_complex_names:
             continue
 
         price_val = 0
