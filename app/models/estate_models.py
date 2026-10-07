@@ -75,6 +75,10 @@ class EstateSell(db.Model):
     estate_price_m2 = db.Column(db.Float)
 
     estate_sell_status_name = db.Column(db.String(100), nullable=True)
+    # Код статуса витрины: 20 — Подбор, 30 — Бронь, 32 — Маркетинговый резерв,
+    # 50 — Сделка в работе, 100 — Сделка проведена. Журнал статусов объектов
+    # хранит именно коды, поэтому остаток на дату считается по ним.
+    estate_sell_status = db.Column(db.Integer, nullable=True)
     estate_price = db.Column(db.Float, nullable=True)
     estate_area = db.Column(db.Float, nullable=True)
 
