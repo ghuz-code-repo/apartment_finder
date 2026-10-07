@@ -250,6 +250,13 @@ def _format_amount(value, currency):
     return f'{value:,.0f}'.replace(',', ' ') + f' {currency}'
 
 
+def _default_discount_names():
+    """Названия скидок, которые офер даёт по умолчанию: «МПП, РОП, Акция»."""
+    from ..services.pricing_service import MANUAL_DISCOUNT_FIELDS
+    names = dict(MANUAL_DISCOUNT_FIELDS)
+    return ', '.join(names.get(code, code) for code in best_offer_service.DEFAULT_DISCOUNT_CODES)
+
+
 def _criteria_labels(inputs, discount_mode, currency):
     """Критерии человеческим языком — для печатной версии."""
     def bounds(low, high, fmt):
@@ -270,7 +277,8 @@ def _criteria_labels(inputs, discount_mode, currency):
                                   ('monthly_from', 'monthly_to', 'Платёж по ипотеке в месяц', money)):
         if inputs.get(low) or inputs.get(high):
             labels.append(f'{title}: {bounds(inputs.get(low), inputs.get(high), fmt)}')
-    labels.append('Скидки: все доступные' if discount_mode != 'manual' else 'Скидки: выбраны вручную')
+    labels.append(f'Скидки: стандартные ({_default_discount_names()})' if discount_mode != 'manual'
+                  else 'Скидки: выбраны вручную')
     return labels
 
 
@@ -296,7 +304,7 @@ def best_offer():
         project,
         filters=filters,
         manual_percents=manual_percents,
-        apply_all_discounts=discount_mode != 'manual',
+        apply_default_discounts=discount_mode != 'manual',
     )
 
     return render_template(
@@ -309,6 +317,7 @@ def best_offer():
         money=money,
         discount_mode=discount_mode,
         selected_discounts=selected_discounts,
+        default_discounts=_default_discount_names(),
     )
 
 
@@ -326,7 +335,7 @@ def best_offer_print():
         project,
         filters=filters,
         manual_percents=manual_percents,
-        apply_all_discounts=discount_mode != 'manual',
+        apply_default_discounts=discount_mode != 'manual',
     )
 
     return render_template(

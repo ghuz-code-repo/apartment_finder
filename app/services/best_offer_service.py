@@ -25,6 +25,11 @@ AVAILABLE_STATUSES = ("Маркетинговый резерв", "Подбор")
 # Квартиры: офер строится по ним, коммерция и кладовые сюда не идут.
 FLAT_CATEGORY = 'flat'
 
+# Скидки, которые офер даёт по умолчанию. Холдинг, КД, ОПТ, ГД и скидку
+# акционера менеджер при необходимости добавляет вручную: они согласуются
+# отдельно, и в типовом предложении их быть не должно.
+DEFAULT_DISCOUNT_CODES = ('mpp', 'rop', 'action')
+
 
 # Нижняя граница правдоподобной цены за м², UZS. В витрине встречаются лоты с
 # ценой-заглушкой (1 сум, 0,01 за м²): без отсечки такой лот стал бы
@@ -164,7 +169,7 @@ def _price_options(sell, discounts, manual_percents, mortgage_settings):
     return {option['type_key']: option for option in options}
 
 
-def build_offer(complex_name, filters=None, manual_percents=None, apply_all_discounts=True):
+def build_offer(complex_name, filters=None, manual_percents=None, apply_default_discounts=True):
     """Лучшие лоты проекта под заданные критерии.
 
     Возвращает три показателя офера и по каждому — квартиру, из которой он
@@ -201,17 +206,16 @@ def build_offer(complex_name, filters=None, manual_percents=None, apply_all_disc
     discounts = get_project_discounts(complex_name)
     settings = get_calculator_settings()
 
-    # Скидки: либо всё доступное по матрице, либо выбранное менеджером.
-    if apply_all_discounts:
+    # Скидки: либо стандартный набор, либо выбранное менеджером вручную.
+    if apply_default_discounts:
+        def standard(method):
+            return {item['code']: item['max_percent']
+                    for item in discounts.get(method, {}).get('limits', [])
+                    if item['code'] in DEFAULT_DISCOUNT_CODES}
+
         manual_percents = {
-            pricing_service.FULL_PAYMENT_KEY: {
-                item['code']: item['max_percent']
-                for item in discounts.get(PaymentMethod.FULL_PAYMENT, {}).get('limits', [])
-            },
-            pricing_service.MORTGAGE_KEY: {
-                item['code']: item['max_percent']
-                for item in discounts.get(PaymentMethod.MORTGAGE, {}).get('limits', [])
-            },
+            pricing_service.FULL_PAYMENT_KEY: standard(PaymentMethod.FULL_PAYMENT),
+            pricing_service.MORTGAGE_KEY: standard(PaymentMethod.MORTGAGE),
         }
 
     best = {'price': None, 'price_m2': None, 'monthly': None}
