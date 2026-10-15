@@ -3,6 +3,7 @@
 import json
 import copy
 from datetime import date, datetime
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from flask import render_template_string
 import requests
@@ -16,6 +17,40 @@ from ..models import planning_models
 from ..models.estate_models import EstateSell
 from .email_service import send_email
 from ..models.planning_models import map_russian_to_mysql_key
+
+# Лист файла скидок со списком квартир под индивидуальную акцию.
+INDIVIDUAL_ACTION_SHEET = 'Индивидуальная акция'
+INDIVIDUAL_ACTION_ID_COLUMNS = ('ID квартиры', 'ID', 'id', 'Код объекта')
+INDIVIDUAL_ACTION_PERCENT_COLUMNS = ('Процент', 'Скидка', '%', 'Акция')
+
+
+def get_individual_actions(version_id):
+    """Индивидуальные акции версии: {id квартиры: доля}.
+
+    Таблица появилась позже остальных, поэтому её отсутствие не должно ронять
+    карточку объекта: до миграции просто считаем, что акций нет.
+    """
+    if not version_id:
+        return {}
+
+    planning_session = get_planning_session()
+    try:
+        rows = planning_session.query(planning_models.IndividualAction).filter_by(
+            version_id=version_id).all()
+    except SQLAlchemyError as exc:
+        planning_session.rollback()
+        print(f'[DISCOUNT SERVICE] Список индивидуальных акций недоступен: {exc}')
+        return {}
+
+    return {row.estate_sell_id: row.percent or 0.0 for row in rows}
+
+
+def get_individual_action(version_id, sell_id):
+    """Доля индивидуальной акции по одной квартире. Нет в списке -> 0."""
+    if not version_id or not sell_id:
+        return 0.0
+    return get_individual_actions(version_id).get(int(sell_id), 0.0)
+
 
 def delete_draft_version(version_id: int):
     """Удаляет версию, если она никогда не была активна."""
@@ -36,10 +71,15 @@ def delete_draft_version(version_id: int):
 
 
 def _normalize_percentage(value):
+    """Процент из файла скидок в долю: 2 -> 0.02.
+
+    Значение всегда читается как процент. Прежняя версия считала всё, что не
+    больше единицы, уже готовой долей, и ровно на границе теряла смысл: шаблон
+    выгружает проценты, поэтому скидка 1% уходила в файл числом 1 и при
+    обратной загрузке становилась 100%.
+    """
     try:
-        num_value = float(value)
-        if num_value > 1.0: return num_value / 100.0 # Исправлено на правильное деление
-        return num_value
+        return float(value) / 100.0
     except (ValueError, TypeError):
         return 0.0
 
@@ -103,8 +143,71 @@ def process_discounts_from_excel(file_path: str, version_id: int):
         except Exception as ex:
             print(f"[DISCOUNT SERVICE] ❌ ОШИБКА ОБРАБОТКИ СТРОКИ {index}: {ex}. Пропускаю.")
 
+    actions_report = _process_individual_actions(file_path, version_id)
+
     print(f"[DISCOUNT SERVICE] Завершение. Создано: {created_count}, Обновлено: {updated_count}.")
-    return f"Обработано {len(df)} строк. Создано: {created_count}, Обновлено: {updated_count}."
+    return (f"Обработано {len(df)} строк. Создано: {created_count}, "
+            f"Обновлено: {updated_count}.{actions_report}")
+
+
+def _pick_column(df, candidates):
+    """Первая колонка из списка подходящих названий."""
+    for name in candidates:
+        if name in df.columns:
+            return name
+    return None
+
+
+def _process_individual_actions(file_path, version_id):
+    """Читает лист со списком квартир под индивидуальную акцию.
+
+    Лист необязателен: файл без него грузится как раньше. Список полностью
+    заменяет прежний для этой версии — так выгрузка из Excel остаётся
+    источником истины, и убрать квартиру из акции можно, удалив строку.
+    """
+    try:
+        df = pd.read_excel(file_path, sheet_name=INDIVIDUAL_ACTION_SHEET)
+    except ValueError:
+        # Листа нет — это нормальный файл без индивидуальных акций.
+        return ''
+    except Exception as ex:
+        print(f'[DISCOUNT SERVICE] Лист «{INDIVIDUAL_ACTION_SHEET}» не прочитан: {ex}')
+        return f' Лист «{INDIVIDUAL_ACTION_SHEET}» не прочитан.'
+
+    id_column = _pick_column(df, INDIVIDUAL_ACTION_ID_COLUMNS)
+    percent_column = _pick_column(df, INDIVIDUAL_ACTION_PERCENT_COLUMNS)
+    if id_column is None or percent_column is None:
+        return (f' На листе «{INDIVIDUAL_ACTION_SHEET}» нужны колонки '
+                f'«{INDIVIDUAL_ACTION_ID_COLUMNS[0]}» и «{INDIVIDUAL_ACTION_PERCENT_COLUMNS[0]}».')
+
+    planning_session = get_planning_session()
+    planning_session.query(planning_models.IndividualAction).filter_by(
+        version_id=version_id).delete(synchronize_session=False)
+
+    seen, skipped = {}, 0
+    for index, row in df.iterrows():
+        try:
+            sell_id = int(row[id_column])
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+
+        percent = _normalize_percentage(row[percent_column])
+        if percent <= 0:
+            skipped += 1
+            continue
+        # Повтор того же ID в файле: берём последнюю строку, как и для матрицы.
+        seen[sell_id] = percent
+
+    for sell_id, percent in seen.items():
+        planning_session.add(planning_models.IndividualAction(
+            version_id=version_id, estate_sell_id=sell_id, percent=percent))
+
+    report = f' Индивидуальных акций: {len(seen)}.'
+    if skipped:
+        report += f' Пропущено строк: {skipped}.'
+    print(f'[DISCOUNT SERVICE] {report.strip()}')
+    return report
 
 
 def generate_discount_template_excel():
@@ -151,8 +254,8 @@ def generate_discount_template_excel():
                     row['Дата кадастра'] = discount_obj.cadastre_date if discount_obj.cadastre_date else ''
                     for field in percentage_fields:
                         val = getattr(discount_obj, field) or 0.0
-                        # Записываем как целое число (0.05 -> 5.0),
-                        # так как _normalize_percentage при загрузке корректно обработает значения > 1
+                        # Записываем процентами (0.05 -> 5.0): в этом же виде
+                        # значения читает _normalize_percentage при загрузке.
                         header_name = field.upper() if field != 'action' else 'Акция'
                         if field == 'shareholder': header_name = 'Акционер'  # Соответствие заголовкам
 
@@ -178,8 +281,19 @@ def generate_discount_template_excel():
     output = io.BytesIO()
 
     # Используем xlsxwriter для настройки форматирования (опционально)
+    # Второй лист: список квартир под индивидуальную акцию. Выгружаем уже
+    # загруженные, чтобы файл можно было править и заливать обратно целиком.
+    actions = []
+    if active_version:
+        for row in sorted(active_version.individual_actions, key=lambda a: a.estate_sell_id):
+            actions.append({INDIVIDUAL_ACTION_ID_COLUMNS[0]: row.estate_sell_id,
+                            INDIVIDUAL_ACTION_PERCENT_COLUMNS[0]: round((row.percent or 0) * 100, 2)})
+    actions_df = pd.DataFrame(actions, columns=[INDIVIDUAL_ACTION_ID_COLUMNS[0],
+                                                INDIVIDUAL_ACTION_PERCENT_COLUMNS[0]])
+
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Текущие скидки')
+        actions_df.to_excel(writer, index=False, sheet_name=INDIVIDUAL_ACTION_SHEET)
 
     output.seek(0)
     print(f"[DISCOUNT SERVICE] Шаблон успешно сформирован. Строк: {len(data)}")
@@ -541,6 +655,12 @@ def clone_version_for_editing(active_version):
     for old_comment in active_version.complex_comments:
         new_comment = planning_models.ComplexComment(version_id=draft_version.id, complex_name=old_comment.complex_name, comment=old_comment.comment)
         planning_session.add(new_comment)
+    # Список индивидуальных акций — часть версии, иначе черновик потерял бы его.
+    for old_action in active_version.individual_actions:
+        planning_session.add(planning_models.IndividualAction(
+            version_id=draft_version.id,
+            estate_sell_id=old_action.estate_sell_id,
+            percent=old_action.percent))
 
     planning_session.commit()
     print(f"[DISCOUNT SERVICE] ✔️ Создан черновик версии №{draft_version.version_number}")
