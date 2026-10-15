@@ -125,7 +125,7 @@ def get_project_discounts(complex_name):
         limits = [
             {'code': code, 'name': name,
              'max_percent': int(round((getattr(row, code) or 0) * 100))}
-            for code, name in pricing_service.MANUAL_DISCOUNT_FIELDS
+            for code, name in pricing_service.MATRIX_DISCOUNT_FIELDS
             if int(round((getattr(row, code) or 0) * 100)) > 0
         ]
         discounts[row.payment_method] = {

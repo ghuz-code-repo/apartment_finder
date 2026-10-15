@@ -18,12 +18,12 @@ from ..models.planning_models import PaymentMethod
 DEDUCTION_AMOUNT = 3_000_000
 
 # Стандартная ипотека — единственная схема, которую видит менеджер в карточке.
-MAX_MORTGAGE_STANDARD = 420_000_000
+MAX_MORTGAGE_STANDARD = 480_000_000
 MIN_INITIAL_PAYMENT_PERCENT_STANDARD = 0.15
 
-# Все скидки менеджер выставляет вручную: матрица задаёт только потолок,
-# ничего не применяется само. Порядок здесь определяет порядок полей в карточке.
-MANUAL_DISCOUNT_FIELDS = (
+# Скидки из системы скидок: матрица задаёт потолок по каждому ЖК, ничего не
+# применяется само. Порядок здесь определяет порядок полей в карточке.
+MATRIX_DISCOUNT_FIELDS = (
     ('mpp', 'МПП'),
     ('rop', 'РОП'),
     ('kd', 'КД'),
@@ -33,6 +33,26 @@ MANUAL_DISCOUNT_FIELDS = (
     ('shareholder', 'Акционер'),
     ('action', 'Акция'),
 )
+
+# Скидка на конкретные квартиры: потолок приходит не из матрицы, а из списка
+# ID, загруженного вместе с версией скидок. По такой квартире она заменяет
+# обычную акцию ЖК, иначе одна и та же акция сложилась бы дважды.
+INDIVIDUAL_ACTION_CODE = 'individual_action'
+ACTION_CODE = 'action'
+
+# Скидки, которых в матрице нет. Потолок реферальной одинаков для всех ЖК,
+# потолок индивидуальной акции зависит от квартиры и приходит отдельно.
+EXTRA_DISCOUNT_FIELDS = (
+    (INDIVIDUAL_ACTION_CODE, 'Индивидуальная акция'),
+    ('referral', 'Реферальная'),
+)
+
+# Потолки внематричных скидок, известные заранее.
+FIXED_EXTRA_LIMITS = {'referral': 1}
+
+# Полный набор: по нему идёт пересчёт и подписи скидок. Матричные поля отдельно
+# в MATRIX_DISCOUNT_FIELDS — там, где значения читаются из строки матрицы.
+MANUAL_DISCOUNT_FIELDS = MATRIX_DISCOUNT_FIELDS + EXTRA_DISCOUNT_FIELDS
 
 FULL_PAYMENT_KEY = 'full_payment'
 MORTGAGE_KEY = 'mortgage_standard'
@@ -70,10 +90,12 @@ def _clean_amount(value):
     return amount if amount > 0 else None
 
 
-def build_payment_options(base_price, discount_by_method):
+def build_payment_options(base_price, discount_by_method, individual_action=0.0):
     """Собирает варианты оплаты для карточки квартиры.
 
     discount_by_method: {PaymentMethod: сериализованная строка матрицы скидок}.
+    individual_action: доля индивидуальной акции по этой квартире, если она
+    попала в список к текущей версии скидок.
     Ипотека показывается, если по ЖК есть ипотечная строка матрицы: сама строка
     и означает, что схема для комплекса доступна. По размеру скидок в ней судить
     нельзя — теперь скидки нулевые до тех пор, пока менеджер их не выставит.
@@ -83,17 +105,46 @@ def build_payment_options(base_price, discount_by_method):
 
     full_payment_row = discount_by_method.get(PaymentMethod.FULL_PAYMENT)
     options.append(_new_option(FULL_PAYMENT_KEY, '100% оплата', base_price,
-                               price_after_deduction, full_payment_row))
+                               price_after_deduction, full_payment_row,
+                               individual_action))
 
     mortgage_row = discount_by_method.get(PaymentMethod.MORTGAGE)
     if mortgage_row is not None:
         options.append(_new_option(MORTGAGE_KEY, 'Ипотека', base_price,
-                                   price_after_deduction, mortgage_row))
+                                   price_after_deduction, mortgage_row,
+                                   individual_action))
 
     return options
 
 
-def _new_option(type_key, title, base_price, price_after_deduction, discount_row):
+def _discount_limits(discount_row, individual_action=0.0):
+    """Потолки скидок для карточки: из матрицы плюс те, которых в ней нет.
+
+    individual_action — доля из списка индивидуальных акций для этой квартиры.
+    Если она есть, обычная акция ЖК из набора убирается: по такому объекту
+    действует только индивидуальный процент.
+    """
+    individual_percent = int(_as_percent(individual_action))
+
+    limits = [
+        {'code': code, 'name': name,
+         'max_percent': int(_as_percent(discount_row.get(code)))}
+        for code, name in MATRIX_DISCOUNT_FIELDS
+        if int(_as_percent(discount_row.get(code))) > 0
+        and not (code == ACTION_CODE and individual_percent > 0)
+    ]
+
+    for code, name in EXTRA_DISCOUNT_FIELDS:
+        max_percent = (individual_percent if code == INDIVIDUAL_ACTION_CODE
+                       else FIXED_EXTRA_LIMITS.get(code, 0))
+        if max_percent > 0:
+            limits.append({'code': code, 'name': name, 'max_percent': max_percent})
+
+    return limits
+
+
+def _new_option(type_key, title, base_price, price_after_deduction, discount_row,
+                individual_action=0.0):
     discount_row = discount_row or {}
     option = {
         'type_key': type_key,
@@ -101,15 +152,10 @@ def _new_option(type_key, title, base_price, price_after_deduction, discount_row
         'base_price': base_price,
         'deduction': DEDUCTION_AMOUNT,
         'price_after_deduction': price_after_deduction,
-        # Только те скидки, которые реально доступны по матрице: менеджеру
-        # не показываем поля, в которые всё равно нечего ввести. Ползунок ходит
-        # целыми процентами, поэтому дробный потолок округляем вниз.
-        'manual_discount_limits': [
-            {'code': code, 'name': name,
-             'max_percent': int(_as_percent(discount_row.get(code)))}
-            for code, name in MANUAL_DISCOUNT_FIELDS
-            if int(_as_percent(discount_row.get(code))) > 0
-        ],
+        # Только те скидки, которые реально доступны: менеджеру не показываем
+        # поля, в которые всё равно нечего ввести. Ползунок ходит целыми
+        # процентами, поэтому дробный потолок округляем вниз.
+        'manual_discount_limits': _discount_limits(discount_row, individual_action),
         # Тело кредита зависит от цены после скидок и считается в recalculate.
         'mortgage_body': None,
         # Дата кадастра из матрицы скидок: на ней меняется ставка по ипотеке.

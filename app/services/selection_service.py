@@ -3,7 +3,7 @@
 from flask import current_app, abort
 from sqlalchemy.orm import joinedload
 
-from . import currency_service, pricing_service
+from . import currency_service, discount_service, pricing_service
 from ..core.db_utils import get_mysql_session, get_planning_session, get_default_session
 import json
 from datetime import date
@@ -210,8 +210,12 @@ def get_apartment_card_data(sell_id: int):
         for d in serialized_discounts
     }
 
+    # Индивидуальная акция привязана к конкретной квартире и по ней заменяет
+    # обычную акцию ЖК.
+    individual_action = discount_service.get_individual_action(active_version.id, sell.id)
+
     pricing_options = pricing_service.build_payment_options(
-        serialized_apartment['estate_price'], discount_by_method
+        serialized_apartment['estate_price'], discount_by_method, individual_action
     )
 
     return {

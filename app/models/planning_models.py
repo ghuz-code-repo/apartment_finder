@@ -122,6 +122,8 @@ class DiscountVersion(db.Model):
     changes_summary_json = db.Column(db.Text, nullable=True)
     summary_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
     discounts = db.relationship('Discount', back_populates='version', cascade="all, delete-orphan")
+    individual_actions = db.relationship('IndividualAction', back_populates='version',
+                                         cascade="all, delete-orphan")
     complex_comments = db.relationship('ComplexComment', back_populates='version', cascade="all, delete-orphan")
 
 
@@ -181,6 +183,32 @@ class FlatPlanCache(db.Model):
     files_json = db.Column(db.Text, nullable=False, default='[]')
     error = db.Column(db.String(500), nullable=True)
     fetched_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+
+class IndividualAction(db.Model):
+    """Акция на конкретные квартиры: список ID с процентом.
+
+    В матрице скидок строка привязана к ЖК, а эта акция действует на отдельные
+    объекты, поэтому хранится отдельно. Версия та же, что у скидок: список
+    загружается вместе с ними и меняется при смене версии.
+
+    Процент хранится долей (0.03 = 3%) — как и в матрице, чтобы расчёт не
+    пришлось переводить между форматами.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'individual_actions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    version_id = db.Column(db.Integer, db.ForeignKey('discount_versions.id'),
+                           nullable=False, index=True)
+    estate_sell_id = db.Column(db.Integer, nullable=False, index=True)
+    percent = db.Column(db.Float, nullable=False, default=0.0)
+
+    version = db.relationship('DiscountVersion', back_populates='individual_actions')
+
+    __table_args__ = (
+        db.UniqueConstraint('version_id', 'estate_sell_id', name='_version_sell_action_uc'),
+    )
 
 
 class ComplexComment(db.Model):
