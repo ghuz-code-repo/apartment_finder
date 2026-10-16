@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
 from app.services import settings_service, report_service, manager_link_service, installment_plan_service
+from app.services.data_service import get_all_complex_names
 from .forms import CalculatorSettingsForm
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from ..models.estate_models import EstateHouse
@@ -79,16 +80,6 @@ def manage_settings():
             except Exception as e:
                 planning_session.rollback()
                 flash(f'Ошибка при обработке файла матрицы: {e}', 'danger')
-
-        # Сетка рассрочки «ПВ x срок»: отдельный файл, свой на каждый ЖК.
-        if form.installment_grid_file.data:
-            try:
-                message = installment_plan_service.import_grid_from_excel(
-                    form.installment_grid_file.data)
-                flash(message, 'success')
-            except Exception as e:
-                get_planning_session().rollback()
-                flash(f'Ошибка при обработке сетки рассрочки: {e}', 'danger')
 
         return redirect(url_for('settings.manage_settings'))
 
@@ -182,13 +173,70 @@ def manage_manager_links():
     )
 
 
-@settings_bp.route('/settings/installment-grid/export')
+# --- Сетки рассрочки --------------------------------------------------------
+
+@settings_bp.route('/installment-grids')
 @login_required
 @permission_required('settings_calculator_view')
-def export_installment_grid():
-    """Выгружает сетку рассрочки в том же формате, в каком её принимает загрузка."""
-    return send_file(
-        installment_plan_service.export_grid_to_excel(),
-        download_name='installment_grid.xlsx',
-        as_attachment=True
-    )
+def installment_grids():
+    """Список сеток рассрочки с привязанными ЖК."""
+    return render_template('settings/installment_grids.html',
+                           title='Сетки рассрочки',
+                           grids=installment_plan_service.list_grids())
+
+
+@settings_bp.route('/installment-grids/new', methods=['GET', 'POST'])
+@settings_bp.route('/installment-grids/<int:grid_id>', methods=['GET', 'POST'])
+@login_required
+@permission_required('settings_calculator_view')
+def edit_installment_grid(grid_id=None):
+    """Создание и правка сетки: название, набор ЖК и таблица «ПВ x срок»."""
+    grid = installment_plan_service.get_grid(grid_id) if grid_id else None
+    if grid_id and not grid:
+        flash('Сетка не найдена.', 'danger')
+        return redirect(url_for('settings.installment_grids'))
+
+    if request.method == 'POST':
+        # Клетки приходят полями вида cell-12:20 — ключ сам несёт срок и ПВ.
+        cells = {key[len('cell-'):]: value
+                 for key, value in request.form.items() if key.startswith('cell-')}
+        try:
+            saved, filled = installment_plan_service.save_grid(
+                grid_id=grid_id,
+                name=request.form.get('name'),
+                complex_names=request.form.getlist('complex_names'),
+                terms_raw=request.form.get('terms'),
+                dp_raw=request.form.get('dp_values'),
+                cells=cells,
+            )
+            flash(f'Сетка «{saved.name}» сохранена: заполнено комбинаций {filled}.', 'success')
+            return redirect(url_for('settings.installment_grids'))
+        except ValueError as e:
+            get_planning_session().rollback()
+            flash(str(e), 'danger')
+        except Exception as e:
+            get_planning_session().rollback()
+            flash(f'Не удалось сохранить сетку: {e}', 'danger')
+
+    # Список ЖК запрашиваем первым: он закрывает общую сессию, и объекты,
+    # прочитанные до него, отвязались бы от неё.
+    all_complexes = get_all_complex_names()
+    grid = installment_plan_service.get_grid(grid_id) if grid_id else None
+
+    table = installment_plan_service.grid_as_table(grid) if grid else {
+        'terms': [], 'dp_values': [], 'cells': {}}
+    return render_template('settings/installment_grid_edit.html',
+                           title='Сетка рассрочки',
+                           grid=grid,
+                           table=table,
+                           all_complexes=all_complexes,
+                           selected=[link.complex_name for link in grid.complexes] if grid else [])
+
+
+@settings_bp.route('/installment-grids/<int:grid_id>/delete', methods=['POST'])
+@login_required
+@permission_required('settings_calculator_view')
+def delete_installment_grid(grid_id):
+    if installment_plan_service.delete_grid(grid_id):
+        flash('Сетка удалена.', 'success')
+    return redirect(url_for('settings.installment_grids'))

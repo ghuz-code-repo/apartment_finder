@@ -29,18 +29,24 @@ REFERRAL_PERCENT = 1
 BASE_DISCOUNT_EXCLUDED = ('opt', 'referral')
 
 
-def _matrix_rows(complex_name):
-    """Строки сетки по ЖК. Таблицы ещё нет — считаем, что сетка пуста."""
+def get_grid_for_complex(complex_name):
+    """Сетка, к которой привязан ЖК. Таблиц ещё нет — считаем, что сетки нет."""
     if not complex_name:
-        return []
+        return None
     session = get_planning_session()
     try:
-        return session.query(planning_models.InstallmentPlanRate).filter_by(
-            complex_name=complex_name).all()
+        link = session.query(planning_models.InstallmentGridComplex).filter_by(
+            complex_name=complex_name).first()
+        return link.grid if link else None
     except SQLAlchemyError as exc:
         session.rollback()
         logger.warning('[INSTALLMENT] Сетка рассрочки недоступна: %s', exc)
-        return []
+        return None
+
+
+def _matrix_rows(complex_name):
+    grid = get_grid_for_complex(complex_name)
+    return list(grid.rates) if grid else []
 
 
 def get_matrix(complex_name):
@@ -153,118 +159,119 @@ def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=Fa
         'monthly_payment': remainder / term_months if term_months else None,
     }
 
-# --- Загрузка и выгрузка сетки ----------------------------------------------
 
-# Формат файла: строка на пару «ЖК + срок», колонки с процентами ПВ.
-# Пустая клетка означает, что такой пары по проекту нет.
-GRID_COMPLEX_COLUMNS = ('ЖК', 'Название ЖК', 'Комплекс')
-GRID_TERM_COLUMNS = ('Срок, мес', 'Срок', 'Месяц', 'Срок рассрочки')
+# --- Ведение сеток ----------------------------------------------------------
 
-
-def _pick_column(columns, candidates):
-    for name in candidates:
-        if name in columns:
-            return name
-    return None
-
-
-def _as_rate(value):
-    """Цена рассрочки из файла в долю: 9 -> 0.09, 0.09 -> 0.09.
-
-    Файл выгружается в процентах, но сетку нередко заполняют долями, поэтому
-    значения не больше единицы считаем уже долями.
-    """
-    rate = float(value)
-    return rate if rate <= 1 else rate / 100.0
+def list_grids():
+    """Все сетки со связанными ЖК. Таблиц ещё нет — список пуст."""
+    session = get_planning_session()
+    try:
+        return session.query(planning_models.InstallmentGrid).order_by(
+            planning_models.InstallmentGrid.name).all()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        logger.warning('[INSTALLMENT] Список сеток недоступен: %s', exc)
+        return []
 
 
-def import_grid_from_excel(file_storage):
-    """Заменяет сетку рассрочки для ЖК, перечисленных в файле.
+def get_grid(grid_id):
+    return get_planning_session().get(planning_models.InstallmentGrid, int(grid_id))
 
-    Трогаем только те проекты, что есть в файле: сетки остальных остаются.
-    Возвращает текст для flash-сообщения.
-    """
-    import pandas as pd
 
-    df = pd.read_excel(file_storage)
-    complex_column = _pick_column(df.columns, GRID_COMPLEX_COLUMNS)
-    term_column = _pick_column(df.columns, GRID_TERM_COLUMNS)
-    if complex_column is None or term_column is None:
-        raise ValueError(f'Нужны колонки «{GRID_COMPLEX_COLUMNS[0]}» и «{GRID_TERM_COLUMNS[0]}».')
+def grid_as_table(grid):
+    """Сетка в виде, удобном шаблону: сроки, проценты ПВ и значения клеток."""
+    rates = list(grid.rates) if grid else []
+    terms = sorted({r.term_months for r in rates})
+    dp_values = sorted({r.dp_percent for r in rates})
+    cells = {f'{r.term_months}:{r.dp_percent}': round((r.cost_rate or 0) * 100, 2)
+             for r in rates}
+    return {'terms': terms, 'dp_values': dp_values, 'cells': cells}
 
-    dp_columns = {}
-    for column in df.columns:
-        if column in (complex_column, term_column):
+
+def _parse_numbers(raw):
+    """«12, 24,36» -> [12, 24, 36]. Повторы и мусор отбрасываются."""
+    values = []
+    for chunk in str(raw or '').replace(';', ',').split(','):
+        chunk = chunk.replace('%', '').strip()
+        if not chunk:
             continue
         try:
-            # Заголовок колонки — процент ПВ: 20, «20», «20%».
-            dp_columns[column] = int(float(str(column).replace('%', '').strip()))
+            value = int(float(chunk))
         except ValueError:
             continue
-    if not dp_columns:
-        raise ValueError('Не найдено ни одной колонки с процентом первоначального взноса.')
+        if value > 0 and value not in values:
+            values.append(value)
+    return sorted(values)
+
+
+def save_grid(grid_id, name, complex_names, terms_raw, dp_raw, cells):
+    """Создаёт или обновляет сетку целиком.
+
+    cells: {'срок:ПВ': строка с процентом}. Пустая клетка означает, что пара
+    не продаётся, и строка для неё не создаётся.
+
+    ЖК закреплён не более чем за одной сеткой, поэтому занятые чужой сеткой
+    проекты отклоняем с понятным текстом, а не молча перевешиваем.
+    """
+    name = (name or '').strip()
+    if not name:
+        raise ValueError('Укажите название сетки.')
+
+    terms = _parse_numbers(terms_raw)
+    dp_values = _parse_numbers(dp_raw)
+    if not terms or not dp_values:
+        raise ValueError('Заполните сроки и проценты первоначального взноса.')
 
     session = get_planning_session()
-    touched, added = set(), 0
+    grid = get_grid(grid_id) if grid_id else None
+    if grid is None:
+        grid = planning_models.InstallmentGrid(name=name)
+        session.add(grid)
+        session.flush()
+    else:
+        grid.name = name
 
-    for _, row in df.iterrows():
-        complex_name = str(row[complex_column]).strip()
-        if not complex_name or complex_name.lower() == 'nan':
-            continue
-        try:
-            term_months = int(row[term_column])
-        except (TypeError, ValueError):
-            continue
+    selected = [c.strip() for c in (complex_names or []) if c and c.strip()]
+    taken = session.query(planning_models.InstallmentGridComplex).filter(
+        planning_models.InstallmentGridComplex.complex_name.in_(selected),
+        planning_models.InstallmentGridComplex.grid_id != grid.id).all() if selected else []
+    if taken:
+        names = ', '.join(sorted(link.complex_name for link in taken))
+        raise ValueError(f'Эти ЖК уже закреплены за другой сеткой: {names}.')
 
-        if complex_name not in touched:
-            session.query(planning_models.InstallmentPlanRate).filter_by(
-                complex_name=complex_name).delete(synchronize_session=False)
-            touched.add(complex_name)
+    session.query(planning_models.InstallmentGridComplex).filter_by(
+        grid_id=grid.id).delete(synchronize_session=False)
+    for complex_name in selected:
+        session.add(planning_models.InstallmentGridComplex(
+            grid_id=grid.id, complex_name=complex_name))
 
-        for column, dp_percent in dp_columns.items():
-            value = row[column]
-            if pd.isna(value):
+    session.query(planning_models.InstallmentGridRate).filter_by(
+        grid_id=grid.id).delete(synchronize_session=False)
+    filled = 0
+    for term in terms:
+        for dp_percent in dp_values:
+            raw = (cells or {}).get(f'{term}:{dp_percent}')
+            if raw is None or str(raw).strip() == '':
                 continue
             try:
-                rate = _as_rate(value)
-            except (TypeError, ValueError):
+                percent = float(str(raw).replace(',', '.').strip())
+            except ValueError:
                 continue
-            session.add(planning_models.InstallmentPlanRate(
-                complex_name=complex_name, term_months=term_months,
-                dp_percent=dp_percent, cost_rate=rate))
-            added += 1
+            if percent <= 0:
+                continue
+            session.add(planning_models.InstallmentGridRate(
+                grid_id=grid.id, term_months=term, dp_percent=dp_percent,
+                cost_rate=percent / 100.0))
+            filled += 1
 
     session.commit()
-    return f'Сетка рассрочки обновлена: проектов {len(touched)}, комбинаций {added}.'
+    return grid, filled
 
 
-def export_grid_to_excel():
-    """Текущая сетка в том же виде, в каком её принимает загрузка."""
-    import io as _io
-
-    import pandas as pd
-
+def delete_grid(grid_id):
     session = get_planning_session()
-    rows = session.query(planning_models.InstallmentPlanRate).order_by(
-        planning_models.InstallmentPlanRate.complex_name,
-        planning_models.InstallmentPlanRate.term_months).all()
-
-    dp_values = sorted({row.dp_percent for row in rows})
-    table = {}
-    for row in rows:
-        key = (row.complex_name, row.term_months)
-        table.setdefault(key, {})[row.dp_percent] = round((row.cost_rate or 0) * 100, 2)
-
-    data = []
-    for (complex_name, term_months), by_dp in table.items():
-        record = {GRID_COMPLEX_COLUMNS[0]: complex_name, GRID_TERM_COLUMNS[0]: term_months}
-        record.update({dp: by_dp.get(dp) for dp in dp_values})
-        data.append(record)
-
-    columns = [GRID_COMPLEX_COLUMNS[0], GRID_TERM_COLUMNS[0]] + dp_values
-    output = _io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        pd.DataFrame(data, columns=columns).to_excel(writer, index=False,
-                                                     sheet_name='Сетка рассрочки')
-    output.seek(0)
-    return output
+    grid = get_grid(grid_id)
+    if grid:
+        session.delete(grid)
+        session.commit()
+    return grid is not None
