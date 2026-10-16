@@ -211,26 +211,62 @@ class IndividualAction(db.Model):
     )
 
 
-class InstallmentPlanRate(db.Model):
-    """Цена рассрочки: сколько процентов скидки съедает пара «ПВ + срок».
+class InstallmentGrid(db.Model):
+    """Именованная сетка рассрочки, общая для нескольких ЖК.
 
-    Сетка своя у каждого ЖК. Строки нет — значит такая пара по этому проекту
-    не продаётся, и калькулятор её не предложит. Процент хранится долей
-    (0.09 = 9%), как и остальные скидки.
+    Условия обычно одинаковы у группы проектов, поэтому сетка заводится один
+    раз и привязывается к нужным ЖК. Один ЖК может принадлежать только одной
+    сетке — иначе калькулятор не знал бы, по какой считать.
     """
     __bind_key__ = 'planning_db'
-    __tablename__ = 'installment_plan_rates'
+    __tablename__ = 'installment_grids'
 
     id = db.Column(db.Integer, primary_key=True)
-    complex_name = db.Column(db.String(255), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+
+    rates = db.relationship('InstallmentGridRate', back_populates='grid',
+                            cascade='all, delete-orphan')
+    complexes = db.relationship('InstallmentGridComplex', back_populates='grid',
+                                cascade='all, delete-orphan')
+
+
+class InstallmentGridRate(db.Model):
+    """Цена рассрочки: сколько процентов скидки съедает пара «ПВ + срок».
+
+    Строки нет — значит такая пара не продаётся, и калькулятор её не
+    предложит. Процент хранится долей (0.09 = 9%), как и остальные скидки.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'installment_grid_rates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    grid_id = db.Column(db.Integer, db.ForeignKey('installment_grids.id'),
+                        nullable=False, index=True)
     term_months = db.Column(db.Integer, nullable=False)
     dp_percent = db.Column(db.Integer, nullable=False)
     cost_rate = db.Column(db.Float, nullable=False, default=0.0)
 
+    grid = db.relationship('InstallmentGrid', back_populates='rates')
+
     __table_args__ = (
-        db.UniqueConstraint('complex_name', 'term_months', 'dp_percent',
-                            name='_complex_term_dp_uc'),
+        db.UniqueConstraint('grid_id', 'term_months', 'dp_percent',
+                            name='_grid_term_dp_uc'),
     )
+
+
+class InstallmentGridComplex(db.Model):
+    """К каким ЖК применяется сетка. Имя уникально на всю таблицу."""
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'installment_grid_complexes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    grid_id = db.Column(db.Integer, db.ForeignKey('installment_grids.id'),
+                        nullable=False, index=True)
+    complex_name = db.Column(db.String(255), nullable=False, unique=True)
+
+    grid = db.relationship('InstallmentGrid', back_populates='complexes')
 
 
 class ComplexComment(db.Model):
