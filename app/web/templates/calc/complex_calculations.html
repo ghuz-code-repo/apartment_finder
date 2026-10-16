@@ -281,6 +281,7 @@
             </div>
         </div>
     </div>
+    </div>
 
     {# Рассрочка по сетке «ПВ x срок»: цена рассрочки вычитается из скидок,
        остаток после взноса делится на срок равными долями. #}
@@ -297,8 +298,10 @@
                     <h5 class="card-title">{{ _('Параметры рассрочки') }}</h5>
                     <form id="matrix-installment-form"
                           data-action="{{ url_for('complex_calc.calculate_matrix_installment') }}"
-                          data-dp-by-term="{{ installment_matrix.dp_by_term|tojson }}"
-                          data-cost-percent="{{ installment_matrix.cost_percent|tojson }}">
+                          {# Кавычки атрибута одинарные: tojson выдаёт двойные,
+                             и в атрибуте с двойными значение обрывалось. #}
+                          data-dp-by-term='{{ installment_matrix.dp_by_term|tojson }}'
+                          data-cost-percent='{{ installment_matrix.cost_percent|tojson }}'>
                         <div class="mb-3">
                             <label for="matrix-term" class="form-label">{{ _('Срок рассрочки (мес)') }}</label>
                             <select class="form-select" id="matrix-term" name="term">
@@ -347,7 +350,6 @@
         </div>
     </div>
     </div>
-</div>
 </div>
 </div>
 
