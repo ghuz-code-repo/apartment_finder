@@ -2,7 +2,7 @@
 
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app
 from ..core.decorators import permission_required, login_required
-from app.services import selection_service, complex_calc_service
+from app.services import selection_service, complex_calc_service, installment_plan_service
 from app.core.decorators import permission_required
 
 complex_calc_bp = Blueprint('complex_calc', __name__, template_folder='templates')
@@ -16,7 +16,10 @@ def show_page(sell_id):
     if not card_data.get('apartment'):
         flash("Объект не найден.", "danger")
         return redirect(url_for('main.selection'))
-    return render_template('calc/complex_calculations.html', title="Сложные расчёты", data=card_data)
+    complex_name = (card_data.get('apartment', {}).get('house') or {}).get('complex_name')
+    return render_template('calc/complex_calculations.html', title="Сложные расчёты",
+                           data=card_data,
+                           installment_matrix=installment_plan_service.get_matrix_options(complex_name))
 
 
 @complex_calc_bp.route('/calculate-installment', methods=['POST'])
@@ -49,6 +52,28 @@ def calculate_installment():
         return jsonify(success=False, error=str(e)), 400
     except Exception as e:
         current_app.logger.error(f"Critical error in installment calculation: {e}")
+        return jsonify(success=False, error="Произошла внутренняя ошибка на сервере."), 500
+
+
+@complex_calc_bp.route('/calculate-matrix-installment', methods=['POST'])
+@login_required
+@permission_required('complex_calc_calculate')
+def calculate_matrix_installment():
+    """AJAX-расчёт рассрочки по сетке «ПВ × срок»."""
+    data = request.get_json() or {}
+    try:
+        result = installment_plan_service.calculate(
+            sell_id=int(data.get('sell_id')),
+            term_months=int(data.get('term')),
+            dp_percent=int(data.get('dp_percent')),
+            with_opt=bool(data.get('with_opt')),
+            with_referral=bool(data.get('with_referral')),
+        )
+        return jsonify(success=True, data=result)
+    except (ValueError, TypeError) as e:
+        return jsonify(success=False, error=str(e)), 400
+    except Exception as e:
+        current_app.logger.error(f"Critical error in matrix installment calculation: {e}")
         return jsonify(success=False, error="Произошла внутренняя ошибка на сервере."), 500
 
 
