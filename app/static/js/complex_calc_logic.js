@@ -358,13 +358,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         if (printMatrixBtn) {
+            // Печатаем обычным КП, а не формой сложных расчётов: в адрес идут
+            // условия, а суммы сервер считает сам — подменить их нельзя.
             printMatrixBtn.addEventListener('click', function () {
                 if (!matrixCalcData) return;
                 const queryParams = new URLSearchParams({
-                    calc_type: 'matrix_installment',
-                    details: formatForUrl(matrixCalcData)
+                    installment_term: matrixCalcData.term_months,
+                    installment_dp: matrixCalcData.dp_percent,
+                    discounts: formatForUrl(readDiscounts())
                 });
-                window.open(`${window.APP_PREFIX}/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
+                window.open(`${window.APP_PREFIX}/commercial-offer/${sellId}?${queryParams.toString()}`, '_blank');
             });
         }
     }

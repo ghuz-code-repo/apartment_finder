@@ -94,6 +94,7 @@ def _payment_schedule(initial_payment, monthly_payment, term_months, start_date=
     schedule = [{
         'month_number': 0,
         'payment_date': start.isoformat(),
+        'date_display': start.strftime('%d.%m.%Y'),
         'amount': initial_payment,
         'type': 'initial_payment',
     }]
@@ -104,6 +105,7 @@ def _payment_schedule(initial_payment, monthly_payment, term_months, start_date=
         schedule.append({
             'month_number': month,
             'payment_date': payment_date.isoformat(),
+            'date_display': payment_date.strftime('%d.%m.%Y'),
             'amount': monthly_payment,
             'type': 'monthly_payment',
         })
@@ -306,3 +308,33 @@ def delete_grid(grid_id):
         session.delete(grid)
         session.commit()
     return grid is not None
+
+
+def as_offer_option(result):
+    """Результат расчёта в виде варианта оплаты для основного КП.
+
+    КП печатается тем же шаблоном, что 100% оплата и ипотека, а он ждёт
+    словарь варианта: прайс, вычет, скидка, итог, взнос и ежемесячный платёж.
+    Поле тела кредита занимает остаток рассрочки, поэтому рядом едет своя
+    подпись — «Остаток», а не «Кредит».
+    """
+    term_months = result['term_months']
+    return {
+        'type_key': 'installment',
+        'payment_method': f"Рассрочка на {term_months} мес.",
+        'base_price': result['base_price'],
+        'deduction': result['deduction'],
+        'price_after_deduction': result['price_after_deduction'],
+        'applied_discounts': result['applied_discounts'],
+        'total_discount_percent': result['available_discount_percent'],
+        'total_discount_amount': result['discount_amount'],
+        'final_price': result['deal_price'],
+        'initial_payment': result['initial_payment'],
+        'monthly_payment': result['monthly_payment'],
+        'mortgage_body': result['remainder'],
+        'mortgage_term_months': term_months,
+        'body_label': 'Остаток',
+        'min_initial_payment': None,
+        'mortgage_rate_annual': None,
+        'monthly_payment_after_cadastre': None,
+    }
