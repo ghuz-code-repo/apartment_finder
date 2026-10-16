@@ -211,6 +211,28 @@ class IndividualAction(db.Model):
     )
 
 
+class InstallmentPlanRate(db.Model):
+    """Цена рассрочки: сколько процентов скидки съедает пара «ПВ + срок».
+
+    Сетка своя у каждого ЖК. Строки нет — значит такая пара по этому проекту
+    не продаётся, и калькулятор её не предложит. Процент хранится долей
+    (0.09 = 9%), как и остальные скидки.
+    """
+    __bind_key__ = 'planning_db'
+    __tablename__ = 'installment_plan_rates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    complex_name = db.Column(db.String(255), nullable=False, index=True)
+    term_months = db.Column(db.Integer, nullable=False)
+    dp_percent = db.Column(db.Integer, nullable=False)
+    cost_rate = db.Column(db.Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        db.UniqueConstraint('complex_name', 'term_months', 'dp_percent',
+                            name='_complex_term_dp_uc'),
+    )
+
+
 class ComplexComment(db.Model):
     __bind_key__ = 'planning_db'
     __tablename__ = 'complex_comments'

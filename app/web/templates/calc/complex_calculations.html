@@ -69,6 +69,11 @@
             {{ _('Ипотека под 0%%') }}
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pills-matrix-installment-tab" data-bs-toggle="pill" data-bs-target="#pills-matrix-installment" type="button" role="tab" aria-controls="pills-matrix-installment" aria-selected="false">
+            {{ _('Рассрочка по сетке') }}
+        </button>
+    </li>
 </ul>
 
 <div class="tab-content" id="pills-tabContent">
@@ -275,6 +280,72 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    {# Рассрочка по сетке «ПВ x срок»: цена рассрочки вычитается из скидок,
+       остаток после взноса делится на срок равными долями. #}
+    <div class="tab-pane fade" id="pills-matrix-installment" role="tabpanel" aria-labelledby="pills-matrix-installment-tab">
+    <div class="card card-glass">
+        <div class="card-body">
+            {% if not installment_matrix.terms %}
+            <div class="alert alert-warning mb-0">
+                {{ _('Для этого ЖК сетка рассрочки не заполнена. Её задают в настройках калькулятора.') }}
+            </div>
+            {% else %}
+            <div class="row">
+                <div class="col-md-5">
+                    <h5 class="card-title">{{ _('Параметры рассрочки') }}</h5>
+                    <form id="matrix-installment-form"
+                          data-action="{{ url_for('complex_calc.calculate_matrix_installment') }}"
+                          data-dp-by-term="{{ installment_matrix.dp_by_term|tojson }}"
+                          data-cost-percent="{{ installment_matrix.cost_percent|tojson }}">
+                        <div class="mb-3">
+                            <label for="matrix-term" class="form-label">{{ _('Срок рассрочки (мес)') }}</label>
+                            <select class="form-select" id="matrix-term" name="term">
+                                {% for term in installment_matrix.terms %}
+                                <option value="{{ term }}">{{ term }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            {# Список ПВ зависит от срока: в сетке заполнены не все пары. #}
+                            <label for="matrix-dp" class="form-label">{{ _('Первоначальный взнос (%%)') }}</label>
+                            <select class="form-select" id="matrix-dp" name="dp_percent"></select>
+                            <div class="form-text" id="matrix-cost-hint"></div>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="matrix-opt">
+                            <label class="form-check-label" for="matrix-opt">{{ _('Скидка ОПТ (3%%)') }}</label>
+                        </div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="matrix-referral">
+                            <label class="form-check-label" for="matrix-referral">{{ _('Реферальная скидка (1%%)') }}</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">{{ _('Рассчитать') }}</button>
+                    </form>
+                </div>
+                <div class="col-md-7">
+                    <h5 class="card-title">{{ _('Результаты') }}</h5>
+                    <div id="matrix-installment-result-display" class="p-3 bg-body-secondary rounded">
+                        <div id="matrix-installment-error-display" class="alert alert-danger d-none"></div>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tbody>
+                                <tr><td>{{ _('Базовая скидка') }}:</td><td class="text-end" id="matrix-res-base">...</td></tr>
+                                <tr><td>{{ _('Цена рассрочки') }}:</td><td class="text-end text-danger" id="matrix-res-cost">...</td></tr>
+                                <tr class="border-top"><td class="pt-2">{{ _('Доступная скидка') }}:</td><td class="pt-2 text-end fw-bold" id="matrix-res-available">...</td></tr>
+                                <tr><td>{{ _('Первоначальный взнос') }}:</td><td class="text-end fw-bold fs-5" id="matrix-res-dp">...</td></tr>
+                                <tr><td>{{ _('Остаток') }}:</td><td class="text-end" id="matrix-res-remainder">...</td></tr>
+                                <tr class="text-primary"><td>{{ _('Ежемесячный платёж') }}:</td><td class="text-end fw-bold fs-5" id="matrix-res-monthly">...</td></tr>
+                                <tr><td>{{ _('Цена сделки за м²') }}:</td><td class="text-end" id="matrix-res-sqm">...</td></tr>
+                                <tr class="border-top"><td class="pt-3">{{ _('Стоимость сделки') }}:</td><td class="pt-3 text-end fw-bold fs-5 text-success" id="matrix-res-deal">...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
     </div>
 </div>
 </div>

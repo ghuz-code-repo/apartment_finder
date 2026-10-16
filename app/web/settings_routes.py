@@ -4,7 +4,7 @@ import pandas as pd
 from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file
 from ..core.decorators import permission_required, login_required
 from app.core.decorators import permission_required
-from app.services import settings_service, report_service, manager_link_service
+from app.services import settings_service, report_service, manager_link_service, installment_plan_service
 from .forms import CalculatorSettingsForm
 from ..core.db_utils import get_planning_session, get_mysql_session, get_default_session
 from ..models.estate_models import EstateHouse
@@ -79,6 +79,16 @@ def manage_settings():
             except Exception as e:
                 planning_session.rollback()
                 flash(f'Ошибка при обработке файла матрицы: {e}', 'danger')
+
+        # Сетка рассрочки «ПВ x срок»: отдельный файл, свой на каждый ЖК.
+        if form.installment_grid_file.data:
+            try:
+                message = installment_plan_service.import_grid_from_excel(
+                    form.installment_grid_file.data)
+                flash(message, 'success')
+            except Exception as e:
+                get_planning_session().rollback()
+                flash(f'Ошибка при обработке сетки рассрочки: {e}', 'danger')
 
         return redirect(url_for('settings.manage_settings'))
 
@@ -169,4 +179,16 @@ def manage_manager_links():
         rows=data['rows'],
         gateway_available=data['gateway_available'],
         search_query=search_query
+    )
+
+
+@settings_bp.route('/settings/installment-grid/export')
+@login_required
+@permission_required('settings_calculator_view')
+def export_installment_grid():
+    """Выгружает сетку рассрочки в том же формате, в каком её принимает загрузка."""
+    return send_file(
+        installment_plan_service.export_grid_to_excel(),
+        download_name='installment_grid.xlsx',
+        as_attachment=True
     )

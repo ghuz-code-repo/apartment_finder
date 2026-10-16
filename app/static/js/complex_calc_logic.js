@@ -245,6 +245,86 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+
+    // --- РАССРОЧКА ПО СЕТКЕ «ПВ x СРОК» ---
+    const matrixForm = document.getElementById('matrix-installment-form');
+    if (matrixForm) {
+        const dpByTerm = JSON.parse(matrixForm.dataset.dpByTerm || '{}');
+        const costPercent = JSON.parse(matrixForm.dataset.costPercent || '{}');
+        const termSelect = document.getElementById('matrix-term');
+        const dpSelect = document.getElementById('matrix-dp');
+        const costHint = document.getElementById('matrix-cost-hint');
+        const errorBox = document.getElementById('matrix-installment-error-display');
+
+        // В сетке заполнены не все пары, поэтому список взносов зависит от
+        // выбранного срока и перестраивается при его смене.
+        function fillDpOptions() {
+            const options = dpByTerm[termSelect.value] || [];
+            dpSelect.innerHTML = '';
+            options.forEach(function (dp) {
+                const option = document.createElement('option');
+                option.value = dp;
+                option.textContent = dp + '%';
+                dpSelect.appendChild(option);
+            });
+            showCost();
+        }
+
+        function showCost() {
+            const cost = costPercent[dpSelect.value + ':' + termSelect.value];
+            costHint.textContent = cost === undefined
+                ? ''
+                : 'Рассрочка на этих условиях стоит ' + cost + '% скидки';
+        }
+
+        termSelect.addEventListener('change', fillDpOptions);
+        dpSelect.addEventListener('change', showCost);
+        fillDpOptions();
+
+        matrixForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            errorBox.classList.add('d-none');
+
+            fetch(matrixForm.dataset.action, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sell_id: sellId,
+                    term: termSelect.value,
+                    dp_percent: dpSelect.value,
+                    with_opt: document.getElementById('matrix-opt').checked,
+                    with_referral: document.getElementById('matrix-referral').checked
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (payload) {
+                if (!payload.success) {
+                    errorBox.textContent = payload.error;
+                    errorBox.classList.remove('d-none');
+                    return;
+                }
+                const data = payload.data;
+                const parts = (data.base_discount_parts || [])
+                    .map(function (p) { return p.name + ' ' + p.percent + '%'; }).join(' + ');
+
+                document.getElementById('matrix-res-base').textContent =
+                    data.base_discount_percent + '%' + (parts ? ' (' + parts + ')' : '');
+                document.getElementById('matrix-res-cost').textContent = '- ' + data.plan_cost_percent + '%';
+                document.getElementById('matrix-res-available').textContent = data.available_discount_percent + '%';
+                document.getElementById('matrix-res-dp').textContent = formatCurrency(data.initial_payment) + ' UZS';
+                document.getElementById('matrix-res-remainder').textContent = formatCurrency(data.remainder) + ' UZS';
+                document.getElementById('matrix-res-monthly').textContent = formatCurrency(data.monthly_payment) + ' UZS';
+                document.getElementById('matrix-res-sqm').textContent =
+                    data.price_per_sqm ? formatCurrency(data.price_per_sqm) + ' UZS' : '—';
+                document.getElementById('matrix-res-deal').textContent = formatCurrency(data.deal_price) + ' UZS';
+            })
+            .catch(function () {
+                errorBox.textContent = 'Не удалось выполнить расчёт.';
+                errorBox.classList.remove('d-none');
+            });
+        });
+    }
+
     const printKpDpInstallmentBtn = document.getElementById('print-kp-dp-installment');
     if(printKpDpInstallmentBtn) {
         printKpDpInstallmentBtn.addEventListener('click', function() {
