@@ -19,7 +19,9 @@ def show_page(sell_id):
     complex_name = (card_data.get('apartment', {}).get('house') or {}).get('complex_name')
     return render_template('calc/complex_calculations.html', title="Сложные расчёты",
                            data=card_data,
-                           installment_matrix=installment_plan_service.get_matrix_options(complex_name))
+                           installment_matrix=installment_plan_service.get_matrix_options(complex_name),
+                           installment_discounts=installment_plan_service.get_discount_limits(
+                               card_data=card_data))
 
 
 @complex_calc_bp.route('/calculate-installment', methods=['POST'])
@@ -66,8 +68,7 @@ def calculate_matrix_installment():
             sell_id=int(data.get('sell_id')),
             term_months=int(data.get('term')),
             dp_percent=int(data.get('dp_percent')),
-            with_opt=bool(data.get('with_opt')),
-            with_referral=bool(data.get('with_referral')),
+            discounts=data.get('discounts') or {},
         )
         return jsonify(success=True, data=result)
     except (ValueError, TypeError) as e:

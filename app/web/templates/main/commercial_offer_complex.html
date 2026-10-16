@@ -116,6 +116,30 @@
                                 <dt>{{ _('Ежемесячный платеж:') }}</dt>
                                 <dd class="fw-bold"><span class="price-value" data-uzs-value="{{ details.monthly_payment }}">{{ "{:,.0f}".format(details.monthly_payment)|replace(',', '.') }} UZS</span></dd>
                             </dl>
+                            {% elif calc_type == 'matrix_installment' %}
+                            <h5 class="card-title text-primary">{{ _('Расчет по рассрочке') }}</h5>
+                            <p class="card-text">
+                                {% trans term=details.term_months, dp=details.dp_percent %}
+                                Рассрочка на <strong>{{ term }} мес.</strong> с первоначальным взносом <strong>{{ dp }}%</strong>.
+                                {% endtrans %}
+                            </p>
+                            <hr>
+                            <dl>
+                                <dt>{{ _('Стоимость по прайсу:') }}</dt>
+                                <dd><span class="price-value" data-uzs-value="{{ details.base_price }}">{{ "{:,.0f}".format(details.base_price)|replace(',', '.') }} UZS</span></dd>
+                                <dt>{{ _('Скидка:') }}</dt>
+                                <dd class="text-danger">{{ "%.2f"|format(details.available_discount_percent) }}%</dd>
+                                <dt class="result-row">{{ _('Стоимость сделки:') }}</dt>
+                                <dd class="result-row price-final"><span class="price-value" data-uzs-value="{{ details.deal_price }}">{{ "{:,.0f}".format(details.deal_price)|replace(',', '.') }} UZS</span></dd>
+                                <dt class="border-top pt-2 mt-2">{{ _('Первоначальный взнос:') }}</dt>
+                                <dd class="border-top pt-2 mt-2 fw-bold"><span class="price-value" data-uzs-value="{{ details.initial_payment }}">{{ "{:,.0f}".format(details.initial_payment)|replace(',', '.') }} UZS</span></dd>
+                                <dt>{{ _('Ежемесячный платеж:') }}</dt>
+                                <dd class="fw-bold"><span class="price-value" data-uzs-value="{{ details.monthly_payment }}">{{ "{:,.0f}".format(details.monthly_payment)|replace(',', '.') }} UZS</span></dd>
+                                {% if details.price_per_sqm %}
+                                <dt>{{ _('Цена сделки за м²:') }}</dt>
+                                <dd><span class="price-value" data-uzs-value="{{ details.price_per_sqm }}">{{ "{:,.0f}".format(details.price_per_sqm)|replace(',', '.') }} UZS</span></dd>
+                                {% endif %}
+                            </dl>
                         {% endif %}
                     </div>
                 </div>

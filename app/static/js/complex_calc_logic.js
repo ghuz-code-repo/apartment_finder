@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let installmentCalcData = null;
     let dpInstallmentCalcData = null;
     let zeroMortgageCalcData = null;
+    let matrixCalcData = null;
 
     // Функция для форматирования объекта в строку для URL
     const formatForUrl = (obj) => JSON.stringify(obj);
@@ -255,6 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const dpSelect = document.getElementById('matrix-dp');
         const costHint = document.getElementById('matrix-cost-hint');
         const errorBox = document.getElementById('matrix-installment-error-display');
+        const printMatrixBtn = document.getElementById('print-kp-matrix-installment');
 
         // В сетке заполнены не все пары, поэтому список взносов зависит от
         // выбранного срока и перестраивается при его смене.
@@ -281,6 +283,32 @@ document.addEventListener('DOMContentLoaded', function() {
         dpSelect.addEventListener('change', showCost);
         fillDpOptions();
 
+        // Скидки набираются ползунками: рядом с каждым показываем значение,
+        // а снизу сумму — по ней видно, хватает ли её на оплату рассрочки.
+        const discountInputs = matrixForm.querySelectorAll('.matrix-discount-input');
+        const discountTotal = document.getElementById('matrix-disc-total');
+
+        function readDiscounts() {
+            const discounts = {};
+            let total = 0;
+            discountInputs.forEach(function (input) {
+                const percent = parseInt(input.value, 10) || 0;
+                const label = input.previousElementSibling &&
+                    input.previousElementSibling.querySelector('.matrix-disc-value');
+                if (label) label.textContent = percent;
+                if (percent > 0) discounts[input.dataset.discountCode] = percent;
+                total += percent;
+            });
+            if (discountTotal) discountTotal.textContent = total;
+            return discounts;
+        }
+
+        discountInputs.forEach(function (input) {
+            input.addEventListener('input', readDiscounts);
+            input.addEventListener('change', readDiscounts);
+        });
+        readDiscounts();
+
         matrixForm.addEventListener('submit', function (e) {
             e.preventDefault();
             errorBox.classList.add('d-none');
@@ -292,23 +320,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     sell_id: sellId,
                     term: termSelect.value,
                     dp_percent: dpSelect.value,
-                    with_opt: document.getElementById('matrix-opt').checked,
-                    with_referral: document.getElementById('matrix-referral').checked
+                    discounts: readDiscounts()
                 })
             })
             .then(function (r) { return r.json(); })
             .then(function (payload) {
                 if (!payload.success) {
+                    matrixCalcData = null;
+                    if (printMatrixBtn) printMatrixBtn.classList.add('d-none');
                     errorBox.textContent = payload.error;
                     errorBox.classList.remove('d-none');
                     return;
                 }
                 const data = payload.data;
-                const parts = (data.base_discount_parts || [])
+                matrixCalcData = data;
+                if (printMatrixBtn) printMatrixBtn.classList.remove('d-none');
+                const parts = (data.applied_discounts || [])
                     .map(function (p) { return p.name + ' ' + p.percent + '%'; }).join(' + ');
 
                 document.getElementById('matrix-res-base').textContent =
-                    data.base_discount_percent + '%' + (parts ? ' (' + parts + ')' : '');
+                    data.given_discount_percent + '%' + (parts ? ' (' + parts + ')' : '');
                 document.getElementById('matrix-res-cost').textContent = '- ' + data.plan_cost_percent + '%';
                 document.getElementById('matrix-res-available').textContent = data.available_discount_percent + '%';
                 document.getElementById('matrix-res-dp').textContent = formatCurrency(data.initial_payment) + ' UZS';
@@ -319,10 +350,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('matrix-res-deal').textContent = formatCurrency(data.deal_price) + ' UZS';
             })
             .catch(function () {
+                matrixCalcData = null;
+                if (printMatrixBtn) printMatrixBtn.classList.add('d-none');
                 errorBox.textContent = 'Не удалось выполнить расчёт.';
                 errorBox.classList.remove('d-none');
             });
         });
+
+        if (printMatrixBtn) {
+            printMatrixBtn.addEventListener('click', function () {
+                if (!matrixCalcData) return;
+                const queryParams = new URLSearchParams({
+                    calc_type: 'matrix_installment',
+                    details: formatForUrl(matrixCalcData)
+                });
+                window.open(`${window.APP_PREFIX}/reports/commercial-offer/complex/${sellId}?${queryParams.toString()}`, '_blank');
+            });
+        }
     }
 
     const printKpDpInstallmentBtn = document.getElementById('print-kp-dp-installment');
