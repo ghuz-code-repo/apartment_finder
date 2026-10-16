@@ -10,7 +10,9 @@
 сетке нет, по проекту не существует — калькулятор её не предлагает.
 """
 import logging
+from datetime import date
 
+from dateutil.relativedelta import relativedelta
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..core.db_utils import get_planning_session
@@ -19,14 +21,7 @@ from . import pricing_service, selection_service
 
 logger = logging.getLogger(__name__)
 
-# Надбавки за особые условия. В отличие от скидок матрицы, они не торгуются:
-# менеджер их либо даёт целиком, либо нет.
-OPT_PERCENT = 3
-REFERRAL_PERCENT = 1
 
-# ОПТ и реферальная включаются отдельными переключателями, поэтому в базовую
-# скидку не входят, иначе ОПТ посчитался бы дважды.
-BASE_DISCOUNT_EXCLUDED = ('opt', 'referral')
 
 
 def get_grid_for_complex(complex_name):
@@ -75,28 +70,55 @@ def get_matrix_options(complex_name):
     }
 
 
-def get_base_discount(card_data):
-    """Базовая скидка объекта: всё, что даёт система скидок по 100% оплате.
+def get_discount_limits(sell_id=None, card_data=None):
+    """Потолки скидок объекта по 100% оплате — те же, что на карточке.
 
-    Берём готовые потолки из pricing_service, поэтому индивидуальная акция
-    здесь уже заменила обычную, как и на карточке объекта.
+    Берём готовый список из pricing_service, поэтому индивидуальная акция
+    здесь уже заменила обычную, а реферальная присутствует наравне с
+    матричными.
     """
+    if card_data is None:
+        card_data = selection_service.get_apartment_card_data(sell_id)
     option = next((o for o in card_data.get('pricing', [])
                    if o.get('type_key') == pricing_service.FULL_PAYMENT_KEY), None)
-    if not option:
-        return 0.0, []
-
-    parts = [limit for limit in option.get('manual_discount_limits', [])
-             if limit['code'] not in BASE_DISCOUNT_EXCLUDED]
-    total = sum(limit['max_percent'] for limit in parts)
-    return total, [{'name': p['name'], 'percent': p['max_percent']} for p in parts]
+    return list(option.get('manual_discount_limits', [])) if option else []
 
 
-def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=False):
+def _payment_schedule(initial_payment, monthly_payment, term_months, start_date=None):
+    """График: первый взнос сегодня, дальше равные платежи раз в месяц.
+
+    Формат тот же, что у остальных сложных расчётов, — КП печатает их одним
+    и тем же шаблоном.
+    """
+    start = start_date or date.today()
+    schedule = [{
+        'month_number': 0,
+        'payment_date': start.isoformat(),
+        'amount': initial_payment,
+        'type': 'initial_payment',
+    }]
+
+    payment_date = start
+    for month in range(1, term_months + 1):
+        payment_date += relativedelta(months=1)
+        schedule.append({
+            'month_number': month,
+            'payment_date': payment_date.isoformat(),
+            'amount': monthly_payment,
+            'type': 'monthly_payment',
+        })
+    return schedule
+
+
+def calculate(sell_id, term_months, dp_percent, discounts=None, start_date=None):
     """Считает условия рассрочки для объекта.
 
+    discounts: {'kd': 3, 'opt': 2, ...} — проценты, выставленные менеджером.
+    Выше потолка из системы скидок не поднимаем: цифру можно подставить в
+    запрос в обход ползунков.
+
     Бросает ValueError с понятным текстом, когда пара «ПВ + срок» недоступна
-    или когда цена рассрочки съедает скидку целиком.
+    или когда выставленных скидок не хватает на оплату рассрочки.
     """
     term_months = int(term_months)
     dp_percent = int(dp_percent)
@@ -116,18 +138,26 @@ def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=Fa
         raise ValueError(f'Рассрочка на {term_months} мес. при взносе {dp_percent}% '
                          f'по этому ЖК не предусмотрена.')
 
-    base_percent, base_parts = get_base_discount(card_data)
-    opt_percent = OPT_PERCENT if with_opt else 0
-    referral_percent = REFERRAL_PERCENT if with_referral else 0
+    limits = get_discount_limits(card_data=card_data)
+    requested = discounts or {}
+    applied = []
+    for limit in limits:
+        percent = min(pricing_service._clean_percent(requested.get(limit['code'])),
+                      limit['max_percent'])
+        if percent > 0:
+            applied.append({'code': limit['code'], 'name': limit['name'], 'percent': percent})
+
+    given_percent = sum(item['percent'] for item in applied)
     cost_percent = round(cost_rate * 100, 2)
 
     # Округление вниз до сотых повторяет исходный расчёт: доступная скидка не
     # должна вырасти из-за погрешности сложения долей.
-    available_percent = int((base_percent + opt_percent + referral_percent - cost_percent) * 100) / 100
+    available_percent = int((given_percent - cost_percent) * 100) / 100
     if available_percent < 0:
         raise ValueError(
-            f'Скидок не хватает: рассрочка на {term_months} мес. стоит {cost_percent:g}%, '
-            f'а доступно {base_percent + opt_percent + referral_percent:g}%.')
+            f'Скидок не хватает: рассрочка на {term_months} мес. при взносе {dp_percent}% '
+            f'стоит {cost_percent:g}%, а выставлено {given_percent:g}%. '
+            f'Добавьте скидку или выберите другие условия.')
 
     base_price = apartment.get('estate_price') or 0
     price_after_deduction = base_price - pricing_service.DEDUCTION_AMOUNT
@@ -137,6 +167,7 @@ def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=Fa
     deal_price = price_after_deduction * (1 - available_percent / 100)
     initial_payment = deal_price * dp_percent / 100
     remainder = deal_price - initial_payment
+    monthly_payment = remainder / term_months if term_months else None
     area = apartment.get('estate_area') or 0
 
     return {
@@ -145,10 +176,8 @@ def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=Fa
         'base_price': base_price,
         'deduction': pricing_service.DEDUCTION_AMOUNT,
         'price_after_deduction': price_after_deduction,
-        'base_discount_percent': base_percent,
-        'base_discount_parts': base_parts,
-        'opt_percent': opt_percent,
-        'referral_percent': referral_percent,
+        'given_discount_percent': given_percent,
+        'applied_discounts': applied,
         'plan_cost_percent': cost_percent,
         'available_discount_percent': available_percent,
         'discount_amount': price_after_deduction - deal_price,
@@ -156,7 +185,9 @@ def calculate(sell_id, term_months, dp_percent, with_opt=False, with_referral=Fa
         'price_per_sqm': deal_price / area if area else None,
         'initial_payment': initial_payment,
         'remainder': remainder,
-        'monthly_payment': remainder / term_months if term_months else None,
+        'monthly_payment': monthly_payment,
+        'payment_schedule': _payment_schedule(initial_payment, monthly_payment,
+                                              term_months, start_date),
     }
 
 
