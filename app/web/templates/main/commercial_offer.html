@@ -110,6 +110,30 @@
         .payment-option-block.full_payment {
             border-left: 4px solid #c4a668;
         }
+        .payment-option-block.installment {
+            border-left: 4px solid #198754;
+        }
+        .payment-option-block.installment h3 {
+            background-color: #f1faf4;
+            color: #146c43;
+        }
+        /* График платежей: длинный список, поэтому компактно и с повтором
+           шапки при переносе на следующую страницу печати. */
+        .payment-schedule {
+            width: 100%;
+            font-size: 8pt;
+            border-collapse: collapse;
+        }
+        .payment-schedule th, .payment-schedule td {
+            border-bottom: 1px solid #eee;
+            padding: 0.25rem 0.4rem;
+        }
+        .payment-schedule thead {
+            display: table-header-group;
+        }
+        .payment-schedule tr {
+            break-inside: avoid;
+        }
         .payment-option-block.mortgage_standard {
             border-left: 4px solid #0d6efd;
         }
@@ -526,7 +550,7 @@
                                     <p class="summary-value blue price-uzs" data-price="{{ option.monthly_payment }}">{{ "{:,.0f}".format(option.monthly_payment) }} UZS</p>
                                 {% endif %}
                                 <p class="mortgage-terms">
-                                    {{ _('Кредит') }}: <span class="price-uzs" data-price="{{ option.mortgage_body }}">{{ "{:,.0f}".format(option.mortgage_body) }} UZS</span>
+                                    {{ _(option.body_label) if option.body_label else _('Кредит') }}: <span class="price-uzs" data-price="{{ option.mortgage_body }}">{{ "{:,.0f}".format(option.mortgage_body) }} UZS</span>
                                     · {{ _('срок') }} {{ option.mortgage_term_months }} {{ _('мес.') }}
                                     {%- if not option.monthly_payment_after_cadastre and option.mortgage_rate_annual %} · {{ option.mortgage_rate_annual }}% {{ _('годовых') }}{% endif %}
                                 </p>
@@ -539,6 +563,35 @@
             </div>
         {% else %}
             <div class="alert alert-warning">{{ _('Не удалось рассчитать варианты оплаты.') }}</div>
+        {% endif %}
+
+        {# График платежей идёт только с рассрочкой: у 100% оплаты и ипотеки
+           графика нет — там платежи ведёт банк. #}
+        {% if payment_schedule %}
+        <div class="section-title">{{ _('График платежей') }}</div>
+        <table class="payment-schedule">
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>{{ _('Дата платежа') }}</th>
+                    <th>{{ _('Назначение') }}</th>
+                    <th class="text-end">{{ _('Сумма') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payment_schedule %}
+                <tr>
+                    <td>{{ payment.month_number }}</td>
+                    <td>{{ payment.date_display }}</td>
+                    <td>
+                        {% if payment.type == 'initial_payment' %}{{ _('Первоначальный взнос') }}
+                        {% else %}{{ _('Ежемесячный платёж') }}{% endif %}
+                    </td>
+                    <td class="text-end price-uzs" data-price="{{ payment.amount }}">{{ "{:,.0f}".format(payment.amount) }} UZS</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% endif %}
 
         <div class="footer">

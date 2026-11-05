@@ -60,6 +60,27 @@ def import_all():
     flash(f"Загружено: наших ЖК — {result['our']}, конкурентов — {result['competitors']}", 'success')
     if result['skipped']:
         flash('Пропущены листы (нет права или неизвестный формат): ' + ', '.join(result['skipped']), 'warning')
+    _flash_warnings(result['warnings'])
+    return redirect(url_for('competitor.map_view'))
+
+
+def _flash_warnings(warnings):
+    for text in warnings:
+        flash(text, 'warning')
+
+
+def _run_single_import(importer, label):
+    """Импорт одной части; ошибки и замечания — пользователю, а не 500."""
+    file = request.files.get('file')
+    if not file:
+        return redirect(url_for('competitor.import_view'))
+    try:
+        report = importer(file)
+    except Exception as e:
+        flash(f'Файл не загружен: {e}', 'danger')
+        return redirect(url_for('competitor.import_view'))
+    flash(f'{label}: загружено строк — {report.count}', 'success')
+    _flash_warnings(report.messages())
     return redirect(url_for('competitor.map_view'))
 
 # --- НАШИ ЖК ---
@@ -77,11 +98,7 @@ def export_our():
 @login_required
 @permission_required('competitors_our_import')
 def import_our():
-    file = request.files.get('file')
-    if file:
-        competitor_service.import_our_projects(file)
-        flash('Данные о наших ЖК обновлены', 'success')
-    return redirect(url_for('competitor.map_view'))
+    return _run_single_import(competitor_service.import_our_projects, 'Наши ЖК')
 
 # --- КОНКУРЕНТЫ ---
 @competitor_bp.route('/competitors/external/export')
@@ -98,11 +115,7 @@ def export_comp():
 @login_required
 @permission_required('competitors_external_import')
 def import_comp():
-    file = request.files.get('file')
-    if file:
-        competitor_service.import_competitors(file)
-        flash('Данные о конкурентах обновлены', 'success')
-    return redirect(url_for('competitor.map_view'))
+    return _run_single_import(competitor_service.import_competitors, 'Конкуренты')
 
 @competitor_bp.route('/competitors/compare/<int:comp_id>')
 @login_required

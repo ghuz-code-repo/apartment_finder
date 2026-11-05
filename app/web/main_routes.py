@@ -15,7 +15,8 @@ from ..core.db_utils import get_default_session, get_mysql_session
 from ..models.estate_models import EstateHouse
 from ..models.exclusion_models import ExcludedSell
 # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-from ..services import currency_service, flat_plan_service, pricing_service, project_info_service
+from ..services import (currency_service, flat_plan_service, installment_plan_service,
+                        pricing_service, project_info_service)
 # Импортируем PropertyType и PaymentMethod из их нового местоположения
 from ..models.planning_models import PropertyType, PaymentMethod
 from ..services import settings_service
@@ -213,6 +214,25 @@ def generate_commercial_offer(sell_id):
         pricing_service.recalculate(option, user_selections.get(option['type_key'], {}),
                                     initial_payment=manual_initial_payment)
 
+    # Режим рассрочки по сетке: вместо 100% оплаты и ипотеки в документ идёт
+    # один вариант. Считаем его здесь, а не принимаем готовые суммы из адреса,
+    # иначе цифры в КП можно было бы подменить вручную.
+    payment_schedule = None
+    installment_term = request.args.get('installment_term', type=int)
+    installment_dp = request.args.get('installment_dp', type=int)
+    if installment_term and installment_dp:
+        try:
+            installment = installment_plan_service.calculate(
+                sell_id=sell_id,
+                term_months=installment_term,
+                dp_percent=installment_dp,
+                discounts=pricing_service.parse_discount_percents(request.args.get('discounts')),
+            )
+        except ValueError as exc:
+            abort(400, str(exc))
+        card_data['pricing'] = [installment_plan_service.as_offer_option(installment)]
+        payment_schedule = installment['payment_schedule']
+
     # Ежемесячный взнос по ипотеке считается от тела кредита, поэтому условия
     # банка проставляются после пересчёта скидок.
     calc_settings = settings_service.get_calculator_settings()
@@ -247,6 +267,7 @@ def generate_commercial_offer(sell_id):
         return render_template(
             'main/commercial_offer.html',
             data=card_data,
+            payment_schedule=payment_schedule,
             flat_plans=flat_plan_service.get_flat_plans(sell_id),
             project_info=project_info,
             project_render_url=(project_info_service.get_render_url(project_renders[0].filename)

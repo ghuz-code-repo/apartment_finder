@@ -26,7 +26,14 @@
                 <tr class="bg-light shadow-sm">
                     <td class="fw-bold text-danger">Цена ДНА ($/м²)</td>
                     <td class="text-center fw-bold text-danger">{{ "{:,.0f}".format(data.our_project.avg_bottom_price|float(0)) }}</td>
-                    <td class="text-center fw-bold">{{ "{:,.0f}".format(data.competitor.avg_bottom_price|float(0)) }}</td>
+                    {# У конкурента в файле — стоимость дна за объект; bottom_price_sqm
+                       приводит её к $/м², как у наших ЖК. #}
+                    <td class="text-center fw-bold">{{ "{:,.0f}".format(data.competitor.bottom_price_sqm) if data.competitor.bottom_price_sqm is not none else '—' }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Цена м² остатка ($)</td>
+                    <td class="text-center">{{ "{:,.0f}".format(data.our_project.avg_price_sqm|float(0)) }}</td>
+                    <td class="text-center">{{ "{:,.0f}".format(data.competitor.avg_price_sqm) if data.competitor.avg_price_sqm is not none else '—' }}</td>
                 </tr>
                 <tr>
                     <td class="text-muted">Продано, шт</td>

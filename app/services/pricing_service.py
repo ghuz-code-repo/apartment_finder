@@ -337,6 +337,21 @@ def apply_mortgage_terms(options, rate_before_cadastre, rate_after_cadastre, ter
     return options
 
 
+def parse_discount_percents(raw_json):
+    """Разбирает ?discounts={"kd": 3} — плоский набор скидок одного варианта."""
+    import json
+
+    if not raw_json:
+        return {}
+    try:
+        parsed = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(code): _clean_percent(value) for code, value in parsed.items()}
+
+
 def parse_manual_selections(raw_json):
     """Разбирает ?selections={"full_payment": {"kd": 3}} из адреса КП."""
     import json
