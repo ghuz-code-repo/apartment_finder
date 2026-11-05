@@ -1,6 +1,9 @@
 # app/services/competitor_service.py
 import io
+import math
 import os
+import re
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -19,32 +22,86 @@ from app.models.planning_models import (
 from . import data_service, currency_service
 
 
+_SPACES = ('\xa0', ' ', ' ', ' ')
+_NUMBER_RE = re.compile(r'[-+]?\d+(?:\.\d+)?')
+
+
 def _to_float(value):
-    """Приводит значение из Excel/БД к числу: '41,33' -> 41.33, мусор -> None."""
+    """Приводит значение из Excel/БД к числу, мусор -> None.
+
+    '41,33' -> 41.33, '1 500,5' -> 1500.5, '1,250.75' -> 1250.75,
+    '1500 $' / '3,2 м' -> число без единиц. Если в тексте несколько чисел
+    ('2025-01-12', '3-4'), угадывать не берёмся — None.
+    """
     if value is None or isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return None if isinstance(value, float) and np.isnan(value) else float(value)
-    text = str(value).strip().replace('\xa0', '').replace(' ', '').replace(',', '.')
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        num = float(value)
+        return None if math.isnan(num) or math.isinf(num) else num
+    text = str(value)
+    for ch in _SPACES + (' ',):
+        text = text.replace(ch, '')
     if not text:
         return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
+    if ',' in text and '.' in text:
+        # Разделитель тысяч — тот, что встречается раньше: '1.250,75' / '1,250.75'.
+        if text.rfind(',') > text.rfind('.'):
+            text = text.replace('.', '').replace(',', '.')
+        else:
+            text = text.replace(',', '')
+    else:
+        text = text.replace(',', '.')
+    numbers = _NUMBER_RE.findall(text)
+    return float(numbers[0]) if len(numbers) == 1 else None
 
 
 def _to_int(value):
     num = _to_float(value)
-    return int(num) if num is not None else None
+    return int(round(num)) if num is not None else None
 
 
 def _to_str(value):
     """Текстовые поля: числа из Excel не должны попадать в БД как float."""
-    if value is None:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
         return None
-    text = str(value).strip()
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    text = str(value)
+    for ch in _SPACES:
+        text = text.replace(ch, ' ')
+    text = ' '.join(text.split())
     return text or None
+
+
+def _to_date(value):
+    """Дата из ячейки Excel: дата, число-серийник Excel или текст '22.03.2026'.
+
+    Текст читаем как день.месяц.год — так пишут даты у нас. Без dayfirst
+    '03.04.2026' превращалось в 4 марта вместо 3 апреля.
+    """
+    if value is None or value is pd.NaT:
+        return None
+    if isinstance(value, datetime):
+        return None if pd.isna(value) else value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+        num = float(value)
+        # Ячейка не в формате даты: Excel хранит число дней от 1899-12-30.
+        if math.isnan(num) or not (20000 < num < 80000):
+            return None
+        return (datetime(1899, 12, 30) + timedelta(days=num)).date()
+    text = _to_str(value)
+    if not text:
+        return None
+    iso = re.fullmatch(r'(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?', text)
+    try:
+        if iso:
+            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        parsed = pd.to_datetime(text, dayfirst=True)
+    except (ValueError, OverflowError):
+        return None
+    return None if pd.isna(parsed) else parsed.date()
 
 
 def build_map_markers(competitors):
@@ -171,9 +228,243 @@ _COMPETITOR_SHEET_NAMES = {COMPETITOR_SHEET.lower(), 'competitors'}
 # Колонки, которые есть только у конкурентов: по ним узнаём лист с чужим названием.
 _COMPETITOR_ONLY_COLUMNS = set(COMPETITOR_COLUMNS) - set(OUR_COLUMNS)
 
+NAME_COL, TYPE_COL = 'Наименование ЖК', 'Тип'
 
-def _read_sheet(file):
-    return pd.read_excel(file).replace({np.nan: None, pd.NaT: None})
+# Колонка Excel -> (атрибут модели, парсер). Порядок — как в выгрузке.
+_FIELD_SPECS = {
+    'Широта': ('lat', _to_float),
+    'Долгота': ('lng', _to_float),
+    'Класс': ('property_class', _to_str),
+    'Высота потолков': ('ceiling_height', _to_float),
+    'Благоустройство': ('amenities', _to_str),
+    'Стадия строительства': ('construction_stage', _to_str),
+    'Кол-во объектов': ('units_count', _to_int),
+    'Продано шт': ('sold_count', _to_int),
+    'Средняя площадь': ('avg_area', _to_float),
+    'Средняя цена за квадратный метр остатка': ('avg_price_sqm', _to_float),
+    'Средняя стоимость дна остатков': ('avg_bottom_price', _to_float),
+    'Плановая Дата кадастр': ('planned_cadastre_date', _to_date),
+    'Первоначальная дата кадастра': ('initial_cadastre_date', _to_date),
+    'Прямой конкурент для': ('direct_competitor_name', _to_str),
+}
+# У наших ЖК из файла берутся только ручные поля, аналитика считается из MySQL.
+_OUR_FIELDS = [c for c in OUR_COLUMNS if c in _FIELD_SPECS]
+_COMPETITOR_FIELDS = [c for c in COMPETITOR_COLUMNS if c in _FIELD_SPECS]
+
+# Как ещё люди подписывают те же колонки. Сравнение идёт по нормализованному
+# виду (регистр, ё/е, пробелы и знаки препинания не важны), поэтому сюда
+# пишем только действительно другие формулировки.
+_COLUMN_ALIASES = {
+    'Наименование ЖК': ['Название ЖК', 'ЖК', 'Наименование', 'Название', 'Проект', 'Name'],
+    'Тип': ['Тип недвижимости', 'Тип объекта', 'Тип помещения', 'Type'],
+    'Широта': ['Lat', 'Latitude'],
+    'Долгота': ['Lng', 'Lon', 'Long', 'Longitude'],
+    'Класс': ['Класс ЖК', 'Класс жилья', 'Class'],
+    'Высота потолков': ['Высота потолков м', 'Потолки', 'Потолки м'],
+    'Стадия строительства': ['Стадия', 'Этап строительства'],
+    'Кол-во объектов': ['Количество объектов', 'Всего объектов', 'Кол-во квартир',
+                        'Количество квартир', 'Объектов'],
+    'Продано шт': ['Продано', 'Продано объектов', 'Кол-во проданных', 'Количество проданных'],
+    'Средняя площадь': ['Средняя площадь м2', 'Средняя площадь остатка', 'Ср площадь'],
+    'Средняя цена за квадратный метр остатка': [
+        'Средняя цена за м2 остатка', 'Средняя цена м2 остатка', 'Средняя цена за м2',
+        'Средняя цена м2', 'Цена за м2', 'Цена м2', 'Средняя цена за кв м остатка',
+        'Средняя цена за квадратный метр'],
+    'Средняя стоимость дна остатков': ['Средняя стоимость дна', 'Стоимость дна', 'Цена дна',
+                                       'Средняя цена дна', 'Дно'],
+    'Плановая Дата кадастр': ['Плановая дата кадастра', 'Плановая дата', 'Плановый кадастр'],
+    'Первоначальная дата кадастра': ['Первоначальная дата', 'Изначальная дата кадастра',
+                                     'Первоначальный кадастр'],
+    'Прямой конкурент для': ['Прямой конкурент', 'Конкурент для', 'Прямой конкурент нашего ЖК'],
+}
+
+_TYPE_ALIASES = {
+    'квартира': 'Квартира', 'квартиры': 'Квартира', 'жилье': 'Квартира', 'flat': 'Квартира',
+    'коммерческое помещение': 'Коммерческое помещение', 'коммерция': 'Коммерческое помещение',
+    'коммерческие помещения': 'Коммерческое помещение', 'comm': 'Коммерческое помещение',
+    'парковка': 'Парковка', 'парковки': 'Парковка', 'паркинг': 'Парковка', 'garage': 'Парковка',
+    'кладовое помещение': 'Кладовое помещение', 'кладовка': 'Кладовое помещение',
+    'кладовки': 'Кладовое помещение', 'кладовые помещения': 'Кладовое помещение',
+    'storageroom': 'Кладовое помещение',
+}
+DEFAULT_TYPE = PropertyType.FLAT.value
+
+# Предупреждений бывает сотни (например, весь столбец в непонятном формате),
+# пользователю хватит первых — дальше только счётчик.
+MAX_WARNINGS = 30
+
+
+def _norm(text):
+    """Ключ для сравнения заголовков и названий: регистр, ё, пробелы, знаки не важны."""
+    text = (_to_str(text) or '').lower().replace('ё', 'е').replace('²', '2')
+    return ' '.join(re.sub(r'[^\w]+', ' ', text).split())
+
+
+_HEADER_LOOKUP = {}
+for _canon, _aliases in _COLUMN_ALIASES.items():
+    for _variant in [_canon, *_aliases]:
+        _HEADER_LOOKUP.setdefault(_norm(_variant), _canon)
+for _canon in set(COMPETITOR_COLUMNS) | set(OUR_COLUMNS):
+    _HEADER_LOOKUP.setdefault(_norm(_canon), _canon)
+
+
+def _name_key(value):
+    """Ключ ЖК: 'Abu\\xa0Dhabi' и 'abu  dhabi' — один и тот же проект."""
+    return ' '.join((_to_str(value) or '').lower().replace('ё', 'е').split())
+
+
+def _clean_type(value):
+    text = _to_str(value)
+    if not text:
+        return DEFAULT_TYPE
+    return _TYPE_ALIASES.get(_norm(text), text)
+
+
+class _Report:
+    """Что загрузили и что не смогли — для сообщения пользователю."""
+
+    def __init__(self):
+        self.count = 0
+        self.warnings = []
+        self.extra = 0
+
+    def warn(self, text):
+        if len(self.warnings) < MAX_WARNINGS:
+            self.warnings.append(text)
+        else:
+            self.extra += 1
+
+    def messages(self):
+        msgs = list(self.warnings)
+        if self.extra:
+            msgs.append(f'…и ещё {self.extra} замечаний')
+        return msgs
+
+
+def _prepare_sheet(raw, sheet_name, report):
+    """Сырой лист (header=None) -> таблица с каноническими названиями колонок.
+
+    Строку заголовков ищем среди первых 15: над таблицей бывает шапка или
+    пустые строки. Возвращает None, если таблицы на листе нет.
+    """
+    raw = raw.dropna(how='all').dropna(axis=1, how='all')
+    if raw.empty:
+        return None
+    header_pos = None
+    for pos in range(min(15, len(raw))):
+        cells = {_HEADER_LOOKUP.get(_norm(v)) for v in raw.iloc[pos].tolist()}
+        if NAME_COL in cells:
+            header_pos = pos
+            break
+    if header_pos is None:
+        return None
+
+    columns, seen = [], set()
+    for col_idx, title in zip(raw.columns, raw.iloc[header_pos].tolist()):
+        canon = _HEADER_LOOKUP.get(_norm(title))
+        title_text = _to_str(title)
+        if canon is None:
+            if title_text:
+                report.warn(f'Лист «{sheet_name}»: колонка «{title_text}» не распознана и пропущена')
+            columns.append(None)
+        elif canon in seen:
+            report.warn(f'Лист «{sheet_name}»: колонка «{title_text}» повторяет «{canon}» — взята первая')
+            columns.append(None)
+        else:
+            seen.add(canon)
+            columns.append(canon)
+
+    body = raw.iloc[header_pos + 1:]
+    df = pd.DataFrame(
+        {canon: body[col_idx].tolist() for col_idx, canon in zip(raw.columns, columns) if canon},
+        index=body.index,
+    )
+    # Индекс сырого листа — номер строки с нуля: +1 даёт номер строки в Excel.
+    return df.astype(object).where(pd.notna(df), None)
+
+
+def _read_sheets(file):
+    """Все листы книги: {имя: сырой DataFrame без заголовка}."""
+    return pd.read_excel(file, sheet_name=None, header=None)
+
+
+def _apply_fields(comp, row, fields, present, sheet, excel_row, report, fill_only=False):
+    """Записывает в объект только колонки, которые есть в файле.
+
+    Раньше отсутствующая (или подписанная чуть иначе) колонка давала None
+    и молча стирала это поле у всех ЖК. Пустая ячейка в существующей
+    колонке по-прежнему очищает значение — так поле правят вручную.
+    fill_only — для повторной строки того же ЖК в файле: она дополняет
+    и обновляет первую, но пустыми ячейками её не стирает.
+    """
+    for column in fields:
+        if column not in present:
+            continue
+        attr, parse = _FIELD_SPECS[column]
+        raw = row.get(column)
+        value = parse(raw)
+        if value is None and _to_str(raw):
+            report.warn(f'Лист «{sheet}», строка {excel_row}, «{column}»: '
+                        f'не удалось прочитать «{_to_str(raw)}» — поле оставлено пустым')
+        if value is None and fill_only:
+            continue
+        setattr(comp, attr, value)
+
+
+def _iter_rows(df, sheet, report):
+    """Строки с названием ЖК; номера строк — как в Excel."""
+    for idx, row in df.iterrows():
+        excel_row = int(idx) + 1
+        name = _to_str(row.get(NAME_COL))
+        if not name:
+            if any(v is not None for v in row.tolist()):
+                report.warn(f'Лист «{sheet}», строка {excel_row}: нет названия ЖК — строка пропущена')
+            continue
+        yield excel_row, name, row
+
+
+class _Existing:
+    """Записи из базы по ключу «название + тип» без учёта регистра и пробелов.
+
+    Раньше ЖК искали по точному названию, и 'GOROD' / 'Gorod' или
+    'Abu\\xa0Dhabi' / 'Abu Dhabi' заводились отдельными записями — на карте
+    две отметки в одной точке. Такие дубли объединяем, как только ЖК
+    встречается в загружаемом файле: фото, документы и история цен
+    переезжают на оставшуюся (самую старую) запись.
+    """
+
+    def __init__(self, is_internal, report):
+        self.items, self.dupes, self.report = {}, {}, report
+        for c in Competitor.query.filter_by(is_internal=is_internal).order_by(Competitor.id).all():
+            key = (_name_key(c.name), _name_key(c.property_type))
+            if key in self.items:
+                self.dupes.setdefault(key, []).append(c)
+            else:
+                self.items[key] = c
+
+    def get(self, key, name):
+        comp = self.items.get(key)
+        extras = self.dupes.pop(key, [])
+        if comp is not None and extras:
+            _merge_into(comp, extras)
+            self.report.warn(f'«{name}»: в базе было записей одного ЖК — {len(extras) + 1}, '
+                             f'объединены в одну (фото и история цен сохранены)')
+        return comp
+
+    def add(self, key, comp):
+        self.items[key] = comp
+
+
+def _merge_into(keep, extras):
+    for dup in extras:
+        for media in list(dup.media):
+            keep.media.append(media)
+        CompetitorHistory.query.filter_by(competitor_id=dup.id).update(
+            {'competitor_id': keep.id}, synchronize_session=False)
+        if not keep.description and dup.description:
+            keep.description = dup.description
+        db.session.delete(dup)
+    db.session.flush()
 
 
 def export_our_projects():
@@ -198,38 +489,54 @@ def _our_rows():
     return data
 
 
+def _import_single(file, importer):
+    """Загрузка файла одной части (наши ЖК или конкуренты): берём первый
+    лист, на котором нашлась таблица."""
+    report = _Report()
+    try:
+        for sheet_name, raw in _read_sheets(file).items():
+            df = _prepare_sheet(raw, sheet_name, report)
+            if df is not None:
+                importer(df, str(sheet_name), report)
+                break
+        else:
+            report.warn('В файле не найдена таблица с колонкой «Наименование ЖК»')
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return report
+
+
 def import_our_projects(file):
     """Импорт наших ЖК: сохранение ручных полей + авто-расчет системных из MySQL."""
-    count = _import_our_rows(_read_sheet(file))
-    db.session.commit()
-    return count
+    return _import_single(file, _import_our_rows)
 
 
-def _import_our_rows(df):
-    count = 0
-    for _, row in df.dropna(subset=['Наименование ЖК']).iterrows():
-        name, p_type = str(row['Наименование ЖК']).strip(), str(row['Тип']).strip()
-        stats = _get_our_project_dynamic_stats(name, p_type)
-
-        comp = Competitor.query.filter_by(name=name, property_type=p_type, is_internal=True).first() or Competitor(
-            is_internal=True)
+def _import_our_rows(df, sheet, report):
+    present = set(df.columns)
+    existing = _Existing(is_internal=True, report=report)
+    known_types = {pt.value for pt in PropertyType}
+    for excel_row, name, row in _iter_rows(df, sheet, report):
+        p_type = _clean_type(row.get(TYPE_COL))
+        if p_type not in known_types:
+            report.warn(f'Лист «{sheet}», строка {excel_row}: неизвестный тип «{p_type}» — строка пропущена')
+            continue
+        key = (_name_key(name), _name_key(p_type))
+        comp = existing.get(key, name)
+        if comp is None:
+            comp = Competitor(is_internal=True)
+            existing.add(key, comp)
         comp.name, comp.property_type = name, p_type
-        # Ручные поля из Excel
-        comp.lat, comp.lng = _to_float(row.get('Широта')), _to_float(row.get('Долгота'))
-        comp.property_class = _to_str(row.get('Класс'))
-        comp.ceiling_height = _to_float(row.get('Высота потолков'))
-        comp.amenities, comp.construction_stage = _to_str(row.get('Благоустройство')), _to_str(
-            row.get('Стадия строительства'))
-        comp.initial_cadastre_date = pd.to_datetime(row.get('Первоначальная дата кадастра')).date() if row.get(
-            'Первоначальная дата кадастра') else None
+        _apply_fields(comp, row, _OUR_FIELDS, present, sheet, excel_row, report)
         # Системные поля (всегда перезаписываются из MySQL)
+        stats = _get_our_project_dynamic_stats(name, p_type)
         if stats:
             comp.units_count, comp.sold_count = stats['total_units'], stats['sold_count']
             comp.avg_area, comp.avg_price_sqm = stats['avg_area'], stats['avg_price_sqm']
             comp.avg_bottom_price, comp.planned_cadastre_date = stats['avg_bottom_price'], stats['planned_date']
         db.session.add(comp)
-        count += 1
-    return count
+        report.count += 1
 
 
 def export_competitors():
@@ -239,7 +546,7 @@ def export_competitors():
 
 def _competitor_rows():
     data = []
-    for c in Competitor.query.filter_by(is_internal=False).all():
+    for c in Competitor.query.filter_by(is_internal=False).order_by(Competitor.name).all():
         data.append({
             'Наименование ЖК': c.name, 'Тип': c.property_type, 'Широта': c.lat, 'Долгота': c.lng,
             'Класс': c.property_class, 'Высота потолков': c.ceiling_height, 'Благоустройство': c.amenities,
@@ -256,37 +563,45 @@ def _competitor_rows():
 
 def import_competitors(file):
     """Импорт внешних конкурентов: все данные берутся из Excel."""
-    count = _import_competitor_rows(_read_sheet(file))
-    db.session.commit()
-    return count
+    return _import_single(file, _import_competitor_rows)
 
 
-def _import_competitor_rows(df):
-    count = 0
-    for _, row in df.dropna(subset=['Наименование ЖК']).iterrows():
-        name, p_type = str(row['Наименование ЖК']).strip(), str(row['Тип']).strip()
-        comp = Competitor.query.filter_by(name=name, property_type=p_type, is_internal=False).first() or Competitor(
-            is_internal=False)
+_HISTORY_FIELDS = ('avg_price_sqm', 'avg_bottom_price', 'units_count', 'sold_count')
+
+
+def _import_competitor_rows(df, sheet, report):
+    present = set(df.columns)
+    existing = _Existing(is_internal=False, report=report)
+    seen, touched = {}, {}
+    for excel_row, name, row in _iter_rows(df, sheet, report):
+        p_type = _clean_type(row.get(TYPE_COL))
+        key = (_name_key(name), _name_key(p_type))
+        repeat = key in seen
+        if repeat:
+            report.warn(f'Лист «{sheet}», строка {excel_row}: «{name}» ({p_type}) уже был в строке '
+                        f'{seen[key]} — строки объединены, при расхождении взято значение из строки {excel_row}')
+        seen[key] = excel_row
+
+        comp = existing.get(key, name)
+        if comp is None:
+            comp = Competitor(is_internal=False)
+            existing.add(key, comp)
+            touched[key] = (comp, None)
+        elif not repeat:
+            touched[key] = (comp, tuple(getattr(comp, f) for f in _HISTORY_FIELDS))
         comp.name, comp.property_type = name, p_type
-        comp.lat, comp.lng = _to_float(row.get('Широта')), _to_float(row.get('Долгота'))
-        comp.property_class = _to_str(row.get('Класс'))
-        comp.ceiling_height = _to_float(row.get('Высота потолков'))
-        comp.amenities, comp.construction_stage = _to_str(row.get('Благоустройство')), _to_str(
-            row.get('Стадия строительства'))
-        comp.units_count, comp.sold_count = _to_int(row.get('Кол-во объектов')), _to_int(row.get('Продано шт'))
-        comp.avg_area, comp.avg_price_sqm = _to_float(row.get('Средняя площадь')), _to_float(
-            row.get('Средняя цена за квадратный метр остатка'))
-        comp.avg_bottom_price = _to_float(row.get('Средняя стоимость дна остатков'))
-        comp.direct_competitor_name = _to_str(row.get('Прямой конкурент для'))
-        for d_col, attr in [('Плановая Дата кадастр', 'planned_cadastre_date'),
-                            ('Первоначальная дата кадастра', 'initial_cadastre_date')]:
-            val = row.get(d_col)
-            setattr(comp, attr, pd.to_datetime(val).date() if val else None)
+        _apply_fields(comp, row, _COMPETITOR_FIELDS, present, sheet, excel_row, report,
+                      fill_only=repeat)
         db.session.add(comp)
-        db.session.flush()
-        record_history(comp)
-        count += 1
-    return count
+        if not repeat:
+            report.count += 1
+
+    db.session.flush()
+    # Одна точка истории на ЖК за загрузку, и только если цифры сдвинулись:
+    # повторная загрузка того же файла не плодит одинаковые точки на графике.
+    for comp, before in touched.values():
+        if before is None or before != tuple(getattr(comp, f) for f in _HISTORY_FIELDS):
+            record_history(comp)
 
 
 def export_all(include_our=True, include_competitors=True):
@@ -314,7 +629,7 @@ def _sheet_kind(sheet_name, df):
         return 'our'
     if name in _COMPETITOR_SHEET_NAMES:
         return 'competitors'
-    if 'Наименование ЖК' not in df.columns:
+    if NAME_COL not in df.columns:
         return None
     return 'competitors' if _COMPETITOR_ONLY_COLUMNS & set(df.columns) else 'our'
 
@@ -322,27 +637,35 @@ def _sheet_kind(sheet_name, df):
 def import_all(file, allow_our=True, allow_competitors=True):
     """Загружает общий файл: каждый лист уходит в свой импорт.
 
-    Возвращает, сколько строк загружено по каждому виду, и какие листы
-    пропущены (нет права или лист не похож ни на один из шаблонов).
+    Возвращает, сколько строк загружено по каждому виду, какие листы
+    пропущены (нет права или лист не похож ни на один из шаблонов) и
+    замечания по ячейкам, которые не удалось прочитать.
     Всё в одной транзакции: ошибка на втором листе не оставит первый
     загруженным наполовину.
     """
-    sheets = pd.read_excel(file, sheet_name=None)
-    result = {'our': 0, 'competitors': 0, 'skipped': []}
+    sheets = _read_sheets(file)
+    result = {'our': 0, 'competitors': 0, 'skipped': [], 'warnings': []}
+    our_report, comp_report = _Report(), _Report()
     try:
-        for sheet_name, df in sheets.items():
-            df = df.replace({np.nan: None, pd.NaT: None})
-            kind = _sheet_kind(sheet_name, df)
+        for sheet_name, raw in sheets.items():
+            sheet = str(sheet_name)
+            probe = _Report()
+            df = _prepare_sheet(raw, sheet, probe)
+            kind = _sheet_kind(sheet, df) if df is not None else None
             if kind == 'our' and allow_our:
-                result['our'] += _import_our_rows(df)
+                our_report.warnings += probe.warnings
+                _import_our_rows(df, sheet, our_report)
             elif kind == 'competitors' and allow_competitors:
-                result['competitors'] += _import_competitor_rows(df)
+                comp_report.warnings += probe.warnings
+                _import_competitor_rows(df, sheet, comp_report)
             else:
-                result['skipped'].append(str(sheet_name))
+                result['skipped'].append(sheet)
         db.session.commit()
     except Exception:
         db.session.rollback()
         raise
+    result['our'], result['competitors'] = our_report.count, comp_report.count
+    result['warnings'] = our_report.messages() + comp_report.messages()
     return result
 
 
@@ -371,6 +694,7 @@ def get_comparison(comp_id, our_complex_name):
             'name': our_complex_name,
             # Оставляем только цену дна
             'avg_bottom_price': stats['avg_bottom_price'] if stats else 0,
+            'avg_price_sqm': stats['avg_price_sqm'] if stats else 0,
             'units': stats['total_units'] if stats else 0,
             'sold': stats['sold_count'] if stats else 0,
             'avg_area': stats['avg_area'] if stats else 0,
@@ -385,12 +709,19 @@ def get_competitor_by_id(comp_id):
 
 
 def update_competitor_info(comp_id, data):
+    """Ручная правка из карточки ЖК.
+
+    Значения формы — строки: без приведения в Float-колонку SQLite попадала
+    строка ('' или '3,2'), и потом ломались карта и выгрузка.
+    Меняем только поля, которые пришли в форме.
+    """
     comp = Competitor.query.get(comp_id)
     if comp:
-        comp.description = data.get('description')
-        comp.property_class = data.get('property_class')
-        comp.ceiling_height = data.get('ceiling_height')
-        comp.amenities = data.get('amenities')
+        for field, parse in (('description', _to_str), ('property_class', _to_str),
+                             ('ceiling_height', _to_float), ('amenities', _to_str),
+                             ('construction_stage', _to_str)):
+            if field in data:
+                setattr(comp, field, parse(data.get(field)))
         db.session.commit()
     return comp
 

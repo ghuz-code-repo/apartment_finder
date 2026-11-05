@@ -42,6 +42,31 @@ class Competitor(db.Model):
 
     media = db.relationship('CompetitorMedia', backref='competitor', lazy='joined', cascade='all, delete-orphan')
 
+    # «Средняя стоимость дна остатков» у конкурентов приходит из Excel как
+    # стоимость одного объекта ($ за квартиру), а у наших ЖК считается из MySQL
+    # в $/м². Сравнивать их напрямую нельзя — приводим к общему виду здесь.
+    @property
+    def bottom_price_sqm(self):
+        """Цена дна за м², $."""
+        if self.avg_bottom_price is None:
+            return None
+        if self.is_internal:
+            return self.avg_bottom_price
+        if not self.avg_area:
+            return None
+        return self.avg_bottom_price / self.avg_area
+
+    @property
+    def bottom_price_unit(self):
+        """Цена дна за объект, $."""
+        if self.avg_bottom_price is None:
+            return None
+        if not self.is_internal:
+            return self.avg_bottom_price
+        if not self.avg_area:
+            return None
+        return self.avg_bottom_price * self.avg_area
+
     def to_dict(self):
         return {
             'id': self.id,

@@ -99,8 +99,12 @@
                             </div>
                             <div class="col-6">
                                 <label class="form-label small fw-bold text-muted">Потолки (м)</label>
-                                <input type="number" step="0.1" name="ceiling_height" class="form-control" value="{{ comp.ceiling_height or '' }}">
+                                <input type="number" step="0.01" min="0" name="ceiling_height" class="form-control" value="{{ comp.ceiling_height if comp.ceiling_height is not none else '' }}">
                             </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Стадия строительства</label>
+                            <input type="text" name="construction_stage" class="form-control" value="{{ comp.construction_stage or '' }}">
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-muted">Благоустройство</label>
@@ -111,14 +115,43 @@
                 </div>
             </div>
 
-            <div class="card shadow-sm">
+            {# Все параметры из файла импорта. Пустое значение показываем прочерком,
+               а не нулём: «0 продано» и «нет данных» — разные вещи. #}
+            {% macro num(value, digits=0, prefix='', suffix='') -%}
+                {%- if value is not none -%}{{ prefix }}{{ ("{:,.%df}" % digits).format(value)|replace(',', ' ') }}{{ suffix }}{%- else -%}—{%- endif -%}
+            {%- endmacro %}
+            {% macro dt(value) -%}{{ value.strftime('%d.%m.%Y') if value else '—' }}{%- endmacro %}
+            <div class="card shadow-sm mb-4">
                 <div class="card-header fw-bold border-0">Аналитика</div>
                 <div class="card-body p-0">
                     <table class="table table-sm mb-0">
                         <tbody class="small">
-                            <tr><td class="ps-3 py-2 text-muted">Всего объектов:</td><td class="pe-3 py-2 text-end fw-bold">{{ comp.units_count or 0 }}</td></tr>
-                            <tr><td class="ps-3 py-2 text-muted">Продано:</td><td class="pe-3 py-2 text-end fw-bold text-success">{{ comp.sold_count or 0 }}</td></tr>
-                            <tr class="bg-light"><td class="ps-3 py-2 fw-bold text-danger">Цена ДНА:</td><td class="pe-3 py-2 text-end fw-bold text-danger">${{ "{:,.0f}".format(comp.avg_bottom_price or 0) }}/м²</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Кол-во объектов</td><td class="pe-3 py-2 text-end fw-bold">{{ num(comp.units_count) }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Продано, шт</td><td class="pe-3 py-2 text-end fw-bold text-success">{{ num(comp.sold_count) }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Средняя площадь</td><td class="pe-3 py-2 text-end fw-bold">{{ num(comp.avg_area, 1, suffix=' м²') }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Средняя цена м² остатка</td><td class="pe-3 py-2 text-end fw-bold">{{ num(comp.avg_price_sqm, 0, '$') }}</td></tr>
+                            <tr class="bg-light"><td class="ps-3 py-2 fw-bold text-danger">Цена дна за м²</td><td class="pe-3 py-2 text-end fw-bold text-danger">{{ num(comp.bottom_price_sqm, 0, '$') }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Средняя стоимость дна остатков (за объект)</td><td class="pe-3 py-2 text-end fw-bold">{{ num(comp.bottom_price_unit, 0, '$') }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header fw-bold border-0">Параметры проекта</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody class="small">
+                            <tr><td class="ps-3 py-2 text-muted">Тип</td><td class="pe-3 py-2 text-end">{{ comp.property_type or '—' }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Класс</td><td class="pe-3 py-2 text-end">{{ comp.property_class or '—' }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Стадия строительства</td><td class="pe-3 py-2 text-end">{{ comp.construction_stage or '—' }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Высота потолков</td><td class="pe-3 py-2 text-end">{{ num(comp.ceiling_height, 2, suffix=' м') }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Плановая дата кадастра</td><td class="pe-3 py-2 text-end">{{ dt(comp.planned_cadastre_date) }}</td></tr>
+                            <tr><td class="ps-3 py-2 text-muted">Первоначальная дата кадастра</td><td class="pe-3 py-2 text-end">{{ dt(comp.initial_cadastre_date) }}</td></tr>
+                            {% if not comp.is_internal %}
+                            <tr><td class="ps-3 py-2 text-muted">Прямой конкурент для</td><td class="pe-3 py-2 text-end">{{ comp.direct_competitor_name or '—' }}</td></tr>
+                            {% endif %}
+                            <tr><td class="ps-3 py-2 text-muted">Координаты</td><td class="pe-3 py-2 text-end">{% if comp.lat is not none and comp.lng is not none %}{{ '%.6f'|format(comp.lat) }}, {{ '%.6f'|format(comp.lng) }}{% else %}—{% endif %}</td></tr>
                         </tbody>
                     </table>
                 </div>
